@@ -9,10 +9,12 @@ use crate::{
 };
 
 use super::{
-    internal_idx, multiple_internal_idx, multiple_internal_idx_strict, open_mut, open_ref,
-    BackedArrayError, BackedEntryContainer, BackedEntryContainerNested,
-    BackedEntryContainerNestedAll, BackedEntryContainerNestedRead, BackedEntryContainerNestedWrite,
-    Container, ResizingContainer,
+    container::{
+        open_mut, open_ref, BackedEntryContainer, BackedEntryContainerNested,
+        BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
+        BackedEntryContainerNestedWrite, Container, ResizingContainer,
+    },
+    internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayError,
 };
 
 /// Array stored as multiple arrays on disk.
