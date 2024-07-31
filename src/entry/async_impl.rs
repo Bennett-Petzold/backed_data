@@ -3,6 +3,7 @@ use futures::{Future, SinkExt, StreamExt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     borrow::Borrow,
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     path::PathBuf,
     pin::pin,
@@ -11,6 +12,8 @@ use tokio::{
     fs::File,
     io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
 };
+
+use crate::utils::ToMut;
 
 use super::{BackedEntry, BackedEntryUnload, DiskOverwritable};
 
@@ -292,28 +295,45 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryAsync<T, Disk> {
 ///
 /// Call [`BackedEntryMutAsync::flush`] to sync with underlying storage before
 /// dropping. Otherwise, drop panics.
-pub struct BackedEntryMutAsync<'a, T: Serialize, Disk: AsyncWriteDisk> {
-    entry: &'a mut BackedEntryAsync<T, Disk>,
+pub struct BackedEntryMutAsync<
+    T: Serialize,
+    Disk: AsyncWriteDisk,
+    E: AsMut<BackedEntryAsync<T, Disk>>,
+> {
+    entry: E,
     modified: bool,
+    _phantom: (PhantomData<T>, PhantomData<Disk>),
 }
 
-impl<'a, T: Serialize, Disk: AsyncWriteDisk> Deref for BackedEntryMutAsync<'a, T, Disk> {
+impl<
+        T: Serialize,
+        Disk: AsyncWriteDisk,
+        E: AsRef<BackedEntry<T, Disk>> + AsMut<BackedEntryAsync<T, Disk>>,
+    > Deref for BackedEntryMutAsync<T, Disk, E>
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.entry.inner.value.as_ref().unwrap()
+        self.entry.as_ref().value.as_ref().unwrap()
     }
 }
 
-impl<'a, T: Serialize, Disk: AsyncWriteDisk> DerefMut for BackedEntryMutAsync<'a, T, Disk> {
+impl<
+        T: Serialize,
+        Disk: AsyncWriteDisk,
+        E: AsRef<BackedEntry<T, Disk>> + AsMut<BackedEntryAsync<T, Disk>>,
+    > DerefMut for BackedEntryMutAsync<T, Disk, E>
+{
     /// [`DerefMut::deref_mut`] that sets a modified flag.
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        self.entry.inner.value.as_mut().unwrap()
+        self.entry.as_mut().inner.value.as_mut().unwrap()
     }
 }
 
-impl<'a, T: Serialize, Disk: AsyncWriteDisk> BackedEntryMutAsync<'a, T, Disk> {
+impl<T: Serialize, Disk: AsyncWriteDisk, E: AsMut<BackedEntryAsync<T, Disk>>>
+    BackedEntryMutAsync<T, Disk, E>
+{
     /// Returns true if the memory version is desynced from the disk version.
     #[allow(dead_code)]
     pub fn is_modified(&self) -> bool {
@@ -322,23 +342,25 @@ impl<'a, T: Serialize, Disk: AsyncWriteDisk> BackedEntryMutAsync<'a, T, Disk> {
 
     /// Saves modifications to disk, unsetting the modified flag if sucessful.
     pub async fn flush(&mut self) -> bincode::Result<&mut Self> {
-        self.entry.update().await?;
+        self.entry.as_mut().update().await?;
         self.modified = false;
         Ok(self)
     }
 
     pub async fn conv_to_sync(&mut self) -> bincode::Result<&mut Self> {
-        self.entry.conv_to_sync().await?;
+        self.entry.as_mut().conv_to_sync().await?;
         Ok(self)
     }
 
     pub async fn conv_to_async(&mut self) -> bincode::Result<&mut Self> {
-        self.entry.conv_to_async().await?;
+        self.entry.as_mut().conv_to_async().await?;
         Ok(self)
     }
 }
 
-impl<'a, T: Serialize, Disk: AsyncWriteDisk> Drop for BackedEntryMutAsync<'a, T, Disk> {
+impl<'a, T: Serialize, Disk: AsyncWriteDisk, E: AsMut<BackedEntryAsync<T, Disk>>> Drop
+    for BackedEntryMutAsync<T, Disk, E>
+{
     /// [`Drop::drop`] panics if the value isn't written to disk with
     /// [`Self::flush`].
     fn drop(&mut self) {
@@ -346,20 +368,35 @@ impl<'a, T: Serialize, Disk: AsyncWriteDisk> Drop for BackedEntryMutAsync<'a, T,
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: AsyncWriteDisk + AsyncReadDisk + DiskOverwritable>
-    BackedEntryAsync<T, Disk>
+impl<
+        T: Serialize + DeserializeOwned,
+        Disk: AsyncWriteDisk + AsyncReadDisk,
+        E: AsMut<BackedEntryAsync<T, Disk>>,
+    > BackedEntryMutAsync<T, Disk, E>
 {
     /// Returns [`BackedEntryMutAsync`] to allow efficient in-memory modifications
     /// if variable-sized writes are safe for the underlying storage.
     ///
     /// Make sure to call [`BackedEntryMutAsync::flush`] to sync with disk before
     /// dropping.
-    pub async fn mut_handle(&mut self) -> bincode::Result<BackedEntryMutAsync<T, Disk>> {
-        self.load().await?;
+    pub async fn mut_handle(mut backed: E) -> bincode::Result<BackedEntryMutAsync<T, Disk, E>> {
+        backed.as_mut().load().await?;
         Ok(BackedEntryMutAsync {
-            entry: self,
+            entry: backed,
             modified: false,
+            _phantom: (PhantomData, PhantomData),
         })
+    }
+}
+
+impl<T: Serialize + for<'de> Deserialize<'de>, Disk: AsyncWriteDisk + AsyncReadDisk>
+    BackedEntryAsync<T, Disk>
+{
+    /// Convenience wrapper for [`BackedEntryMut::mut_handle`]
+    pub async fn mut_handle(
+        &mut self,
+    ) -> bincode::Result<BackedEntryMutAsync<T, Disk, ToMut<Self>>> {
+        BackedEntryMutAsync::mut_handle(ToMut(self)).await
     }
 }
 

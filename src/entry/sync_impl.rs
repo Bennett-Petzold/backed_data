@@ -141,7 +141,7 @@ pub struct BackedEntryMut<T: Serialize, Disk: WriteDisk, E: AsMut<BackedEntry<T,
 
 impl<
         T: Serialize,
-        Disk: WriteDisk + ReadDisk,
+        Disk: WriteDisk,
         E: AsRef<BackedEntry<T, Disk>> + AsMut<BackedEntry<T, Disk>>,
     > Deref for BackedEntryMut<T, Disk, E>
 {
@@ -154,7 +154,7 @@ impl<
 
 impl<
         T: Serialize,
-        Disk: WriteDisk + ReadDisk,
+        Disk: WriteDisk,
         E: AsRef<BackedEntry<T, Disk>> + AsMut<BackedEntry<T, Disk>>,
     > DerefMut for BackedEntryMut<T, Disk, E>
 {
