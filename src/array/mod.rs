@@ -92,15 +92,15 @@ pub trait RefIter<T> {
 
 pub trait Container: AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::Data> {
     type Data;
-    type Ref<'a>: AsRef<Self::Data> + 'a
+    type Ref<'b>: AsRef<Self::Data>
     where
-        Self: 'a;
-    type Mut<'a>: AsMut<Self::Data> + 'a
+        Self: 'b;
+    type Mut<'b>: AsMut<Self::Data>
     where
-        Self: 'a;
+        Self: 'b;
 
-    fn c_get<'a>(&'a self, index: usize) -> Option<Self::Ref<'a>>;
-    fn c_get_mut<'a>(&'a mut self, index: usize) -> Option<Self::Mut<'a>>;
+    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>>;
+    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>>;
     fn c_len(&self) -> usize;
 }
 
@@ -117,7 +117,7 @@ pub trait ResizingContainer:
 }
 
 pub trait BackedEntryContainer {
-    type Container;
+    type Container: Once<Inner: Container>;
     type Disk;
     type Coder;
 
@@ -129,27 +129,16 @@ pub trait BackedEntryContainer {
 /// A [`BackedEntryContainer`] inside a [`Container`].
 ///
 /// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNested<'a>:
+pub trait BackedEntryContainerNested:
     Container<
     Data: BackedEntryContainer<
         Container = Self::OnceWrapper,
         Disk = Self::Disk,
         Coder = Self::Coder,
-    > + From<BackedEntry<Self::OnceWrapper, Self::Disk, Self::Coder>>
-              + BackedEntryContainer<
-        Container: Once<Inner: Container<Ref<'a> = Self::DataRef<'a>, Mut<'a> = Self::DataMut<'a>>>,
-    >,
+    > + From<BackedEntry<Self::OnceWrapper, Self::Disk, Self::Coder>>,
 >
-where
-    <Self as BackedEntryContainerNested<'a>>::Unwrapped: 'a,
 {
     type InnerData;
-    type DataRef<'b>: AsRef<Self::InnerData>
-    where
-        Self::Unwrapped: 'b;
-    type DataMut<'b>: AsMut<Self::InnerData>
-    where
-        Self::Unwrapped: 'b;
     type OnceWrapper: Once<Inner = Self::Unwrapped>;
     type Unwrapped: Container<Data = Self::InnerData>;
     type Disk;
@@ -157,7 +146,7 @@ where
 }
 
 /// Auto-implement trait to wrap intended generics.
-impl<'a, T> BackedEntryContainerNested<'a> for T
+impl<T> BackedEntryContainerNested for T
 where
     T: Container<Data: BackedEntryContainer>,
     <<T as Container>::Data as BackedEntryContainer>::Container: Once<Inner: Container>,
@@ -168,16 +157,9 @@ where
             <T::Data as BackedEntryContainer>::Coder,
         >,
     >,
-    <<<T as Container>::Data as BackedEntryContainer>::Container as Once>::Inner: 'a,
 {
     type InnerData =
         <<<T::Data as BackedEntryContainer>::Container as Once>::Inner as Container>::Data;
-    type DataRef<'b> =
-        <<<T::Data as BackedEntryContainer>::Container as Once>::Inner as Container>::Ref<'b>
-        where <<<T as Container>::Data as BackedEntryContainer>::Container as Once>::Inner: 'b;
-    type DataMut<'b> =
-        <<<T::Data as BackedEntryContainer>::Container as Once>::Inner as Container>::Mut<'b>
-        where <<<T as Container>::Data as BackedEntryContainer>::Container as Once>::Inner: 'b;
     type OnceWrapper = <T::Data as BackedEntryContainer>::Container;
     type Unwrapped = <<T::Data as BackedEntryContainer>::Container as Once>::Inner;
     type Disk = <T::Data as BackedEntryContainer>::Disk;
@@ -187,9 +169,8 @@ where
 /// [`BackedEntryContainerNested`] variant.
 ///
 /// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedRead<'a>:
+pub trait BackedEntryContainerNestedRead:
     BackedEntryContainerNested<
-    'a,
     Unwrapped: for<'de> Deserialize<'de>,
     Disk: ReadDisk,
     Coder: Decoder<<Self::Disk as ReadDisk>::ReadDisk, Error = Self::ReadError>,
@@ -198,10 +179,9 @@ pub trait BackedEntryContainerNestedRead<'a>:
     type ReadError;
 }
 
-impl<'a, T> BackedEntryContainerNestedRead<'a> for T
+impl<T> BackedEntryContainerNestedRead for T
 where
     T: BackedEntryContainerNested<
-        'a,
         Unwrapped: for<'de> Deserialize<'de>,
         Disk: ReadDisk,
         Coder: Decoder<<Self::Disk as ReadDisk>::ReadDisk>,
@@ -213,9 +193,8 @@ where
 /// [`BackedEntryContainerNested`] variant.
 ///
 /// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedWrite<'a>:
+pub trait BackedEntryContainerNestedWrite:
     BackedEntryContainerNested<
-    'a,
     Unwrapped: Serialize,
     Disk: WriteDisk,
     Coder: Encoder<<Self::Disk as WriteDisk>::WriteDisk, Error = Self::WriteError>,
@@ -224,10 +203,9 @@ pub trait BackedEntryContainerNestedWrite<'a>:
     type WriteError;
 }
 
-impl<'a, T> BackedEntryContainerNestedWrite<'a> for T
+impl<T> BackedEntryContainerNestedWrite for T
 where
     T: BackedEntryContainerNested<
-        'a,
         Unwrapped: Serialize,
         Disk: WriteDisk,
         Coder: Encoder<<Self::Disk as WriteDisk>::WriteDisk>,
@@ -239,13 +217,13 @@ where
 /// [`BackedEntryContainerNested`] variant.
 ///
 /// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedAll<'a>:
-    BackedEntryContainerNestedRead<'a> + BackedEntryContainerNestedWrite<'a>
+pub trait BackedEntryContainerNestedAll:
+    BackedEntryContainerNestedRead + BackedEntryContainerNestedWrite
 {
 }
 
-impl<'a, T> BackedEntryContainerNestedAll<'a> for T where
-    T: BackedEntryContainerNestedRead<'a> + BackedEntryContainerNestedWrite<'a>
+impl<T> BackedEntryContainerNestedAll for T where
+    T: BackedEntryContainerNestedRead + BackedEntryContainerNestedWrite
 {
 }
 
@@ -293,13 +271,13 @@ impl<T> RefIter<T> for Box<[T]> {
 
 impl<T> Container for Box<[T]> {
     type Data = T;
-    type Ref<'a> = ToRef<'a, Self::Data> where Self::Data: 'a;
-    type Mut<'a> = ToMut<'a, Self::Data> where Self::Data: 'a;
+    type Ref<'b> = ToRef<'b, Self::Data> where Self: 'b;
+    type Mut<'b> = ToMut<'b, Self::Data> where Self: 'b;
 
-    fn c_get<'a>(&'a self, index: usize) -> Option<Self::Ref<'a>> {
+    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
         self.get(index).map(|v| ToRef(v))
     }
-    fn c_get_mut<'a>(&'a mut self, index: usize) -> Option<Self::Mut<'a>> {
+    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
         self.get_mut(index).map(|v| ToMut(v))
     }
     fn c_len(&self) -> usize {
@@ -315,13 +293,13 @@ impl<T> RefIter<T> for Vec<T> {
 
 impl<T> Container for Vec<T> {
     type Data = T;
-    type Ref<'a> = ToRef<'a, Self::Data> where Self::Data: 'a;
-    type Mut<'a> = ToMut<'a, Self::Data> where Self::Data: 'a;
+    type Ref<'b> = ToRef<'b, Self::Data> where Self: 'b;
+    type Mut<'b> = ToMut<'b, Self::Data> where Self: 'b;
 
-    fn c_get<'a>(&'a self, index: usize) -> Option<Self::Ref<'a>> {
+    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
         self.get(index).map(|v| ToRef(v))
     }
-    fn c_get_mut<'a>(&'a mut self, index: usize) -> Option<Self::Mut<'a>> {
+    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
         self.get_mut(index).map(|v| ToMut(v))
     }
     fn c_len(&self) -> usize {
