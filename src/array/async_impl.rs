@@ -2,24 +2,19 @@ use std::ops::Range;
 
 use futures::{stream, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::sync::OnceCell;
 
 use crate::{
     entry::{
         async_impl::OnceCellWrap,
         disks::{AsyncReadDisk, AsyncWriteDisk},
-        formats::{AsyncDecoder, AsyncEncoder, Decoder, Encoder},
-        BackedEntry, BackedEntryAsync, BackedEntryTrait,
+        formats::{AsyncDecoder, AsyncEncoder},
+        BackedEntryAsync,
     },
     utils::BorrowExtender,
 };
 
 use super::{
-    container::{
-        open_mut, open_ref, BackedEntryContainer, BackedEntryContainerNested,
-        BackedEntryContainerNestedRead, BackedEntryContainerNestedWrite, Container,
-        ResizingContainer,
-    },
+    container::{BackedEntryContainer, Container, ResizingContainer},
     internal_idx, multiple_internal_idx, multiple_internal_idx_strict,
     sync_impl::BackedArray,
     BackedArrayError,
@@ -142,13 +137,6 @@ pub trait BackedEntryContainerNestedAsyncAll:
 impl<T> BackedEntryContainerNestedAsyncAll for T where
     T: BackedEntryContainerNestedAsyncRead + BackedEntryContainerNestedAsyncWrite
 {
-}
-
-/// Mutable open for a reference to a [`BackedEntryContainer`].
-macro_rules! a_open_mut {
-    ($x:expr) => {
-        $x.as_mut().as_mut()
-    };
 }
 
 /// Immutable open for a reference to a [`BackedEntryContainer`].
@@ -399,11 +387,10 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
 mod tests {
     use std::{io::Cursor, sync::Mutex};
 
-    use itertools::Itertools;
     use stream::TryStreamExt;
     use tokio::join;
 
-    use crate::{entry::formats::AsyncBincodeCoder, test_utils::cursor_vec, test_utils::CursorVec};
+    use crate::{entry::formats::AsyncBincodeCoder, test_utils::CursorVec};
 
     use super::*;
 

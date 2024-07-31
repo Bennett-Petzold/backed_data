@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     entry::{
-        sync_impl::{BackedEntryMut, BackedEntryWrite},
-        BackedEntry, BackedEntryArr, BackedEntryTrait,
+        sync_impl::{BackedEntryMut, BackedEntryRead, BackedEntryWrite},
+        BackedEntry, BackedEntryArr,
     },
     utils::BorrowExtender,
 };
@@ -40,8 +40,8 @@ use super::{
 pub struct BackedArray<K, E> {
     // keys and entries must always have the same length
     // keys must always be sorted min-max
-    keys: K,
-    entries: E,
+    pub(super) keys: K,
+    pub(super) entries: E,
 }
 
 impl<K: Clone, E: Clone> Clone for BackedArray<K, E> {
@@ -336,7 +336,7 @@ impl<
 {
     /// Removes an entry with the internal index, shifting ranges.
     ///
-    /// The getter functions can be used to indentify the target index.
+    /// The getter functions can be used to identify the target index.
     pub fn remove(&mut self, entry_idx: usize) -> &mut Self {
         // This split is necessary to solve lifetimes
         let width = self.keys.c_get(entry_idx).map(|entry| entry.as_ref().len());
@@ -434,39 +434,44 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Fused
 /// Handle to a backed value that flushes on drop.
 ///
 /// This automatically flushes when it is the last reference remaining.
-pub struct CountedHandle<'a, E: BackedEntryWrite, V> {
-    handle: Arc<Mutex<BackedEntryMut<'a, E>>>,
+pub struct CountedHandle<'a, E: BackedEntryWrite + BackedEntryRead, V> {
+    handle: Arc<Mutex<Result<BackedEntryMut<'a, E>, E::ReadError>>>,
     value: V,
 }
 
-impl<E: BackedEntryWrite, V> CountedHandle<'_, E, V> {
+impl<E: BackedEntryWrite + BackedEntryRead, V> CountedHandle<'_, E, V> {
     pub fn flush(&self) -> Result<(), E::WriteError> {
-        self.handle.lock().unwrap().flush().map(|_| {})
+        let mut h = self.handle.lock().unwrap();
+        if let Ok(h) = h.deref_mut() {
+            h.flush().map(|_| {})
+        } else {
+            Ok(())
+        }
     }
 }
 
-impl<E: BackedEntryWrite, V> Deref for CountedHandle<'_, E, V> {
+impl<E: BackedEntryWrite + BackedEntryRead, V> Deref for CountedHandle<'_, E, V> {
     type Target = V;
     fn deref(&self) -> &V {
         &self.value
     }
 }
 
-impl<E: BackedEntryWrite, V> DerefMut for CountedHandle<'_, E, V> {
+impl<E: BackedEntryWrite + BackedEntryRead, V> DerefMut for CountedHandle<'_, E, V> {
     fn deref_mut(&mut self) -> &mut V {
         &mut self.value
     }
 }
 
-impl<E: BackedEntryWrite, V> Drop for CountedHandle<'_, E, V> {
+impl<E: BackedEntryWrite + BackedEntryRead, V> Drop for CountedHandle<'_, E, V> {
     fn drop(&mut self) {
         if Arc::strong_count(&self.handle) == 1 {
-            self.handle
-                .lock()
-                .unwrap()
-                .flush()
-                .map_err(|_| "Failed to drop handle in CountedHandle!")
-                .unwrap();
+            let mut h = self.handle.lock().unwrap();
+            if let Ok(h) = h.deref_mut() {
+                h.flush()
+                    .map_err(|_| "Failed to drop handle in CountedHandle!")
+                    .unwrap();
+            }
         }
     }
 }
@@ -595,13 +600,23 @@ where
         // This actually extends lifetimes too long, beyond lifetime of struct
         let handle_ptr: *mut _ = self.handles.last_mut().unwrap();
         let handle = unsafe { &mut *handle_ptr };
-        let mut handle = handle.lock().unwrap();
+        let mut handle_locked = handle.lock().unwrap();
 
-        match &mut *handle {
-            Ok(h) => h.c_get_mut(inner_pos).map(Ok),
-            Err(e) => Some(Err(&*e)),
-        };
-        todo!()
+        match &mut *handle_locked {
+            Ok(h) => {
+                let h: *mut _ = h;
+                unsafe { &mut *h }.c_get_mut(inner_pos).map(|h| {
+                    Ok(CountedHandle {
+                        handle: handle.clone(),
+                        value: h,
+                    })
+                })
+            }
+            Err(e) => {
+                let e: *const _ = e;
+                Some(Err(unsafe { &*e }))
+            }
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -878,7 +893,6 @@ mod tests {
         );
     }
 
-    /*
     #[test]
     fn item_mod_iter() {
         const FIB: &[u8] = &[0, 1, 1, 2, 3, 5];
@@ -903,12 +917,12 @@ mod tests {
         // Read checks
         assert_eq!(backed.iter_mut().size_hint(), (FIB.len(), Some(FIB.len())));
         assert_eq!(backed.iter_mut().count(), FIB.len());
-        assert_eq!(backed.iter_mut().map(|x| *x.unwrap()).collect_vec(), FIB);
+        assert_eq!(backed.iter_mut().map(|x| **x.unwrap()).collect_vec(), FIB);
 
         let mut backed_iter = backed.iter_mut();
         for val in INPUT_1 {
             let mut entry = backed_iter.next().unwrap().unwrap();
-            *entry = *val;
+            **entry = *val;
         }
 
         // Backed storage is not modified
@@ -922,23 +936,23 @@ mod tests {
         assert_eq!(back_peek[back_peek.len() - after_mod.len()..], after_mod);
 
         assert_eq!(
-            backed_iter.map(|ent| *ent.unwrap()).collect_vec(),
+            backed_iter.map(|ent| **ent.unwrap()).collect_vec(),
             FIB.iter().skip(INPUT_1.len()).cloned().collect_vec()
         );
 
         assert_eq!(
-            backed.iter_mut().map(|ent| *ent.unwrap()).collect_vec(),
+            backed.iter_mut().map(|ent| **ent.unwrap()).collect_vec(),
             after_mod
         );
 
         let mut backed_iter = backed.iter_mut();
-        let first = *backed_iter.next().unwrap().unwrap();
-        let second = *backed_iter.next().unwrap().unwrap();
-        let third = *backed_iter.next().unwrap().unwrap();
+        let first = **backed_iter.next().unwrap().unwrap();
+        let second = **backed_iter.next().unwrap().unwrap();
+        let third = **backed_iter.next().unwrap().unwrap();
         assert_eq!([first, second, third], INPUT_1);
         for val in INPUT_1 {
             let mut entry = backed_iter.next().unwrap().unwrap();
-            *entry = *val;
+            **entry = *val;
         }
 
         #[cfg(not(miri))]
@@ -955,7 +969,7 @@ mod tests {
         drop(backed_iter);
 
         assert_eq!(
-            backed.iter_mut().map(|x| *x.unwrap()).collect_vec(),
+            backed.iter_mut().map(|x| **x.unwrap()).collect_vec(),
             after_second_mod.iter().map(|x| **x).collect_vec(),
         );
 
@@ -972,11 +986,10 @@ mod tests {
 
         // Correctly crosses multiple storage disks
         assert_eq!(
-            backed.iter_mut().map(|x| *x.unwrap()).collect_vec(),
+            backed.iter_mut().map(|x| **x.unwrap()).collect_vec(),
             after_third_mod.iter().map(|x| **x).collect_vec(),
         );
     }
-    */
 
     #[test]
     fn length_checking() {
