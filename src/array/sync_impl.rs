@@ -137,8 +137,7 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<BackedArray<T, Disk>>
             .map(|entry| entry.load())
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
-            .flatten()
-            .cloned()
+            .flat_map(|entry| entry.iter().cloned())
             .collect())
     }
 }
@@ -200,7 +199,9 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
     ///
     /// See [`Self::get_chunk_mut`] for a modifiable handle.
     pub fn get_chunk(&mut self, idx: usize) -> Option<bincode::Result<&[T]>> {
-        self.entries.get_mut(idx).map(|arr| arr.load())
+        self.entries
+            .get_mut(idx)
+            .map(|arr| arr.load().map(|entry| entry.as_ref()))
     }
 }
 
@@ -223,13 +224,19 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     /// let file_0 = FILENAME_BASE.clone().join("_0");
     /// let file_1 = FILENAME_BASE.join("_1");
     /// let mut array: BackedArray<u32, _> = BackedArray::default();
-    /// array.append(&values.0, file_0);
-    /// array.append(&values.1, file_1);
+    /// array.append(values.0, file_0);
+    /// array.append(values.1, file_1);
     ///
     /// assert_eq!(array.get(4).unwrap(), &3);
     /// remove_dir_all(FILENAME_BASE).unwrap();
     /// ```
-    pub fn append(&mut self, values: &[T], backing_store: Disk) -> bincode::Result<&mut Self> {
+    pub fn append<U: Into<Box<[T]>>>(
+        &mut self,
+        values: U,
+        backing_store: Disk,
+    ) -> bincode::Result<&mut Self> {
+        let values = values.into();
+
         // End of a range is exclusive
         let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
         self.keys.push(start_idx..(start_idx + values.len()));
@@ -251,19 +258,21 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     ///     [2, 3, 5]);
     ///
     /// let mut array: BackedArray<u32, _> = BackedArray::default();
-    /// array.append_memory(Box::new(values.0), FILENAME.clone());
+    /// array.append_memory(values.0, FILENAME.clone());
     ///
     /// // Overwrite file, making disk pointer for first array invalid
-    /// array.append_memory(Box::new(values.1), FILENAME.clone());
+    /// array.append_memory(values.1, FILENAME.clone());
     ///
     /// assert_eq!(array.get(0).unwrap(), &0);
     /// remove_file(FILENAME).unwrap();
     /// ```
-    pub fn append_memory(
+    pub fn append_memory<U: Into<Box<[T]>>>(
         &mut self,
-        values: Box<[T]>,
+        values: U,
         backing_store: Disk,
     ) -> bincode::Result<&mut Self> {
+        let values = values.into();
+
         // End of a range is exclusive
         let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
         self.keys.push(start_idx..(start_idx + values.len()));
@@ -424,7 +433,7 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
         self.entries
             .iter_mut()
             .skip(offset)
-            .map(|entry| entry.load())
+            .map(|entry| entry.load().map(|entry| entry.as_ref()))
     }
 }
 
@@ -452,7 +461,7 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
         offset: usize,
     ) -> impl Iterator<Item = bincode::Result<Vec<T>>> + '_ {
         self.entries.iter_mut().skip(offset).map(|entry| {
-            let val = entry.load()?.to_owned();
+            let val = entry.load()?.to_vec();
             entry.unload();
             Ok(val)
         })
@@ -513,10 +522,8 @@ mod tests {
         const INPUT_1: [u8; 3] = [2, 3, 5];
 
         let mut backed = BackedArray::new();
-        backed.append(&INPUT_0, back_vector_0).unwrap();
-        backed
-            .append_memory(Box::new(INPUT_1), back_vector_1)
-            .unwrap();
+        backed.append(INPUT_0, back_vector_0).unwrap();
+        backed.append_memory(INPUT_1, back_vector_1).unwrap();
 
         assert_eq!(backed.get(0).unwrap(), &0);
         assert_eq!(backed.get(4).unwrap(), &3);
@@ -721,7 +728,7 @@ mod tests {
 
         let mut backed = BackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
-        backed.append_memory(INPUT_1.into(), back_vector_1).unwrap();
+        backed.append_memory(INPUT_1, back_vector_1).unwrap();
 
         assert_eq!(backed.len(), 6);
         assert_eq!(backed.loaded_len(), 3);

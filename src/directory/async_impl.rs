@@ -43,13 +43,16 @@ impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
         Ok(self)
     }
 
-    async fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self> {
+    async fn append<U: Into<Box<[T]>> + Send>(&mut self, values: U) -> bincode::Result<&mut Self> {
         let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
         self.array.append(values, next_target).await?;
         Ok(self)
     }
 
-    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self> {
+    async fn append_memory<U: Into<Box<[T]>> + Send>(
+        &mut self,
+        values: U,
+    ) -> bincode::Result<&mut Self> {
         let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
         self.array.append_memory(values, next_target).await?;
         Ok(self)
@@ -120,7 +123,6 @@ impl<T> DirectoryBackedArray<T> {
     /// Moves the directory to a new location wholesale.
     pub async fn move_root(&mut self, new_root: PathBuf) -> std::io::Result<&mut Self> {
         let mut copy_futures = JoinSet::new();
-
         if rename(self.directory_root.clone(), new_root.clone())
             .await
             .is_err()
@@ -205,8 +207,8 @@ mod tests {
         let mut arr = DirectoryBackedArray::new(directory.clone()).await.unwrap();
         let (values, second_values) = values();
 
-        arr.append_memory(values.into()).await.unwrap();
-        arr.append(&second_values).await.unwrap();
+        arr.append_memory(values).await.unwrap();
+        arr.append(second_values).await.unwrap();
         assert_eq!(arr.get(100).await.unwrap(), &"TEST STRING");
         assert_eq!(arr.get(15_000).await.unwrap(), &"OTHER VALUE");
 
@@ -220,8 +222,8 @@ mod tests {
         let mut arr = DirectoryBackedArray::new(directory.clone()).await.unwrap();
         let (values, second_values) = values();
 
-        arr.append(&values).await.unwrap();
-        arr.append_memory(second_values.into()).await.unwrap();
+        arr.append(values).await.unwrap();
+        arr.append_memory(second_values).await.unwrap();
         arr.save_to_disk(&mut File::create(directory.join("directory")).await.unwrap())
             .await
             .unwrap();
@@ -246,8 +248,8 @@ mod tests {
         let mut arr = DirectoryBackedArray::new(directory.clone()).await.unwrap();
         let (values, second_values) = values();
 
-        arr.append(&values).await.unwrap();
-        arr.append_memory(second_values.into()).await.unwrap();
+        arr.append(values).await.unwrap();
+        arr.append_memory(second_values).await.unwrap();
         arr.save_to_disk(&mut File::create(directory.join("directory")).await.unwrap())
             .await
             .unwrap();

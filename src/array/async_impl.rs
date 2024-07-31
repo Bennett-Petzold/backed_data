@@ -189,11 +189,13 @@ where
 #[cfg(feature = "async")]
 impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
     /// Async version of [`super::sync_impl::BackedArray::append`].
-    pub async fn append(
+    pub async fn append<U: Into<Box<[T]>>>(
         &mut self,
-        values: &[T],
+        values: U,
         backing_store: Disk,
     ) -> bincode::Result<&mut Self> {
+        let values = values.into();
+
         // End of a range is exclusive
         let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
         self.keys.push(start_idx..(start_idx + values.len()));
@@ -203,12 +205,14 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
         Ok(self)
     }
 
-    /// Async version of [`super::sync_impl::append_memory`]
-    pub async fn append_memory(
+    /// Async version of [`super::sync_impl::append_memory`].
+    pub async fn append_memory<U: Into<Box<[T]>>>(
         &mut self,
-        values: Box<[T]>,
+        values: U,
         backing_store: Disk,
     ) -> bincode::Result<&mut Self> {
+        let values = values.into();
+
         // End of a range is exclusive
         let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
         self.keys.push(start_idx..(start_idx + values.len()));
@@ -406,7 +410,7 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedArray<T, Disk> {
     /// * `offset`: Starting chunk (skips loading offset - 1 chunks)
     pub fn chunk_stream(&mut self, offset: usize) -> impl Stream<Item = bincode::Result<&[T]>> {
         stream::iter(self.entries.iter_mut().skip(offset))
-            .then(|entry| async { entry.load().await })
+            .then(|entry| async { entry.load().await.map(|entry| entry.as_ref()) })
     }
 }
 
@@ -434,7 +438,7 @@ impl<T: DeserializeOwned + Clone, Disk: AsyncReadDisk> BackedArray<T, Disk> {
         offset: usize,
     ) -> impl Stream<Item = bincode::Result<Vec<T>>> + '_ {
         stream::iter(self.entries.iter_mut().skip(offset)).then(|entry| async {
-            let val = entry.load().await?.to_owned();
+            let val = entry.load().await?.to_vec();
             entry.unload();
             Ok(val)
         })
@@ -461,7 +465,7 @@ mod tests {
         const INPUT: [u8; 3] = [2, 3, 5];
 
         let mut backed = BackedArray::new();
-        backed.append(&INPUT, &mut back_vector_wrap).await.unwrap();
+        backed.append(INPUT, &mut back_vector_wrap).await.unwrap();
         assert_eq!(
             back_vector.get_ref()[back_vector.get_ref().len() - 3..],
             [2, 3, 5]
@@ -485,9 +489,9 @@ mod tests {
         const INPUT_1: [u8; 3] = [2, 3, 5];
 
         let mut backed = BackedArray::new();
-        backed.append(&INPUT_0, back_vector_wrap_0).await.unwrap();
+        backed.append(INPUT_0, back_vector_wrap_0).await.unwrap();
         backed
-            .append_memory(Box::new(INPUT_1), back_vector_wrap_1)
+            .append_memory(INPUT_1, back_vector_wrap_1)
             .await
             .unwrap();
 
@@ -519,7 +523,7 @@ mod tests {
         const INPUT: [u8; 3] = [2, 3, 5];
 
         let mut backed = BackedArray::new();
-        backed.append(&INPUT, &mut back_vector_wrap).await.unwrap();
+        backed.append(INPUT, &mut back_vector_wrap).await.unwrap();
 
         let back_vec_prev = back_vector.get_ref().clone();
 
@@ -568,7 +572,7 @@ mod tests {
         const INPUT: [u8; 3] = [2, 3, 5];
 
         let mut backed = BackedArray::new();
-        backed.append(&INPUT, &mut back_vector_wrap).await.unwrap();
+        backed.append(INPUT, &mut back_vector_wrap).await.unwrap();
 
         let back_vec_prev = back_vector.get_ref().clone();
 

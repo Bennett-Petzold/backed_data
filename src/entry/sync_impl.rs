@@ -8,7 +8,7 @@ use std::{
 use bincode::Options;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload};
+use super::{BackedEntry, BackedEntryUnload};
 
 pub trait ReadDisk: Serialize + for<'de> Deserialize<'de> {
     type ReadDisk: Read;
@@ -42,17 +42,17 @@ impl WriteDisk for PathBuf {
     }
 }
 
-// ----- General Implementations ----- //
-
 impl<T: Serialize, Disk: WriteDisk> BackedEntry<T, Disk> {
     /// Updates underlying storage with the current entry
     fn update(&mut self) -> bincode::Result<()> {
-        let mut disk = self.disk.write_disk()?;
-        bincode::options()
-            .with_limit(u32::max_value() as u64)
-            .allow_trailing_bytes()
-            .serialize_into(&mut disk, &self.value)?;
-        disk.flush()?; // Make sure buffer is emptied
+        if let Some(val) = self.value.as_ref() {
+            let mut disk = self.disk.write_disk()?;
+            bincode::options()
+                .with_limit(u32::MAX as u64)
+                .allow_trailing_bytes()
+                .serialize_into(&mut disk, &val)?;
+            disk.flush()?; // Make sure buffer is emptied
+        }
         Ok(())
     }
 
@@ -61,11 +61,11 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntry<T, Disk> {
     /// See [`Self::write_unload`] to skip the memory write.
     pub fn write(&mut self, new_value: T) -> bincode::Result<()> {
         let mut disk = self.disk.write_disk()?;
-        self.value = new_value;
+        self.value = Some(new_value);
         bincode::options()
-            .with_limit(u32::max_value() as u64)
+            .with_limit(u32::MAX as u64)
             .allow_trailing_bytes()
-            .serialize_into(&mut disk, &self.value)?;
+            .serialize_into(&mut disk, self.value.as_ref().unwrap())?;
         disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
@@ -76,55 +76,7 @@ impl<T: Serialize, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> where
 {
 }
 
-// ----- Boxed Array Implementations ----- //
-
-impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryArr<T, Disk> {
-    /// Returns the entry, loading from disk if not in memory.
-    ///
-    /// Will remain in memory until an explicit call to unload.
-    pub fn load(&mut self) -> bincode::Result<&[T]> {
-        if self.value.is_empty() {
-            let disk = self.disk.read_disk()?;
-            self.value = bincode::options()
-                .with_limit(u32::max_value() as u64)
-                .allow_trailing_bytes()
-                .deserialize_from(disk)?;
-        }
-        Ok(&self.value)
-    }
-}
-
-impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryArr<T, Disk> {
-    pub fn is_loaded(&self) -> bool {
-        !self.value.is_empty()
-    }
-}
-
-impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryUnload for BackedEntryArr<T, Disk> {
-    fn unload(&mut self) {
-        self.value = Box::new([]);
-    }
-}
-
-impl<T: Serialize, Disk: WriteDisk> BackedEntryArr<T, Disk> {
-    /// Write the value to disk only, unloading current memory.
-    ///
-    /// See [`Self::write`] to keep the value in memory.
-    pub fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
-        self.unload();
-        let mut disk = self.disk.write_disk()?;
-        bincode::options()
-            .with_limit(u32::max_value() as u64)
-            .allow_trailing_bytes()
-            .serialize_into(&mut disk, new_value)?;
-        disk.flush()?; // Make sure buffer is emptied
-        Ok(())
-    }
-}
-
-// ----- Option Implementations ----- //
-
-impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryOption<T, Disk> {
+impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntry<T, Disk> {
     /// Returns the entry, loading from disk if not in memory.
     ///
     /// Will remain in memory until an explicit call to unload.
@@ -133,7 +85,7 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryOption<T, Disk> {
             let disk = self.disk.read_disk()?;
             self.value = Some(
                 bincode::options()
-                    .with_limit(u32::max_value() as u64)
+                    .with_limit(u32::MAX as u64)
                     .allow_trailing_bytes()
                     .deserialize_from(disk)?,
             );
@@ -142,29 +94,29 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryOption<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryOption<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
     pub fn is_loaded(&self) -> bool {
         self.value.is_some()
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryUnload for BackedEntryOption<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryUnload for BackedEntry<T, Disk> {
     fn unload(&mut self) {
         self.value = None;
     }
 }
 
-impl<T: Serialize, Disk: WriteDisk> BackedEntryOption<T, Disk> {
+impl<T: Serialize, Disk: WriteDisk> BackedEntry<T, Disk> {
     /// Write the value to disk only, unloading current memory.
     ///
     /// See [`Self::write`] to keep the value in memory.
-    pub fn write_unload(&mut self, new_value: &T) -> bincode::Result<()> {
+    pub fn write_unload<U: Into<T>>(&mut self, new_value: U) -> bincode::Result<()> {
         self.unload();
         let mut disk = self.disk.write_disk()?;
         bincode::options()
-            .with_limit(u32::max_value() as u64)
+            .with_limit(u32::MAX as u64)
             .allow_trailing_bytes()
-            .serialize_into(&mut disk, new_value)?;
+            .serialize_into(&mut disk, &new_value.into())?;
         disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
@@ -187,7 +139,7 @@ impl<'a, T: Serialize, Disk: WriteDisk> Deref for BackedEntryMut<'a, T, Disk> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.entry.value
+        self.entry.value.as_ref().unwrap()
     }
 }
 
@@ -195,7 +147,7 @@ impl<'a, T: Serialize, Disk: WriteDisk> DerefMut for BackedEntryMut<'a, T, Disk>
     /// [`DerefMut::deref_mut`] that sets a modified flag.
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        &mut self.entry.value
+        self.entry.value.as_mut().unwrap()
     }
 }
 
@@ -224,28 +176,13 @@ impl<'a, T: Serialize, Disk: WriteDisk> Drop for BackedEntryMut<'a, T, Disk> {
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedEntryArr<T, Disk> {
+impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedEntry<T, Disk> {
     /// Returns [`BackedEntryMut`] to allow efficient in-memory modifications
     /// if variable-sized writes are safe for the underlying storage.
     ///
     /// Make sure to call [`BackedEntryMut::flush`] to sync with disk before
     /// dropping.
-    pub fn mut_handle(&mut self) -> bincode::Result<BackedEntryMut<Box<[T]>, Disk>> {
-        self.load()?;
-        Ok(BackedEntryMut {
-            entry: self,
-            modified: false,
-        })
-    }
-}
-
-impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedEntryOption<T, Disk> {
-    /// Returns [`BackedEntryMut`] to allow efficient in-memory modifications
-    /// if variable-sized writes are safe for the underlying storage.
-    ///
-    /// Make sure to call [`BackedEntryMut::flush`] to sync with disk before
-    /// dropping.
-    pub fn mut_handle(&mut self) -> bincode::Result<BackedEntryMut<Option<T>, Disk>> {
+    pub fn mut_handle(&mut self) -> bincode::Result<BackedEntryMut<T, Disk>> {
         self.load()?;
         Ok(BackedEntryMut {
             entry: self,
@@ -271,7 +208,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
 mod tests {
     use std::{collections::HashMap, io::Cursor};
 
-    use crate::test_utils::CursorVec;
+    use crate::{entry::BackedEntryArr, test_utils::CursorVec};
 
     use super::*;
 
@@ -287,7 +224,7 @@ mod tests {
         let mut backed_entry = unsafe { BackedEntryArr::new(&mut *back_vec_ptr) };
         backed_entry.write_unload(FIB).unwrap();
 
-        assert_eq!(backed_entry.load().unwrap(), FIB);
+        assert_eq!(backed_entry.load().unwrap().as_ref(), FIB);
 
         let backing_store = back_vec.inner.get_ref();
         assert_eq!(&backing_store[backing_store.len() - FIB.len()..], FIB);
@@ -308,7 +245,7 @@ mod tests {
         assert_eq!(backing_store[backing_store.len() - FIB.len() + 1], FIB[1]);
 
         drop(handle);
-        assert_eq!(backed_entry.load().unwrap(), [20, 1, 30, 5, 7]);
+        assert_eq!(backed_entry.load().unwrap().as_ref(), [20, 1, 30, 5, 7]);
     }
 
     #[test]
@@ -322,15 +259,12 @@ mod tests {
         };
 
         // Intentional unsafe access to later peek underlying storage
-        let mut backed_entry = BackedEntryOption::new(&mut back_vec);
-        backed_entry.write_unload(&input).unwrap();
+        let mut backed_entry = BackedEntry::new(&mut back_vec);
+        backed_entry.write_unload(input.clone()).unwrap();
 
         assert_eq!(&input, backed_entry.load().unwrap());
         let mut handle = backed_entry.mut_handle().unwrap();
-        handle
-            .as_mut()
-            .unwrap()
-            .insert("EXTRA STRING".to_string(), 234137);
+        handle.insert("EXTRA STRING".to_string(), 234137);
         handle.flush().unwrap();
 
         drop(handle);

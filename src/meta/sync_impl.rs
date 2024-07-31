@@ -31,8 +31,8 @@ pub trait BackedArrayWrapper<T>:
     type BackingError;
     // Functionality wrappers
     fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, Self::BackingError>;
-    fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self>;
-    fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self>;
+    fn append<U: Into<Box<[T]>>>(&mut self, values: U) -> bincode::Result<&mut Self>;
+    fn append_memory<U: Into<Box<[T]>>>(&mut self, values: U) -> bincode::Result<&mut Self>;
 
     /// Moves all entries of same-type `rhs` into `self`.
     fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError>;
@@ -52,12 +52,12 @@ pub fn append_wrapper<'a, T, LHS, RHS>(
 where
     LHS: BackedArrayWrapper<T>,
     RHS: BackedArrayWrapper<T>,
-    T: Serialize + DeserializeOwned,
+    T: Serialize + DeserializeOwned + Clone,
     <RHS as BackedArrayWrapper<T>>::BackingError: 'static,
 {
     let idxs = 0..rhs.chunks_len();
     for idx in idxs {
-        lhs.append(rhs.get_chunk(idx).unwrap()?)?;
+        lhs.append(rhs.get_chunk_mut(idx).unwrap()?.clone())?;
         rhs.clear_chunk(idx);
     }
     Ok(lhs)
@@ -74,11 +74,15 @@ where
     T: Sized + Serialize + DeserializeOwned,
     <RHS as BackedArrayWrapper<T>>::BackingError: Send + Sync + std::error::Error + 'static,
 {
-    while let Some(val) = rhs.get_chunk(0) {
-        let val = val?;
-        lhs.append(val)?;
+    for val in rhs.chunk_mod_iter(0) {
+        let mut val = val?;
+        lhs.append(std::mem::take(&mut *val))?;
+    }
+
+    for _ in 0..rhs.chunks_len() {
         rhs.remove(0)?;
     }
+
     Ok(lhs)
 }
 
@@ -110,8 +114,8 @@ mod tests {
 
         let mut first_store = ZstdDirBackedArray::new(dir.clone(), None).unwrap();
         let mut second_store = DirectoryBackedArray::new(dir2.clone()).unwrap();
-        first_store.append(&first_sequence).unwrap();
-        second_store.append(&second_sequence).unwrap();
+        first_store.append(first_sequence).unwrap();
+        second_store.append(second_sequence).unwrap();
 
         append_wrapper(&mut first_store, &mut second_store).unwrap();
         assert_eq!(
@@ -177,8 +181,8 @@ mod tests {
 
         let mut first_store = ZstdDirBackedArray::new(dir.clone(), None).unwrap();
         let mut second_store = DirectoryBackedArray::new(dir.clone()).unwrap();
-        first_store.append(&first_sequence).unwrap();
-        second_store.append(&second_sequence).unwrap();
+        first_store.append(first_sequence).unwrap();
+        second_store.append(second_sequence).unwrap();
 
         append_wrapper_destructive(&mut first_store, second_store).unwrap();
         assert_eq!(
