@@ -62,6 +62,7 @@ impl<'a> WriteDisk for CursorVec<'a> {
     }
 }
 
+#[cfg(feature = "async")]
 impl<'a> AsyncReadDisk for CursorVec<'a> {
     type ReadDisk = &'a mut Cursor<Vec<u8>>;
 
@@ -72,6 +73,7 @@ impl<'a> AsyncReadDisk for CursorVec<'a> {
     }
 }
 
+#[cfg(feature = "async")]
 impl<'a> AsyncWriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
@@ -104,6 +106,7 @@ impl<'a> WriteDisk for &mut CursorVec<'a> {
     }
 }
 
+#[cfg(feature = "async")]
 impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
     type ReadDisk = &'a mut Cursor<Vec<u8>>;
 
@@ -114,6 +117,7 @@ impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
     }
 }
 
+#[cfg(feature = "async")]
 impl<'a> AsyncWriteDisk for &mut CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
