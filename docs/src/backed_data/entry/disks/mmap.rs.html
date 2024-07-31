@@ -941,6 +941,21 @@
 <a href="#941" id="941">941</a>
 <a href="#942" id="942">942</a>
 <a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
@@ -1352,7 +1367,10 @@
         </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateWrite);
 
         <span class="kw">let </span>reserved_len = <span class="self">Self</span>::get_reserved_len(
-            <span class="kw-2">&amp;</span>mmap,
+            <span class="attr">#[cfg(not(target_os = <span class="string">"windows"</span>))]
+            </span><span class="kw-2">&amp;</span>mmap,
+            <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+            </span><span class="kw-2">&amp;</span><span class="prelude-val">Some</span>(mmap),
             <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
             </span><span class="kw-2">&amp;</span>open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>,
         )<span class="question-mark">?</span>;
@@ -1382,7 +1400,10 @@
         <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map_mut(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
 
         <span class="kw">let </span>reserved_len = <span class="self">Self</span>::get_reserved_len(
-            <span class="kw-2">&amp;</span>mmap,
+            <span class="attr">#[cfg(not(target_os = <span class="string">"windows"</span>))]
+            </span><span class="kw-2">&amp;</span>mmap,
+            <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+            </span><span class="kw-2">&amp;</span><span class="prelude-val">Some</span>(mmap),
             <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
             </span><span class="kw-2">&amp;</span>file,
         )<span class="question-mark">?</span>;
@@ -1603,7 +1624,16 @@
             stub_mmap = <span class="prelude-val">Some</span>(<span class="kw">unsafe </span>{ MmapOptions::new().map_mut(<span class="kw-2">&amp;</span><span class="self">self</span>.file()<span class="question-mark">?</span>) }<span class="question-mark">?</span>);
         }
 
-        <span class="prelude-val">Ok</span>(std::mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.mmap, stub_mmap))
+        <span class="kw">let </span>map = std::mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.mmap, stub_mmap);
+
+        <span class="attr">#[cfg(not(target_os = <span class="string">"windows"</span>))]
+        </span>{
+            <span class="prelude-val">Ok</span>(map)
+        }
+        <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+        </span>{
+            <span class="prelude-val">Ok</span>(map.unwrap())
+        }
     }
 
     <span class="doccomment">/// Remap to the current reserved len.
@@ -1701,7 +1731,7 @@
         }
         <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
         </span>{
-            ret = <span class="self">self</span>.mmap.as_ref()[<span class="number">0</span>..<span class="self">self</span>.written_len];
+            ret = <span class="self">self</span>.mmap.as_ref().unwrap()[<span class="number">0</span>..<span class="self">self</span>.written_len];
         }
 
         ret
@@ -1718,7 +1748,7 @@
         }
         <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
         </span>{
-            ret = <span class="self">self</span>.mmap.as_mut()[<span class="number">0</span>..<span class="self">self</span>.written_len];
+            ret = <span class="self">self</span>.mmap.as_mut().unwrap()[<span class="number">0</span>..<span class="self">self</span>.written_len];
         }
 
         ret
