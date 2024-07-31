@@ -185,8 +185,11 @@ impl<E: BackedEntryWrite> BackedEntryMut<'_, E> {
 
     /// Saves modifications to disk, unsetting the modified flag if sucessful.
     pub fn flush(&mut self) -> Result<&mut Self, E::WriteError> {
-        self.entry.get_inner_mut().update()?;
-        self.modified = false;
+        // No need to update if unmodified
+        if self.modified {
+            self.entry.get_inner_mut().update()?;
+            self.modified = false;
+        }
         Ok(self)
     }
 }
@@ -297,6 +300,7 @@ mod tests {
 
     use crate::{
         entry::{formats::BincodeCoder, BackedEntryArr, BackedEntryArrLock, BackedEntryCell},
+        test_utils::cursor_vec,
         test_utils::CursorVec,
     };
 
@@ -373,31 +377,31 @@ mod tests {
     #[cfg(feature = "bincode")]
     #[test]
     fn write() {
-        use crate::test_utils::cursor_vec;
-
         const VALUE: &[u8] = &[5];
         const NEW_VALUE: &[u8] = &[7];
 
-        cursor_vec!(back_vec);
-        let back_vec = UnsafeCell::new(back_vec);
+        cursor_vec!(back_vec, back_vec_inner);
 
-        // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
-            unsafe { BackedEntryArr::new(&mut *back_vec.get(), BincodeCoder {}) };
+            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder {});
 
         backed_entry.write_unload(VALUE).unwrap();
         assert!(!backed_entry.is_loaded());
-        let back_vec_inner = unsafe { (*back_vec.get()).get_mut() };
+
+        #[cfg(not(miri))]
         assert_eq!(&back_vec_inner[back_vec_inner.len() - VALUE.len()..], VALUE);
+
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUE);
 
         backed_entry.write(NEW_VALUE.into()).unwrap();
         assert!(backed_entry.is_loaded());
-        let back_vec_inner = unsafe { (*back_vec.get()).get_mut() };
+
+        #[cfg(all(test, not(miri)))]
         assert_eq!(
             &back_vec_inner[back_vec_inner.len() - NEW_VALUE.len()..],
             NEW_VALUE
         );
+
         assert_eq!(backed_entry.load().unwrap().as_ref(), NEW_VALUE);
     }
 
@@ -442,31 +446,24 @@ mod tests {
 
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
         const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
-        let mut binding = Cursor::new(Vec::with_capacity(10));
-        let back_vec = UnsafeCell::new(CursorVec {
-            inner: (&mut binding).into(),
-        });
+        cursor_vec!(back_vec, backing_store);
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
-            unsafe { BackedEntryArr::new(&mut *back_vec.get(), BincodeCoder {}) };
+            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder {});
         backed_entry.write(VALUES.into()).unwrap();
 
         // Check for valid bincode encoding
-        {
-            let backing_store = unsafe { &*back_vec.get() }.get_ref();
-            assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
-        }
+        #[cfg(not(miri))]
+        assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
 
         let mut backed_entry = backed_entry
             .change_backing(unsafe { &mut *back_vec.get() }, SerdeJsonCoder {})
             .unwrap();
 
         // Check for valid json encoding
-        {
-            let backing_store = unsafe { &*back_vec.get() }.get_ref();
-            assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
-        }
+        #[cfg(not(miri))]
+        assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
 
         // Check that data is preserved with json backing
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
@@ -481,10 +478,7 @@ mod tests {
 
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
         const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
-        let mut binding = Cursor::new(Vec::with_capacity(10));
-        let back_vec = UnsafeCell::new(CursorVec {
-            inner: (&mut binding).into(),
-        });
+        cursor_vec!(back_vec, backing_store);
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
@@ -492,18 +486,14 @@ mod tests {
         backed_entry.write(VALUES.into()).unwrap();
 
         // Check for valid serde json encoding
-        {
-            let backing_store = unsafe { &*back_vec.get() }.get_ref();
-            assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
-        }
+        #[cfg(not(miri))]
+        assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
 
         let mut backed_entry = backed_entry.encoder_into::<SimdJsonCoder>();
 
         // Check for valid simd json encoding
-        {
-            let backing_store = unsafe { &*back_vec.get() }.get_ref();
-            assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
-        }
+        #[cfg(not(miri))]
+        assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
 
         // Check that data is preserved in the alternative reader
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
