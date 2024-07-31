@@ -10,7 +10,7 @@ use crate::{
         sync_impl::{BackedEntryMut, BackedEntryRead, BackedEntryWrite},
         BackedEntry,
     },
-    utils::BorrowExtender,
+    utils::{BorrowExtender, BorrowExtenderMut},
 };
 
 use super::{
@@ -404,7 +404,7 @@ pub struct BackedArrayIterMut<'a, K: Container + 'a, E: BackedEntryContainerNest
     pos: usize,
     len: usize,
     keys: BorrowExtender<<K as Container>::RefSlice<'a>, Peekable<std::slice::Iter<'a, K::Data>>>,
-    entries: BorrowExtender<<E as Container>::MutSlice<'a>, std::slice::IterMut<'a, E::Data>>,
+    entries: BorrowExtenderMut<<E as Container>::MutSlice<'a>, std::slice::IterMut<'a, E::Data>>,
     // TODO: Rewrite this to be a box of Once or MaybeUninit type
     // Problem with once types is that either a generic needs to be introduced,
     // or this iterator needs to choose between cell/lock tradeoffs.
@@ -431,7 +431,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll>
             let keys_ptr: *const _ = keys;
             unsafe { &*keys_ptr }.as_ref().iter().peekable()
         });
-        let mut entries = BorrowExtender::new_mut(backed.entries.c_mut(), |ent| {
+        let mut entries = BorrowExtenderMut::new(backed.entries.c_mut(), |ent| {
             let ent_ptr: *mut _ = ent;
             unsafe { &mut *ent_ptr }.as_mut().iter_mut()
         });
@@ -606,9 +606,17 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Backed
         >,
     > {
         self.entries.mut_iter().map(|arr| {
-            BorrowExtender::new_mut(arr, |arr| {
-                let arr_ptr: *mut _ = arr;
-                unsafe { &mut *arr_ptr }.as_mut().get_mut().mut_handle()
+            let arr = BorrowExtenderMut::new(arr, |arr| {
+                let arr: *mut _ = arr.as_mut();
+                unsafe { &mut *arr }
+            });
+            let arr = BorrowExtenderMut::new(arr, |arr| {
+                let arr: *mut _ = arr.get_mut().get_mut();
+                unsafe { &mut *arr }
+            });
+            BorrowExtenderMut::new(arr, |arr| {
+                let arr: *mut _ = arr.get_mut();
+                unsafe { &mut *arr }.mut_handle()
             })
             .open_result()
         })

@@ -10,7 +10,8 @@ impl<T> RefIter<T> for Box<[T]> {
 }
 
 impl<T> MutIter<T> for Box<[T]> {
-    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>> {
+    type IterMut<'a> = ToMut<'a, T> where T: 'a;
+    fn mut_iter(&mut self) -> impl Iterator<Item = Self::IterMut<'_>> {
         self.iter_mut().map(|v| ToMut(v))
     }
 }
@@ -47,7 +48,8 @@ impl<T> RefIter<T> for Vec<T> {
 }
 
 impl<T> MutIter<T> for Vec<T> {
-    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>> {
+    type IterMut<'a> = ToMut<'a, T> where T: 'a;
+    fn mut_iter(&mut self) -> impl Iterator<Item = Self::IterMut<'_>> {
         self.iter_mut().map(|v| ToMut(v))
     }
 }
