@@ -18,6 +18,24 @@ pub struct CursorVec<'a> {
     pub inner: Mutex<&'a mut Cursor<Vec<u8>>>,
 }
 
+impl<'a> CursorVec<'a> {
+    pub fn new(inner: &'a mut Cursor<Vec<u8>>) -> Self {
+        Self {
+            inner: Mutex::new(inner),
+        }
+    }
+}
+
+/// Creates a default [`CursorVec`] for testing.
+#[macro_export]
+macro_rules! cursor_vec {
+    ($x: ident) => {
+        let mut inner = std::io::Cursor::default();
+        let $x = $crate::test_utils::CursorVec::new(&mut inner);
+    };
+}
+pub use cursor_vec;
+
 impl<'de> Deserialize<'de> for CursorVec<'_> {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
     where

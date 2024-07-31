@@ -22,7 +22,7 @@ pub mod encrypted;
 pub mod mmap;
 */
 
-#[cfg(test)]
-mod test_utils;
+#[cfg(any(test, feature = "test"))]
+pub mod test_utils;
 
 pub mod utils;

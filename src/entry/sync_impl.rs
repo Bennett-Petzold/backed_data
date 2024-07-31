@@ -373,13 +373,13 @@ mod tests {
     #[cfg(feature = "bincode")]
     #[test]
     fn write() {
+        use crate::test_utils::cursor_vec;
+
         const VALUE: &[u8] = &[5];
         const NEW_VALUE: &[u8] = &[7];
 
-        let mut binding = Cursor::new(Vec::with_capacity(1));
-        let back_vec = UnsafeCell::new(CursorVec {
-            inner: (&mut binding).into(),
-        });
+        cursor_vec!(back_vec);
+        let back_vec = UnsafeCell::new(back_vec);
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
