@@ -270,7 +270,7 @@ impl<T, U> BorrowExtender<T, U> {
         })
     }
 
-    pub fn new_mut<V: FnOnce(&mut T) -> U>(mut parent: T, child: V) -> Self {
+    pub fn new_mut<V: FnOnce(&mut T) -> U>(parent: T, child: V) -> Self {
         let mut parent = Box::pin(parent);
         let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr });
@@ -281,7 +281,7 @@ impl<T, U> BorrowExtender<T, U> {
     }
 
     pub fn try_new_mut<'a, W, V: FnOnce(&'a mut T) -> Result<U, W>>(
-        mut parent: T,
+        parent: T,
         child: V,
     ) -> Result<Self, W>
     where
@@ -296,10 +296,7 @@ impl<T, U> BorrowExtender<T, U> {
         })
     }
 
-    pub fn maybe_new_mut<'a, V: FnOnce(&'a mut T) -> Option<U>>(
-        mut parent: T,
-        child: V,
-    ) -> Option<Self>
+    pub fn maybe_new_mut<'a, V: FnOnce(&'a mut T) -> Option<U>>(parent: T, child: V) -> Option<Self>
     where
         T: 'a,
     {
@@ -358,7 +355,7 @@ impl<T, U> BorrowExtender<T, U> {
     }
 
     pub async fn a_new_mut<F: Future<Output = U>, V: FnOnce(&mut T) -> F>(
-        mut parent: T,
+        parent: T,
         child: V,
     ) -> Self {
         let mut parent = Box::pin(parent);
@@ -371,7 +368,7 @@ impl<T, U> BorrowExtender<T, U> {
     }
 
     pub async fn a_try_new_mut<'a, W, F: Future<Output = Result<U, W>>, V: FnOnce(&'a mut T) -> F>(
-        mut parent: T,
+        parent: T,
         child: V,
     ) -> Result<Self, W>
     where
