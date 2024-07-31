@@ -44,7 +44,9 @@ impl<T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for DirectoryBackedA
             .iter()
             .map(|disk| copy(disk, self.directory_root.join(disk.file_name().unwrap())))
             .collect::<Result<Vec<_>, _>>()?;
-        remove_dir_all(rhs.directory_root)?;
+        if self.directory_root != rhs.directory_root {
+            remove_dir_all(rhs.directory_root)?;
+        }
         self.array.append_array(rhs.array);
         Ok(self)
     }
