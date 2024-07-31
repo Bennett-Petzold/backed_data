@@ -8,6 +8,9 @@ use std::{
     sync::{Mutex, MutexGuard, OnceLock},
 };
 
+#[cfg(feature = "async")]
+use futures::Future;
+
 /// Used to constrain a trait to internal use only.
 ///
 /// `Internal` marks the only types the trait is implemented for.
@@ -391,6 +394,90 @@ impl<T, U> BorrowExtender<T, U> {
     {
         let parent_ptr: *mut _ = &mut parent;
         let child = (child)(unsafe { &mut *parent_ptr })?;
+        Some(Self {
+            _parent: parent,
+            child,
+        })
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T, U> BorrowExtender<T, U> {
+    pub async fn a_new<F: Future<Output = U>, V: FnOnce(&T) -> F>(parent: T, child: V) -> Self {
+        let parent_ptr: *const _ = &parent;
+        let child = (child)(unsafe { &*parent_ptr }).await;
+        Self {
+            _parent: parent,
+            child,
+        }
+    }
+
+    pub async fn a_try_new<'a, W, F: Future<Output = Result<U, W>>, V: FnOnce(&'a T) -> F>(
+        parent: T,
+        child: V,
+    ) -> Result<Self, W>
+    where
+        T: 'a,
+    {
+        let parent_ptr: *const _ = &parent;
+        let child = (child)(unsafe { &*parent_ptr }).await?;
+        Ok(Self {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub async fn a_maybe_new<'a, F: Future<Output = Option<U>>, V: FnOnce(&'a T) -> F>(
+        parent: T,
+        child: V,
+    ) -> Option<Self>
+    where
+        T: 'a,
+    {
+        let parent_ptr: *const _ = &parent;
+        let child = (child)(unsafe { &*parent_ptr }).await?;
+        Some(Self {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub async fn a_new_mut<F: Future<Output = U>, V: FnOnce(&mut T) -> F>(
+        mut parent: T,
+        child: V,
+    ) -> Self {
+        let parent_ptr: *mut _ = &mut parent;
+        let child = (child)(unsafe { &mut *parent_ptr }).await;
+        Self {
+            _parent: parent,
+            child,
+        }
+    }
+
+    pub async fn a_try_new_mut<'a, W, F: Future<Output = Result<U, W>>, V: FnOnce(&'a mut T) -> F>(
+        mut parent: T,
+        child: V,
+    ) -> Result<Self, W>
+    where
+        T: 'a,
+    {
+        let parent_ptr: *mut _ = &mut parent;
+        let child = (child)(unsafe { &mut *parent_ptr }).await?;
+        Ok(Self {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub async fn a_maybe_new_mut<'a, F: Future<Output = Option<U>>, V: FnOnce(&'a mut T) -> F>(
+        mut parent: T,
+        child: V,
+    ) -> Option<Self>
+    where
+        T: 'a,
+    {
+        let parent_ptr: *mut _ = &mut parent;
+        let child = (child)(unsafe { &mut *parent_ptr }).await?;
         Some(Self {
             _parent: parent,
             child,

@@ -51,7 +51,7 @@ pub trait ResizingContainer:
 ///
 /// For internal use, reduces size of generics boilerplate.
 pub trait BackedEntryContainer {
-    type Container: Once<Inner: Container>;
+    type Container;
     type Disk;
     type Coder;
 
@@ -161,10 +161,7 @@ impl<T> BackedEntryContainerNestedAll for T where
 {
 }
 
-impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc>
-where
-    C: Once<Inner: Container>,
-{
+impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc> {
     type Container = C;
     type Disk = D;
     type Coder = Enc;
