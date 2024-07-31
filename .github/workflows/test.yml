@@ -19,6 +19,8 @@ jobs:
     runs-on: ${{ format('{0}-latest', matrix.os) }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
     - uses: dtolnay/rust-toolchain@stable
       if: ${{ matrix.triple == null }}
