@@ -17,7 +17,10 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
+use crate::{
+    array::async_impl::BackedArray, directory::sync_impl::DirectoryBackedArray as SyncBackedArray,
+    meta::async_impl::BackedArrayWrapper,
+};
 
 /// [`BackedArray`] that uses a directory of plain files
 #[derive(Debug, Serialize, Deserialize)]
@@ -143,6 +146,14 @@ impl<T> DirectoryBackedArray<T> {
 impl<T: Serialize> DirectoryBackedArray<T> {
     async fn next_target(&self) -> std::io::Result<PathBuf> {
         Ok(self.directory_root.join(Uuid::new_v4().to_string()))
+    }
+
+    /// Convert to synchronous version
+    pub async fn conv_to_sync(self) -> bincode::Result<SyncBackedArray<T>> {
+        Ok(SyncBackedArray::from_existing_array(
+            self.array.to_sync_array().await?,
+            self.directory_root,
+        ))
     }
 }
 

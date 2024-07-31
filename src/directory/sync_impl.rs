@@ -105,6 +105,13 @@ impl<T> DirectoryBackedArray<T> {
         }
         Ok(self.update_root(new_root))
     }
+
+    pub fn from_existing_array(array: BackedArray<T, PathBuf>, directory_root: PathBuf) -> Self {
+        DirectoryBackedArray {
+            array,
+            directory_root,
+        }
+    }
 }
 
 impl<T: Serialize> DirectoryBackedArray<T> {
