@@ -766,6 +766,10 @@
 <a href="#766" id="766">766</a>
 <a href="#767" id="767">767</a>
 <a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
@@ -803,7 +807,8 @@
 <span class="kw">impl </span>SwitchingMmap {
     <span class="kw">fn </span>init_read&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map(<span class="kw-2">&amp;</span>open_mmap(path)<span class="question-mark">?</span>) }<span class="question-mark">?</span>;
-        <span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
+        <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+        </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(mmap))
     }
@@ -813,7 +818,8 @@
             <span class="self">Self</span>::ReadMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(x)),
             <span class="self">Self</span>::WriteMmap(<span class="kw-2">mut </span>x) =&gt; {
                 <span class="kw">let </span>mmap = x.get_map()<span class="question-mark">?</span>.make_read_only()<span class="question-mark">?</span>;
-                <span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
+                <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+                </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
 
                 <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(mmap))
             }
@@ -1111,8 +1117,10 @@
 
 <span class="kw">impl </span>MmapWriter {
     <span class="kw">fn </span>from_args&lt;P: AsRef&lt;Path&gt;&gt;(path: P, mmap: memmap2::MmapMut) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="kw">let _ </span>= mmap.advise(Advice::Sequential);
-        <span class="kw">let _ </span>= mmap.advise(Advice::PopulateWrite);
+        <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+        </span><span class="kw">let _ </span>= mmap.advise(Advice::Sequential);
+        <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+        </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateWrite);
 
         <span class="kw">let </span>reserved_len = mmap.len();
 
