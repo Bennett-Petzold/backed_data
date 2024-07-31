@@ -388,7 +388,7 @@ pub mod sync_impl {
 
 #[cfg(feature = "async")]
 pub mod async_impl {
-    use crate::entry::{BackedEntryArrAsync, BackedEntryUnload};
+    use crate::entry::{async_impl::BackedEntryArrAsync, BackedEntryUnload};
     use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
     use derive_getters::Getters;
     use futures::{SinkExt, StreamExt};

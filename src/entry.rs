@@ -1,16 +1,12 @@
+pub trait BackedEntryUnload {
+    /// Removes the entry from memory.
+    fn unload(&mut self);
+}
+
 use std::io::{Read, Seek, Write};
 
 use bincode::{deserialize_from, serialize_into};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-#[cfg(feature = "async")]
-use {
-    async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter},
-    futures::{SinkExt, StreamExt},
-    std::borrow::Borrow,
-    tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt},
-    tokio_util::io::SyncIoBridge,
-};
 
 /// Entry kept on some backing storage, loaded into memory on request.
 ///
@@ -36,42 +32,6 @@ pub struct BackedEntry<T, Disk: ?Sized> {
     disk_entry: Disk,
 }
 
-pub trait BackedEntryUnload {
-    /// Removes the entry from memory.
-    fn unload(&mut self);
-}
-
-#[cfg(feature = "async")]
-/// Used by [`BackedEntryAsync`] to track the valid reader.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BackedEntryWriteMode {
-    Sync,
-    Async,
-}
-
-#[cfg(feature = "async")]
-/// Async variant of [`BackedEntry`].
-///
-/// # Why Separate?
-/// AsyncBincodeReader and BincodeReader use different formats.
-/// Therefore all writes and reads from AsyncBincodeWriter must support
-/// one or the other. This adds resolution so only the valid read is possible.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackedEntryAsync<T, Disk: ?Sized> {
-    mode: BackedEntryWriteMode,
-    inner: BackedEntry<T, Disk>,
-}
-
-#[cfg(feature = "async")]
-impl<T, Disk> BackedEntryUnload for BackedEntryAsync<T, Disk>
-where
-    BackedEntry<T, Disk>: BackedEntryUnload,
-{
-    fn unload(&mut self) {
-        self.inner.unload()
-    }
-}
-
 impl<T, Disk> BackedEntry<T, Disk> {
     pub fn get_disk(&self) -> &Disk {
         &self.disk_entry
@@ -79,21 +39,6 @@ impl<T, Disk> BackedEntry<T, Disk> {
 
     pub fn get_disk_mut(&mut self) -> &mut Disk {
         &mut self.disk_entry
-    }
-}
-
-#[cfg(feature = "async")]
-impl<T, Disk> BackedEntryAsync<T, Disk> {
-    pub fn get_disk(&self) -> &Disk {
-        &self.inner.disk_entry
-    }
-
-    pub fn get_disk_mut(&mut self) -> &mut Disk {
-        &mut self.inner.disk_entry
-    }
-
-    pub fn get_mode(&self) -> &BackedEntryWriteMode {
-        &self.mode
     }
 }
 
@@ -123,10 +68,6 @@ impl<T, Disk> BackedEntryAsync<T, Disk> {
 /// ```
 pub type BackedEntryArr<T, Disk> = BackedEntry<Box<[T]>, Disk>;
 
-#[cfg(feature = "async")]
-/// Async version of [`BackedEntryArr`]
-pub type BackedEntryArrAsync<T, Disk> = BackedEntryAsync<Box<[T]>, Disk>;
-
 /// Typedef of [`BackedEntry`].
 ///
 /// # Example
@@ -154,10 +95,6 @@ pub type BackedEntryArrAsync<T, Disk> = BackedEntryAsync<Box<[T]>, Disk>;
 /// ```
 pub type BackedEntryOption<T, Disk> = BackedEntry<Option<T>, Disk>;
 
-#[cfg(feature = "async")]
-/// Async version of [`BackedEntryOption`]
-pub type BackedEntryOptionAsync<T, Disk> = BackedEntryAsync<Option<T>, Disk>;
-
 // ----- Initializations ----- //
 
 impl<T, Disk> BackedEntryArr<T, Disk> {
@@ -169,38 +106,11 @@ impl<T, Disk> BackedEntryArr<T, Disk> {
     }
 }
 
-#[cfg(feature = "async")]
-impl<T, Disk> BackedEntryArrAsync<T, Disk> {
-    /// Set underlying storage and [`BackedEntryWriteMode`].
-    ///
-    /// # Arguments
-    /// * `disk_entry`: Async storage to write/read
-    /// * `mode`: Whether to write to sync or async reads. Default async.
-    pub fn new(disk_entry: Disk, mode: Option<BackedEntryWriteMode>) -> Self {
-        let mode = mode.unwrap_or(BackedEntryWriteMode::Async);
-        Self {
-            inner: BackedEntryArr::new(disk_entry),
-            mode,
-        }
-    }
-}
-
 impl<T, Disk> BackedEntryOption<T, Disk> {
     pub fn new(disk_entry: Disk) -> Self {
         Self {
             value: None,
             disk_entry,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl<T, Disk> BackedEntryOptionAsync<T, Disk> {
-    pub fn new(disk_entry: Disk, mode: Option<BackedEntryWriteMode>) -> Self {
-        let mode = mode.unwrap_or(BackedEntryWriteMode::Async);
-        Self {
-            inner: BackedEntryOption::new(disk_entry),
-            mode,
         }
     }
 }
@@ -218,106 +128,7 @@ impl<T: Serialize, Disk: Write> BackedEntry<T, Disk> {
         Ok(())
     }
 }
-
 impl<T: Serialize, Disk: Write> BackedEntry<T, Disk> where BackedEntry<T, Disk>: BackedEntryUnload {}
-
-#[cfg(feature = "async")]
-impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryAsync<T, Disk> {
-    #[inline]
-    async fn update_lower_async<U: Borrow<T>>(&mut self, new_value: U) -> bincode::Result<()> {
-        let new_value = new_value.borrow();
-        let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
-        match self.mode {
-            BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&new_value).await?;
-            }
-            BackedEntryWriteMode::Sync => {
-                bincode_writer.send(&new_value).await?;
-            }
-        };
-
-        self.inner.disk_entry.flush().await?;
-        Ok(())
-    }
-
-    /// Writes the new value to memory and disk.
-    ///
-    /// See [`Self::write_unload`] to skip the memory write.
-    pub async fn write(&mut self, new_value: T) -> bincode::Result<()> {
-        self.update_lower_async(&new_value).await?;
-        self.inner.value = new_value;
-        Ok(())
-    }
-
-    /// Convert the backed version to be sync read compatible
-    pub async fn conv_to_sync(&mut self) -> bincode::Result<()> {
-        if self.mode == BackedEntryWriteMode::Async {
-            self.mode = BackedEntryWriteMode::Sync;
-            AsyncBincodeWriter::from(&mut self.inner.disk_entry)
-                .send(&self.inner.value)
-                .await?;
-            self.inner.disk_entry.flush().await?;
-        }
-        Ok(())
-    }
-
-    /// Convert the backed version to be async read compatible
-    pub async fn conv_to_async(&mut self) -> bincode::Result<()> {
-        if self.mode == BackedEntryWriteMode::Sync {
-            self.mode = BackedEntryWriteMode::Async;
-            AsyncBincodeWriter::from(&mut self.inner.disk_entry)
-                .for_async()
-                .send(&self.inner.value)
-                .await?;
-            self.inner.disk_entry.flush().await?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg(feature = "async")]
-impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryArrAsync<T, Disk> {
-    /// Write the value to disk only, unloading current memory.
-    ///
-    /// See [`Self::write`] to keep the value in memory.
-    pub async fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
-        self.unload();
-        let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
-        match self.mode {
-            BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&new_value).await?;
-            }
-            BackedEntryWriteMode::Sync => {
-                bincode_writer.send(&new_value).await?;
-            }
-        };
-
-        self.inner.disk_entry.flush().await?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "async")]
-impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryOptionAsync<T, Disk> {
-    /// Write the value to disk only, unloading current memory.
-    ///
-    /// See [`Self::write`] to keep the value in memory.
-    pub async fn write_unload(&mut self, new_value: &T) -> bincode::Result<()> {
-        self.unload();
-        let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
-        match self.mode {
-            BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&new_value).await?;
-            }
-            BackedEntryWriteMode::Sync => {
-                bincode_writer.send(&new_value).await?;
-            }
-        };
-
-        self.inner.disk_entry.flush().await?;
-        Ok(())
-    }
-}
 
 // ----- Boxed Array Implementations ----- //
 
@@ -331,35 +142,6 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedEntryArr<T, Disk> {
             self.value = deserialize_from(&mut self.disk_entry)?;
         }
         Ok(&self.value)
-    }
-}
-
-#[cfg(feature = "async")]
-impl<T: DeserializeOwned, Disk: AsyncRead + AsyncSeek + Unpin> BackedEntryArrAsync<T, Disk> {
-    /// Async version of [`BackedEntryArr::load`].
-    ///
-    /// Will use AsyncBincodeReader or BincodeReader depending on mode.
-    /// Check that [`Self::get_mode`] is async for optimal read performance.
-    /// The sync implementation will block the thread.
-    pub async fn load(&mut self) -> Result<&[T], Box<bincode::ErrorKind>> {
-        if self.inner.value.is_empty() {
-            self.inner.disk_entry.rewind().await?;
-            match self.mode {
-                BackedEntryWriteMode::Sync => {
-                    self.inner.value =
-                        deserialize_from(SyncIoBridge::new(&mut self.inner.disk_entry))?;
-                }
-                BackedEntryWriteMode::Async => {
-                    self.inner.value = AsyncBincodeReader::from(&mut self.inner.disk_entry)
-                        .next()
-                        .await
-                        .ok_or(bincode::ErrorKind::Custom(
-                            "AsyncBincodeReader stream empty".to_string(),
-                        ))??
-                }
-            }
-        }
-        Ok(&self.inner.value)
     }
 }
 
@@ -395,34 +177,6 @@ impl<T: DeserializeOwned, Disk: Read> BackedEntryOption<T, Disk> {
     }
 }
 
-#[cfg(feature = "async")]
-impl<T: DeserializeOwned, Disk: AsyncRead + Unpin> BackedEntryOptionAsync<T, Disk> {
-    /// Async version of [`BackedEntryOption::load`].
-    ///
-    /// Will use AsyncBincodeReader or BincodeReader depending on mode.
-    /// Check that [`Self::get_mode`] is async for optimal read performance.
-    /// The sync implementation will block the thread.
-    pub async fn load(&mut self) -> Result<&T, Box<bincode::ErrorKind>> {
-        if self.inner.value.is_none() {
-            match self.mode {
-                BackedEntryWriteMode::Sync => {
-                    self.inner.value =
-                        deserialize_from(SyncIoBridge::new(&mut self.inner.disk_entry))?;
-                }
-                BackedEntryWriteMode::Async => {
-                    self.inner.value = AsyncBincodeReader::from(&mut self.inner.disk_entry)
-                        .next()
-                        .await
-                        .ok_or(bincode::ErrorKind::Custom(
-                            "AsyncBincodeReader stream empty".to_string(),
-                        ))??
-                }
-            }
-        }
-        Ok(self.inner.value.as_ref().unwrap())
-    }
-}
-
 impl<T, U> BackedEntryUnload for BackedEntryOption<T, U> {
     fn unload(&mut self) {
         self.value = None;
@@ -438,5 +192,241 @@ impl<T: Serialize, U: Write> BackedEntryOption<T, U> {
         serialize_into(&mut self.disk_entry, new_value)?;
         self.disk_entry.flush()?; // Make sure buffer is emptied
         Ok(())
+    }
+}
+
+#[cfg(feature = "async")]
+pub mod async_impl {
+    use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
+    use bincode::{deserialize_from, serialize_into};
+    use futures::{SinkExt, StreamExt};
+    use serde::{de::DeserializeOwned, Deserialize, Serialize};
+    use std::borrow::Borrow;
+    use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
+    use tokio_util::io::SyncIoBridge;
+
+    use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload};
+
+    /// Used by [`BackedEntryAsync`] to track the valid reader.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum BackedEntryWriteMode {
+        Sync,
+        Async,
+    }
+
+    /// Async variant of [`BackedEntry`].
+    ///
+    /// # Why Separate?
+    /// AsyncBincodeReader and BincodeReader use different formats.
+    /// Therefore all writes and reads from AsyncBincodeWriter must support
+    /// one or the other. This adds resolution so only the valid read is possible.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BackedEntryAsync<T, Disk: ?Sized> {
+        mode: BackedEntryWriteMode,
+        inner: BackedEntry<T, Disk>,
+    }
+
+    impl<T, Disk> BackedEntryUnload for BackedEntryAsync<T, Disk>
+    where
+        BackedEntry<T, Disk>: BackedEntryUnload,
+    {
+        fn unload(&mut self) {
+            self.inner.unload()
+        }
+    }
+
+    impl<T, Disk> BackedEntryAsync<T, Disk> {
+        pub fn get_disk(&self) -> &Disk {
+            &self.inner.disk_entry
+        }
+
+        pub fn get_disk_mut(&mut self) -> &mut Disk {
+            &mut self.inner.disk_entry
+        }
+
+        pub fn get_mode(&self) -> &BackedEntryWriteMode {
+            &self.mode
+        }
+    }
+
+    /// Async version of [`BackedEntryArr`]
+    pub type BackedEntryArrAsync<T, Disk> = BackedEntryAsync<Box<[T]>, Disk>;
+
+    /// Async version of [`BackedEntryOption`]
+    pub type BackedEntryOptionAsync<T, Disk> = BackedEntryAsync<Option<T>, Disk>;
+
+    impl<T, Disk> BackedEntryArrAsync<T, Disk> {
+        /// Set underlying storage and [`BackedEntryWriteMode`].
+        ///
+        /// # Arguments
+        /// * `disk_entry`: Async storage to write/read
+        /// * `mode`: Whether to write to sync or async reads. Default async.
+        pub fn new(disk_entry: Disk, mode: Option<BackedEntryWriteMode>) -> Self {
+            let mode = mode.unwrap_or(BackedEntryWriteMode::Async);
+            Self {
+                inner: BackedEntryArr::new(disk_entry),
+                mode,
+            }
+        }
+    }
+
+    impl<T, Disk> BackedEntryOptionAsync<T, Disk> {
+        pub fn new(disk_entry: Disk, mode: Option<BackedEntryWriteMode>) -> Self {
+            let mode = mode.unwrap_or(BackedEntryWriteMode::Async);
+            Self {
+                inner: BackedEntryOption::new(disk_entry),
+                mode,
+            }
+        }
+    }
+
+    impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryAsync<T, Disk> {
+        #[inline]
+        async fn update_lower_async<U: Borrow<T>>(&mut self, new_value: U) -> bincode::Result<()> {
+            let new_value = new_value.borrow();
+            let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
+            match self.mode {
+                BackedEntryWriteMode::Async => {
+                    bincode_writer.for_async().send(&new_value).await?;
+                }
+                BackedEntryWriteMode::Sync => {
+                    bincode_writer.send(&new_value).await?;
+                }
+            };
+
+            self.inner.disk_entry.flush().await?;
+            Ok(())
+        }
+
+        /// Writes the new value to memory and disk.
+        ///
+        /// See [`Self::write_unload`] to skip the memory write.
+        pub async fn write(&mut self, new_value: T) -> bincode::Result<()> {
+            self.update_lower_async(&new_value).await?;
+            self.inner.value = new_value;
+            Ok(())
+        }
+
+        /// Convert the backed version to be sync read compatible
+        pub async fn conv_to_sync(&mut self) -> bincode::Result<()> {
+            if self.mode == BackedEntryWriteMode::Async {
+                self.mode = BackedEntryWriteMode::Sync;
+                AsyncBincodeWriter::from(&mut self.inner.disk_entry)
+                    .send(&self.inner.value)
+                    .await?;
+                self.inner.disk_entry.flush().await?;
+            }
+            Ok(())
+        }
+
+        /// Convert the backed version to be async read compatible
+        pub async fn conv_to_async(&mut self) -> bincode::Result<()> {
+            if self.mode == BackedEntryWriteMode::Sync {
+                self.mode = BackedEntryWriteMode::Async;
+                AsyncBincodeWriter::from(&mut self.inner.disk_entry)
+                    .for_async()
+                    .send(&self.inner.value)
+                    .await?;
+                self.inner.disk_entry.flush().await?;
+            }
+            Ok(())
+        }
+    }
+
+    impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryArrAsync<T, Disk> {
+        /// Write the value to disk only, unloading current memory.
+        ///
+        /// See [`Self::write`] to keep the value in memory.
+        pub async fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
+            self.unload();
+            let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
+            match self.mode {
+                BackedEntryWriteMode::Async => {
+                    bincode_writer.for_async().send(&new_value).await?;
+                }
+                BackedEntryWriteMode::Sync => {
+                    bincode_writer.send(&new_value).await?;
+                }
+            };
+
+            self.inner.disk_entry.flush().await?;
+            Ok(())
+        }
+    }
+
+    impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryOptionAsync<T, Disk> {
+        /// Write the value to disk only, unloading current memory.
+        ///
+        /// See [`Self::write`] to keep the value in memory.
+        pub async fn write_unload(&mut self, new_value: &T) -> bincode::Result<()> {
+            self.unload();
+            let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
+            match self.mode {
+                BackedEntryWriteMode::Async => {
+                    bincode_writer.for_async().send(&new_value).await?;
+                }
+                BackedEntryWriteMode::Sync => {
+                    bincode_writer.send(&new_value).await?;
+                }
+            };
+
+            self.inner.disk_entry.flush().await?;
+            Ok(())
+        }
+    }
+
+    impl<T: DeserializeOwned, Disk: AsyncRead + AsyncSeek + Unpin> BackedEntryArrAsync<T, Disk> {
+        /// Async version of [`BackedEntryArr::load`].
+        ///
+        /// Will use AsyncBincodeReader or BincodeReader depending on mode.
+        /// Check that [`Self::get_mode`] is async for optimal read performance.
+        /// The sync implementation will block the thread.
+        pub async fn load(&mut self) -> Result<&[T], Box<bincode::ErrorKind>> {
+            if self.inner.value.is_empty() {
+                self.inner.disk_entry.rewind().await?;
+                match self.mode {
+                    BackedEntryWriteMode::Sync => {
+                        self.inner.value =
+                            deserialize_from(SyncIoBridge::new(&mut self.inner.disk_entry))?;
+                    }
+                    BackedEntryWriteMode::Async => {
+                        self.inner.value = AsyncBincodeReader::from(&mut self.inner.disk_entry)
+                            .next()
+                            .await
+                            .ok_or(bincode::ErrorKind::Custom(
+                                "AsyncBincodeReader stream empty".to_string(),
+                            ))??
+                    }
+                }
+            }
+            Ok(&self.inner.value)
+        }
+    }
+
+    impl<T: DeserializeOwned, Disk: AsyncRead + Unpin> BackedEntryOptionAsync<T, Disk> {
+        /// Async version of [`BackedEntryOption::load`].
+        ///
+        /// Will use AsyncBincodeReader or BincodeReader depending on mode.
+        /// Check that [`Self::get_mode`] is async for optimal read performance.
+        /// The sync implementation will block the thread.
+        pub async fn load(&mut self) -> Result<&T, Box<bincode::ErrorKind>> {
+            if self.inner.value.is_none() {
+                match self.mode {
+                    BackedEntryWriteMode::Sync => {
+                        self.inner.value =
+                            deserialize_from(SyncIoBridge::new(&mut self.inner.disk_entry))?;
+                    }
+                    BackedEntryWriteMode::Async => {
+                        self.inner.value = AsyncBincodeReader::from(&mut self.inner.disk_entry)
+                            .next()
+                            .await
+                            .ok_or(bincode::ErrorKind::Custom(
+                                "AsyncBincodeReader stream empty".to_string(),
+                            ))??
+                    }
+                }
+            }
+            Ok(self.inner.value.as_ref().unwrap())
+        }
     }
 }
