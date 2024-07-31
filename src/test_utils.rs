@@ -6,8 +6,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "async")]
+use crate::entry::async_impl::{AsyncReadDisk, AsyncWriteDisk};
+
 use crate::entry::{
-    async_impl::{AsyncReadDisk, AsyncWriteDisk},
     sync_impl::{ReadDisk, WriteDisk},
     DiskOverwritable,
 };
