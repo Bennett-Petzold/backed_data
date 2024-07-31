@@ -213,7 +213,7 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     ///
     /// # Example
     /// ```rust
-    /// use backed_array::array::sync_impl::BackedArray;
+    /// use backed_data::array::sync_impl::BackedArray;
     /// use std::fs::{File, create_dir_all, remove_dir_all, OpenOptions};
     ///
     /// let FILENAME_BASE = std::env::temp_dir().join("example_array_append");
@@ -250,7 +250,7 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     ///
     /// # Example
     /// ```rust
-    /// use backed_array::array::sync_impl::BackedArray;
+    /// use backed_data::array::sync_impl::BackedArray;
     /// use std::fs::{File, remove_file, OpenOptions};
     ///
     /// let FILENAME = std::env::temp_dir().join("example_array_append_memory");

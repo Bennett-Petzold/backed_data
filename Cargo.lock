@@ -111,8 +111,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1fdabc7756949593fe60f30ec81974b613357de856987752631dea1e3394c80"
 
 [[package]]
-name = "backed_array"
-version = "0.1.0"
+name = "backed_data"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-bincode",

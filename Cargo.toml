@@ -1,5 +1,5 @@
 [package]
-name = "backed_array"
+name = "backed_data"
 version = "0.2.0"
 edition = "2021"
 resolver = "2"
@@ -7,13 +7,14 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["zstd"]
-zstd = ["dep:zstd"]
+default = ["array", "zstd"]
+array = []
+zstd = ["array", "dep:zstd"]
 zstd-thin-lto = ["zstd", "zstd/thin-lto"]
 zstd-fat-lto = ["zstd", "zstd/fat-lto"]
 zstdmt = ["zstd", "zstd/zstdmt", "dep:lazy_static"]
 async = ["dep:async-bincode", "dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-trait"]
-async-zstd = ["async", "dep:async-compression", "async-compression/zstd"]
+async-zstd = ["array", "async", "dep:async-compression", "async-compression/zstd"]
 async-zstdmt = ["async-zstd", "async-compression/zstdmt", "dep:lazy_static"]
 
 [dependencies]

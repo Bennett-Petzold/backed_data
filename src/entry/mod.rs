@@ -75,7 +75,7 @@ where
 ///
 /// ```rust
 /// use std::fs::{File, remove_file};
-/// use backed_array::entry::BackedEntryBox;
+/// use backed_data::entry::BackedEntryBox;
 ///
 /// let FILENAME = std::env::temp_dir().join("example_box");
 ///
@@ -99,7 +99,7 @@ pub type BackedEntryBox<T, Disk> = BackedEntry<Box<T>, Disk>;
 ///
 /// ```rust
 /// use std::fs::{File, remove_file};
-/// use backed_array::entry::BackedEntryArr;
+/// use backed_data::entry::BackedEntryArr;
 ///
 /// let FILENAME = std::env::temp_dir().join("example_array");
 ///
