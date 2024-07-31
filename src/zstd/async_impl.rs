@@ -152,7 +152,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
         Ok(self)
     }
 
-    async fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self> {
+    async fn append<U: Into<Box<[T]>> + Send>(&mut self, values: U) -> bincode::Result<&mut Self> {
         self.array
             .append(
                 values,
@@ -168,7 +168,10 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
         Ok(self)
     }
 
-    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self> {
+    async fn append_memory<U: Into<Box<[T]>> + Send>(
+        &mut self,
+        values: U,
+    ) -> bincode::Result<&mut Self> {
         self.array
             .append_memory(
                 values,
@@ -372,8 +375,8 @@ mod tests {
             .unwrap();
         let (values, second_values) = values();
 
-        arr.append_memory(values.into()).await.unwrap();
-        arr.append(&second_values).await.unwrap();
+        arr.append_memory(values).await.unwrap();
+        arr.append(second_values).await.unwrap();
         assert_eq!(arr.get(100).await.unwrap(), &"TEST STRING");
         assert_eq!(arr.get(200).await.unwrap(), &"TEST STRING");
         assert_eq!(arr.get(150).await.unwrap(), &"TEST STRING");
@@ -391,8 +394,8 @@ mod tests {
             .unwrap();
         let (values, second_values) = values();
 
-        arr.append(&values).await.unwrap();
-        arr.append_memory(second_values.into()).await.unwrap();
+        arr.append(values).await.unwrap();
+        arr.append_memory(second_values).await.unwrap();
         arr.save_to_disk(&mut File::create(directory.join("directory")).await.unwrap())
             .await
             .unwrap();

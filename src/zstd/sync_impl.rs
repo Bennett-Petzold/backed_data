@@ -140,7 +140,7 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
         Ok(self)
     }
 
-    fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self> {
+    fn append<U: Into<Box<[T]>>>(&mut self, values: U) -> bincode::Result<&mut Self> {
         self.array.append(
             values,
             ZstdFile::new(
@@ -153,7 +153,7 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
         Ok(self)
     }
 
-    fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self> {
+    fn append_memory<U: Into<Box<[T]>>>(&mut self, values: U) -> bincode::Result<&mut Self> {
         self.array.append_memory(
             values,
             ZstdFile::new(
@@ -264,8 +264,8 @@ mod tests {
         let mut arr = ZstdDirBackedArray::new(directory.clone(), None).unwrap();
         let (values, second_values) = values();
 
-        arr.append_memory(values.into()).unwrap();
-        arr.append(&second_values).unwrap();
+        arr.append_memory(values).unwrap();
+        arr.append(second_values).unwrap();
         assert_eq!(arr.get(100).unwrap(), &"TEST STRING");
         assert_eq!(arr.get(200).unwrap(), &"TEST STRING");
         assert_eq!(arr.get(150).unwrap(), &"TEST STRING");
@@ -281,8 +281,8 @@ mod tests {
         let mut arr = ZstdDirBackedArray::new(directory.clone(), None).unwrap();
         let (values, second_values) = values();
 
-        arr.append(&values).unwrap();
-        arr.append_memory(second_values.into()).unwrap();
+        arr.append(values).unwrap();
+        arr.append_memory(second_values).unwrap();
         arr.save_to_disk(File::create(directory.join("directory")).unwrap())
             .unwrap();
         drop(arr);

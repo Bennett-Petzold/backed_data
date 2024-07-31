@@ -20,28 +20,34 @@ pub trait DiskOverwritable {}
 
 /// Entry kept on some backing storage, loaded into memory on request.
 ///
-/// This is only useful for types that can occupy zero/almost zero heap,
-/// so most types should use the generic Option wrapper with a boxed type.
-/// Boxed arrays can occupy zero heap, so they have a special implementation.
-/// Broader collections do not have a special implementation, as they do not
-/// guarantee memory freeing.
-///
+/// Use a heap pointer type or [`BackedEntryBox`], otherwise this will occupy
+/// the full type size even when unloaded.
 /// Writing/reading is serialized with bincode
 ///     <https://docs.rs/bincode/latest/bincode/> for space efficiency.
 ///
 /// # Generics
 ///
-/// * `T`: the type to store (should use heap, to make clearing useful)
+/// * `T`: the type to store
 /// * `Disk`: any backing store with write/read (or the async equivalent)
 ///
 /// # Examples
-/// See [`BackedEntryArr`] and [`BackedEntryOption`]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// See [`BackedEntryBox`] for a heap-storing version.
+/// See [`BackedEntryArr`] for an array-specialized version.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BackedEntry<T, Disk: for<'df> Deserialize<'df>> {
     #[serde(skip)]
-    value: T,
+    value: Option<T>,
     #[serde(deserialize_with = "backing_deserialize")]
     disk: Disk,
+}
+
+impl<T: Clone, Disk: for<'df> Deserialize<'df> + Clone> Clone for BackedEntry<T, Disk> {
+    fn clone(&self) -> Self {
+        Self {
+            value: self.value.clone(),
+            disk: self.disk.clone(),
+        }
+    }
 }
 
 impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
@@ -63,7 +69,31 @@ where
     Deserialize::deserialize(deserializer)
 }
 
-/// Typedef of [`BackedEntry`].
+/// Specialized typedef of [`BackedEntry`] for non-pointer types.
+///
+/// # Example
+///
+/// ```rust
+/// use std::fs::{File, remove_file};
+/// use backed_array::entry::BackedEntryBox;
+///
+/// let FILENAME = std::env::temp_dir().join("example_box");
+///
+/// // Write array to file
+/// let mut writer: BackedEntryBox<str, _> = BackedEntryBox::new(FILENAME.clone());
+/// writer.write_unload("HELLO I AM A STRING").unwrap();
+/// drop(writer);
+///
+/// // Read array from file
+/// let mut sparse: BackedEntryBox<str, _> = BackedEntryBox::new(FILENAME.clone());
+/// assert_eq!(sparse.load().unwrap().as_ref(), "HELLO I AM A STRING");
+///
+/// // Cleanup
+/// remove_file(FILENAME).unwrap();
+/// ```
+pub type BackedEntryBox<T, Disk> = BackedEntry<Box<T>, Disk>;
+
+/// Specialized typedef of [`BackedEntry`] for arrays.
 ///
 /// # Example
 ///
@@ -75,55 +105,21 @@ where
 ///
 /// // Write array to file
 /// let mut writer: BackedEntryArr<i32, _> = BackedEntryArr::new(FILENAME.clone());
-/// writer.write_unload(&[1, 2, 3]).unwrap();
+/// writer.write_unload([1, 2, 3]).unwrap();
 /// drop(writer);
 ///
 /// // Read array from file
 /// let mut sparse: BackedEntryArr<i32, _> = BackedEntryArr::new(FILENAME.clone());
-/// assert_eq!(sparse.load().unwrap(), [1, 2, 3]);
+/// assert_eq!(sparse.load().unwrap().as_ref(), [1, 2, 3]);
 ///
 /// // Cleanup
 /// remove_file(FILENAME).unwrap();
 /// ```
-pub type BackedEntryArr<T, Disk> = BackedEntry<Box<[T]>, Disk>;
-
-/// Typedef of [`BackedEntry`].
-///
-/// # Example
-///
-/// ```rust
-/// use std::fs::{File, remove_file};
-/// use std::env::temp_dir;
-/// use backed_array::entry::BackedEntryOption;
-///
-/// let FILENAME = std::env::temp_dir().join("example_option");
-///
-/// // Write array to file
-/// let mut writer: BackedEntryOption<String, _> = BackedEntryOption::new(FILENAME.clone());
-/// writer.write_unload(&"Limited memory".to_string()).unwrap();
-/// drop(writer);
-///
-/// // Read array from file
-/// let mut sparse: BackedEntryOption<String, _> = BackedEntryOption::new(FILENAME.clone());
-/// assert_eq!(sparse.load().unwrap(), "Limited memory");
-///
-/// // Cleanup
-/// remove_file(FILENAME).unwrap();
-/// ```
-pub type BackedEntryOption<T, Disk> = BackedEntry<Option<T>, Disk>;
+pub type BackedEntryArr<T, Disk> = BackedEntryBox<[T], Disk>;
 
 // ----- Initializations ----- //
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryArr<T, Disk> {
-    pub fn new(disk: Disk) -> Self {
-        Self {
-            value: Box::new([]),
-            disk,
-        }
-    }
-}
-
-impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryOption<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
     pub fn new(disk: Disk) -> Self {
         Self { value: None, disk }
     }
