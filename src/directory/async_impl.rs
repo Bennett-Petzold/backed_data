@@ -276,8 +276,8 @@ mod tests {
 
                 arr.a_append_memory(values).await.unwrap();
                 arr.a_append(second_values).await.unwrap();
-                assert_eq!(arr.a_get(10).await.unwrap().as_ref(), &"TEST STRING");
-                assert_eq!(arr.a_get(150).await.unwrap().as_ref(), &"OTHER VALUE");
+                assert_eq!(*arr.a_get(10).await.unwrap(), "TEST STRING");
+                assert_eq!(*arr.a_get(150).await.unwrap(), "OTHER VALUE");
 
                 let _ = remove_dir_all(directory);
             });
@@ -312,10 +312,10 @@ mod tests {
                         .decode(&mut File::open(directory.join("meta.data")).await.unwrap())
                         .await
                         .unwrap();
-                assert_eq!(arr.a_get(10).await.unwrap().as_ref(), &"TEST STRING");
-                assert_eq!(arr.a_get(150).await.unwrap().as_ref(), &"OTHER VALUE");
-                assert_eq!(arr.a_get(20).await.unwrap().as_ref(), &"TEST STRING");
-                assert_eq!(arr.a_get(1).await.unwrap().as_ref(), &"TEST STRING");
+                assert_eq!(*arr.a_get(10).await.unwrap(), "TEST STRING");
+                assert_eq!(*arr.a_get(150).await.unwrap(), "OTHER VALUE");
+                assert_eq!(*arr.a_get(20).await.unwrap(), "TEST STRING");
+                assert_eq!(*arr.a_get(1).await.unwrap(), "TEST STRING");
 
                 let _ = remove_dir_all(directory);
             })

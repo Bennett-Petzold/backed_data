@@ -26,10 +26,11 @@ use super::{
 impl<K, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
-        self.entries.c_mut().as_mut().iter_mut().for_each(|entry| {
-            let entry = entry.get_mut();
-            BackedEntryContainer::get_mut(entry).unload()
-        });
+        self.entries
+            .c_mut()
+            .as_mut()
+            .into_iter()
+            .for_each(|entry| entry.get_mut().unload());
     }
 
     /// Move the chunk at `idx` out of memory.
@@ -659,7 +660,7 @@ impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArra
 #[cfg(test)]
 #[cfg(feature = "bincode")]
 mod tests {
-    use std::{io::Cursor, ops::Deref, sync::Mutex};
+    use std::{io::Cursor, sync::Mutex};
 
     use itertools::Itertools;
 
