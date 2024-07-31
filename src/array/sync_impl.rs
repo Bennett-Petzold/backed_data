@@ -1,4 +1,5 @@
 use std::{
+    fmt::Debug,
     io::{Read, Write},
     ops::Range,
 };
@@ -14,7 +15,7 @@ use crate::entry::{
 
 use super::{
     internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayEntry,
-    BackedArrayError,
+    BackedArrayError, BackingContainer,
 };
 
 /// Array stored as multiple arrays on disk.
@@ -31,15 +32,30 @@ use super::{
 /// multiple modifications on a backing block before saving to disk.
 /// Getting and overwriting the entries without these handles will write to
 /// disk on every single change.
-#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
-pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
+#[derive(Debug, Serialize, Deserialize, Getters)]
+pub struct BackedArray<K, E> {
     // keys and entries must always have the same length
     // keys must always be sorted min-max
-    keys: Vec<Range<usize>>,
-    #[serde(deserialize_with = "entries_deserialize")]
-    entries: Vec<BackedEntryArr<T, Disk>>,
+    keys: K,
+    //#[serde(deserialize_with = "entries_deserialize")]
+    entries: E,
 }
 
+impl<K: Clone, E: Clone> Clone for BackedArray<K, E> {
+    fn clone(&self) -> Self {
+        Self {
+            keys: self.keys.clone(),
+            entries: self.entries.clone(),
+        }
+    }
+}
+
+pub type VecBackedArray<T, Disk> = BackedArray<Vec<Range<usize>>, Vec<BackedEntryArr<T, Disk>>>;
+
+//K: BackingContainer<Range<usize>>
+//E: Vec<BackedEntryArr<T, Disk>>
+
+/*
 /// Helper function to make deserialization work.
 fn entries_deserialize<'de, D, Backing: Deserialize<'de>>(
     deserializer: D,
@@ -49,8 +65,9 @@ where
 {
     Deserialize::deserialize(deserializer)
 }
+*/
 
-impl<T, Disk: for<'de> Deserialize<'de>> Default for BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> Default for VecBackedArray<T, Disk> {
     fn default() -> Self {
         Self {
             keys: vec![],
@@ -59,7 +76,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> Default for BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -127,10 +144,10 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<BackedArray<T, Disk>>
+impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<VecBackedArray<T, Disk>>
     for bincode::Result<Box<[T]>>
 {
-    fn from(mut val: BackedArray<T, Disk>) -> Self {
+    fn from(mut val: VecBackedArray<T, Disk>) -> Self {
         Ok(val
             .entries
             .iter_mut()
@@ -143,7 +160,7 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<BackedArray<T, Disk>>
 }
 
 /// Read implementations
-impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
+impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
     /// Return a value (potentially loading its backing array).
     ///
     /// Backing arrays stay in memory until freed.
@@ -206,14 +223,14 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
 }
 
 /// Write implementations
-impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
     /// Adds new values by writing them to the backing store.
     ///
     /// Does not keep the values in memory.
     ///
     /// # Example
     /// ```rust
-    /// use backed_data::array::sync_impl::BackedArray;
+    /// use backed_data::array::sync_impl::VecBackedArray;
     /// use std::fs::{File, create_dir_all, remove_dir_all, OpenOptions};
     ///
     /// let FILENAME_BASE = std::env::temp_dir().join("example_array_append");
@@ -223,7 +240,7 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     /// create_dir_all(FILENAME_BASE.clone()).unwrap();
     /// let file_0 = FILENAME_BASE.clone().join("_0");
     /// let file_1 = FILENAME_BASE.join("_1");
-    /// let mut array: BackedArray<u32, _> = BackedArray::default();
+    /// let mut array: VecBackedArray<u32, _> = VecBackedArray::default();
     /// array.append(values.0, file_0);
     /// array.append(values.1, file_1);
     ///
@@ -250,14 +267,14 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     ///
     /// # Example
     /// ```rust
-    /// use backed_data::array::sync_impl::BackedArray;
+    /// use backed_data::array::sync_impl::VecBackedArray;
     /// use std::fs::{File, remove_file, OpenOptions};
     ///
     /// let FILENAME = std::env::temp_dir().join("example_array_append_memory");
     /// let values = ([0, 1, 1],
     ///     [2, 3, 5]);
     ///
-    /// let mut array: BackedArray<u32, _> = BackedArray::default();
+    /// let mut array: VecBackedArray<u32, _> = VecBackedArray::default();
     /// array.append_memory(values.0, FILENAME.clone());
     ///
     /// // Overwrite file, making disk pointer for first array invalid
@@ -283,7 +300,7 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedArray<T, Disk> {
+impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> VecBackedArray<T, Disk> {
     /// Returns a mutable handle to a given chunk.
     pub fn get_chunk_mut(
         &mut self,
@@ -293,7 +310,7 @@ impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedArray<T,
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to indentify the target index.
@@ -326,7 +343,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
     /// Serializes this to disk after clearing all entries from memory to disk.
     ///
     /// Writing directly from serialize wastes disk space and increases load
@@ -337,7 +354,7 @@ impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: ReadDisk> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: ReadDisk> VecBackedArray<T, Disk> {
     /// Loads the backed array. Does not load backing arrays, unless this
     /// was saved with data (was not saved with [`Self::save_to_disk`]).
     pub fn load<R: Read>(writer: &mut R) -> bincode::Result<Self> {
@@ -345,7 +362,7 @@ impl<T: Serialize, Disk: ReadDisk> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
+impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> VecBackedArray<T, Disk> {
     /// Combine `self` and `rhs` into a new [`Self`].
     ///
     /// Appends entries of `self` and `rhs`.
@@ -379,7 +396,7 @@ impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Moves all entries of `rhs` into `self`.
     pub fn append_array(&mut self, mut rhs: Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
@@ -394,7 +411,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
 }
 
 // Iterator returns
-impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
+impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
     /// Outputs items in order.
     ///
     /// Excluding chunks before the initial offset, all chunks will load in
@@ -437,7 +454,7 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> BackedArray<T, Disk> {
+impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> VecBackedArray<T, Disk> {
     /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
     ///
     /// See [`Self::chunk_iter`] for the immutable iterator.
@@ -452,7 +469,7 @@ impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> BackedArray<T,
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
+impl<T: DeserializeOwned + Clone, Disk: ReadDisk> VecBackedArray<T, Disk> {
     /// Returns an iterator that outputs clones of chunk data.
     ///
     /// See [`Self::chunk_iter`] for a version that produces references.
@@ -468,12 +485,12 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Construct a backed array from entry range, backing storage pairs.
     ///
-    /// Not recommended for use outside of BackedArray wrappers.
+    /// Not recommended for use outside of VecBackedArray wrappers.
     /// If ranges do not correspond to the entry arrays, the resulting
-    /// [`BackedArray`] will be invalid.
+    /// [`VecBackedArray`] will be invalid.
     pub fn from_pairs<I>(pairs: I) -> Self
     where
         I: IntoIterator<Item = (Range<usize>, BackedEntry<Box<[T]>, Disk>)>,
@@ -483,18 +500,18 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Replaces the underlying entry disk.
     ///
-    /// Not recommended for use outside of BackedArray wrappers.
+    /// Not recommended for use outside of VecBackedArray wrappers.
     /// If ranges do not correspond to the entry arrays, the resulting
-    /// [`BackedArray`] will be invalid.
-    pub fn replace_disk<OtherDisk>(self) -> BackedArray<T, OtherDisk>
+    /// [`VecBackedArray`] will be invalid.
+    pub fn replace_disk<OtherDisk>(self) -> VecBackedArray<T, OtherDisk>
     where
         OtherDisk: for<'de> Deserialize<'de>,
         Disk: Into<OtherDisk>,
     {
-        BackedArray::<T, OtherDisk> {
+        VecBackedArray::<T, OtherDisk> {
             keys: self.keys,
             entries: self.entries.into_iter().map(|x| x.replace_disk()).collect(),
         }
@@ -521,7 +538,7 @@ mod tests {
         const INPUT_0: [u8; 3] = [0, 1, 1];
         const INPUT_1: [u8; 3] = [2, 3, 5];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append_memory(INPUT_1, back_vector_1).unwrap();
 
@@ -561,7 +578,7 @@ mod tests {
 
         const INPUT: &[u8] = &[0, 1, 1];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT, back_vector).unwrap();
 
         assert!(backed.get(0).is_ok());
@@ -600,7 +617,7 @@ mod tests {
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append(INPUT_1, back_vector_1).unwrap();
 
@@ -622,7 +639,7 @@ mod tests {
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append(INPUT_1, back_vector_1).unwrap();
         let collected = backed.item_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
@@ -643,7 +660,7 @@ mod tests {
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append(INPUT_1, back_vector_1).unwrap();
 
@@ -671,7 +688,7 @@ mod tests {
         let backing_store_1 = back_vec_1.inner.get_ref();
 
         // Intentional unsafe access to later peek underlying storage
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         unsafe {
             backed.append(FIB, &mut *back_vec_ptr_0).unwrap();
         }
@@ -726,7 +743,7 @@ mod tests {
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append_memory(INPUT_1, back_vector_1).unwrap();
 

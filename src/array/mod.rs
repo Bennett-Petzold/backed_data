@@ -66,3 +66,11 @@ where
 {
     idxs.into_iter().map(|idx| internal_idx(keys, idx))
 }
+
+pub trait BackingContainer<T>: Default {
+    // add code here
+}
+
+impl<T> BackingContainer<T> for Vec<T> {
+    // add code here
+}
