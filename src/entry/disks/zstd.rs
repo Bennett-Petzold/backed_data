@@ -6,14 +6,14 @@ use std::{
     io::{BufRead, Read, Seek},
     marker::PhantomData,
     ops::Deref,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use zstd::{Decoder, Encoder};
 
-#[cfg(any(feature = "zstd", feature = "async_zstd"))]
+#[cfg(feature = "async_zstd")]
 use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
 
-use super::{Plainfile, ReadDisk, WriteDisk};
+use super::{ReadDisk, WriteDisk};
 
 #[cfg(feature = "async_zstd")]
 use {
@@ -29,7 +29,7 @@ use {lazy_static::lazy_static, std::sync::Mutex};
 
 #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
 lazy_static! {
-    static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(1);
+    pub static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(1);
 }
 
 /// Zstd compression level (<https://facebook.github.io/zstd/zstd_manual.html>).
@@ -126,7 +126,7 @@ pub struct ZstdDisk<'a, const ZSTD_LEVEL: u8, B> {
     _phantom: PhantomData<&'a ()>,
 }
 
-impl<const ZSTD_LEVEL: u8> From<PathBuf> for ZstdDisk<'_, ZSTD_LEVEL, Plainfile> {
+impl<const ZSTD_LEVEL: u8, B: From<PathBuf>> From<PathBuf> for ZstdDisk<'_, ZSTD_LEVEL, B> {
     fn from(value: PathBuf) -> Self {
         Self {
             inner: value.into(),
@@ -135,9 +135,18 @@ impl<const ZSTD_LEVEL: u8> From<PathBuf> for ZstdDisk<'_, ZSTD_LEVEL, Plainfile>
     }
 }
 
-impl<const ZSTD_LEVEL: u8> From<ZstdDisk<'_, ZSTD_LEVEL, Plainfile>> for PathBuf {
-    fn from(val: ZstdDisk<ZSTD_LEVEL, Plainfile>) -> Self {
+impl<const ZSTD_LEVEL: u8, B> From<ZstdDisk<'_, ZSTD_LEVEL, B>> for PathBuf
+where
+    PathBuf: From<B>,
+{
+    fn from(val: ZstdDisk<ZSTD_LEVEL, B>) -> Self {
         Self::from(val.inner)
+    }
+}
+
+impl<const ZSTD_LEVEL: u8, B: AsRef<Path>> AsRef<Path> for ZstdDisk<'_, ZSTD_LEVEL, B> {
+    fn as_ref(&self) -> &Path {
+        self.inner.as_ref()
     }
 }
 

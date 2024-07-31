@@ -12,6 +12,7 @@ use std::{
 #[cfg(feature = "async")]
 use futures::Future;
 
+#[cfg(feature = "async")]
 pub mod blocking;
 
 /// Used to constrain a trait to internal use only.
