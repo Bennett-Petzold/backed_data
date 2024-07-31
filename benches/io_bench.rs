@@ -1,6 +1,7 @@
 use std::{
+    array,
     env::temp_dir,
-    fs::{create_dir, remove_dir_all, File},
+    fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
     io::{Seek, Write},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
@@ -14,11 +15,6 @@ use chrono::Local;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fs_extra::dir::get_size;
 use humansize::{format_size, BINARY};
-use rand::{rngs::StdRng, Rng, SeedableRng};
-
-const DATA_SIZE: usize = 1024 * 128;
-const DATA_CHUNKS: usize = 32;
-const SEED_VALUE: u64 = 3448;
 
 fn logfile() -> &'static Mutex<File> {
     static LOGFILE: OnceLock<Mutex<File>> = OnceLock::new();
@@ -39,32 +35,35 @@ fn logfile() -> &'static Mutex<File> {
     })
 }
 
-fn create_plainfiles(path: PathBuf, data: &[[u8; DATA_SIZE]]) -> DirectoryBackedArray<u8> {
+fn complete_works() -> &'static Vec<String> {
+    static LOGFILE: OnceLock<Vec<String>> = OnceLock::new();
+    LOGFILE.get_or_init(|| {
+        read_dir("shakespeare-dataset/text")
+            .unwrap()
+            .map(|text| read_to_string(text.unwrap().path()).unwrap())
+            .collect::<Vec<String>>()
+    })
+}
+
+fn create_plainfiles(path: PathBuf, data: &[String]) -> DirectoryBackedArray<u8> {
     let mut arr: DirectoryBackedArray<u8> = DirectoryBackedArray::new(path).unwrap();
     for inner_data in data {
-        arr.append(inner_data).unwrap();
+        arr.append(inner_data.as_ref()).unwrap();
     }
     arr
 }
 
 #[cfg(feature = "zstd")]
-fn create_zstdfiles(
-    path: PathBuf,
-    data: &[[u8; DATA_SIZE]],
-    level: Option<i32>,
-) -> ZstdDirBackedArray<u8> {
+fn create_zstdfiles(path: PathBuf, data: &[String], level: Option<i32>) -> ZstdDirBackedArray<u8> {
     let mut arr: ZstdDirBackedArray<u8> = ZstdDirBackedArray::new(path, level).unwrap();
     for inner_data in data {
-        arr.append(inner_data).unwrap();
+        arr.append(inner_data.as_ref()).unwrap();
     }
     arr
 }
 
 fn file_creation_bench(c: &mut Criterion) {
-    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; DATA_CHUNKS];
-    let mut rng = StdRng::seed_from_u64(SEED_VALUE);
-    data.iter_mut()
-        .for_each(|subdata| rng.fill(&mut subdata[..]));
+    let data = complete_works();
 
     let path = temp_dir().join("file_creation_bench");
 
@@ -72,7 +71,7 @@ fn file_creation_bench(c: &mut Criterion) {
     group.bench_function("create_plainfiles", |b| {
         let _ = remove_dir_all(path.clone());
         create_dir(path.clone()).unwrap();
-        b.iter(|| create_plainfiles(black_box(path.clone()), black_box(data)))
+        b.iter(|| create_plainfiles(black_box(path.clone()), black_box(&data)))
     });
 
     println!(
@@ -90,7 +89,7 @@ fn file_creation_bench(c: &mut Criterion) {
     group.bench_function("create_zstdfiles", |b| {
         let _ = remove_dir_all(path.clone());
         create_dir(path.clone()).unwrap();
-        b.iter(|| create_zstdfiles(black_box(path.clone()), black_box(data), None))
+        b.iter(|| create_zstdfiles(black_box(path.clone()), black_box(&data), None))
     });
 
     println!(
@@ -127,10 +126,7 @@ fn read_zstdfiles(f: &mut File) -> usize {
 }
 
 fn file_load_bench(c: &mut Criterion) {
-    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; DATA_CHUNKS];
-    let mut rng = StdRng::seed_from_u64(SEED_VALUE);
-    data.iter_mut()
-        .for_each(|subdata| rng.fill(&mut subdata[..]));
+    let data = complete_works();
 
     let path = temp_dir().join("file_load_bench");
     let _ = remove_dir_all(path.clone());
@@ -146,7 +142,7 @@ fn file_load_bench(c: &mut Criterion) {
         .open(path.join("CONFIG"))
         .unwrap();
 
-    let mut arr = create_plainfiles(path.clone(), data);
+    let mut arr = create_plainfiles(path.clone(), &data);
     arr.save_to_disk(file.try_clone().unwrap()).unwrap();
 
     group.bench_function("load_plainfiles", |b| {
@@ -164,7 +160,7 @@ fn file_load_bench(c: &mut Criterion) {
         .open(path.join("CONFIG"))
         .unwrap();
 
-    let mut arr = create_zstdfiles(path.clone(), data, None);
+    let mut arr = create_zstdfiles(path.clone(), &data, None);
     arr.save_to_disk(file.try_clone().unwrap()).unwrap();
 
     #[cfg(feature = "zstd")]
@@ -182,10 +178,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
 
     use criterion::BenchmarkId;
 
-    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; DATA_CHUNKS];
-    let mut rng = StdRng::seed_from_u64(SEED_VALUE);
-    data.iter_mut()
-        .for_each(|subdata| rng.fill(&mut subdata[..]));
+    let data = complete_works();
 
     let path = temp_dir().join("file_creation_bench");
 
@@ -201,7 +194,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 let _ = remove_dir_all(path.clone());
                 create_dir(path.clone()).unwrap();
                 b.iter(|| {
-                    create_zstdfiles(black_box(path.clone()), black_box(data), Some(*zstd_level))
+                    create_zstdfiles(black_box(path.clone()), black_box(&data), Some(*zstd_level))
                 })
             },
         );
@@ -226,7 +219,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
             .truncate(true)
             .open(path.join("CONFIG"))
             .unwrap();
-        create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
+        create_zstdfiles(black_box(path.clone()), black_box(&data), Some(zstd_level))
             .save_to_disk(file.try_clone().unwrap())
             .unwrap();
         group.bench_with_input(
@@ -236,7 +229,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
         );
 
         #[cfg(feature = "zstdmt")]
-        for t_count in 0..3 {
+        for t_count in 0..5 {
             set_zstd_multithread(t_count);
             group.bench_with_input(
                 BenchmarkId::new(
@@ -250,7 +243,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
                     b.iter(|| {
                         create_zstdfiles(
                             black_box(path.clone()),
-                            black_box(data),
+                            black_box(&data),
                             Some(*zstd_level),
                         )
                     })
@@ -264,7 +257,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 .truncate(true)
                 .open(path.join("CONFIG"))
                 .unwrap();
-            create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
+            create_zstdfiles(black_box(path.clone()), black_box(&data), Some(zstd_level))
                 .save_to_disk(file.try_clone().unwrap())
                 .unwrap();
             group.bench_with_input(
@@ -284,7 +277,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
 
 criterion_group! {
     name = io_benches;
-    config = Criterion::default().sample_size(100);
+    config = Criterion::default().sample_size(10);
     targets = file_creation_bench,
     file_load_bench,
     zstd_setting_benches
