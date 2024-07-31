@@ -97,6 +97,10 @@ seq-macro = "0.3.5"
 name = "io_bench"
 harness = false
 
+[[bench]]
+name = "zstd_bench"
+harness = false
+
 [profile.bench]
 debug = true
 
