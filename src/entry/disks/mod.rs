@@ -122,6 +122,9 @@ impl AsyncWriteDisk for Plainfile {
     }
 }
 
+mod write_unbuffered;
+pub use write_unbuffered::*;
+
 #[cfg(any(feature = "zstd", feature = "async_zstd"))]
 mod zstd;
 #[cfg(any(feature = "zstd", feature = "async_zstd"))]
