@@ -12,5 +12,11 @@ pub mod meta;
 #[cfg(any(feature = "zstd", feature = "async-zstd"))]
 pub mod zstd;
 
+#[cfg(feature = "encrypted")]
+pub mod encrypted;
+
+#[cfg(feature = "mmap")]
+pub mod mmap;
+
 #[cfg(test)]
 mod test_utils;
