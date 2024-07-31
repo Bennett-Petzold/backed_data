@@ -266,7 +266,7 @@ impl GuardedMmap {
             })
         })?;
 
-        let is_read = matches!(**write_lock, SwitchingMmap::ReadMmap(_));
+        let is_read = !matches!(**write_lock, SwitchingMmap::WriteMmap(_));
 
         if is_read {
             let temp_mmap = std::mem::replace(
