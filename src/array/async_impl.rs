@@ -149,6 +149,10 @@ where
             .group_by(|(_, loc)| loc.entry_idx);
         let translated_idxes: Vec<_> = translated_idxes.into_iter().collect();
 
+        if num_items == 0 {
+            return Ok(vec![]);
+        }
+
         let num_groups = translated_idxes.len();
         let mut results = Vec::with_capacity(num_items);
 
