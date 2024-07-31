@@ -1,3 +1,21 @@
+use std::sync::Mutex;
+
+use lazy_static::lazy_static;
+
+#[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
+lazy_static! {
+    static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(1);
+}
+
+#[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
+/// Set the level of zstdmt multithreading
+///
+/// Default is 1 (one extra thread).
+/// Values greater than 0 run compression in N background threads.
+pub fn set_zstd_multithread(value: u32) {
+    *ZSTD_MULTITHREAD.lock().unwrap() = value;
+}
+
 pub mod sync_impl {
     use std::{
         fs::{copy, create_dir_all, remove_file, rename, File},
@@ -16,6 +34,9 @@ pub mod sync_impl {
     use zstd::{Decoder, Encoder};
 
     use crate::{array::sync_impl::BackedArray, meta::sync_impl::BackedArrayWrapper};
+
+    #[cfg(feature = "zstdmt")]
+    use super::ZSTD_MULTITHREAD;
 
     /// File encoded with zstd
     pub struct ZstdFile<'a> {
@@ -52,11 +73,16 @@ pub mod sync_impl {
                 .write(true)
                 .create(true)
                 .open(path.clone())?;
+
+            let mut encoder = Encoder::new(file.try_clone()?, zstd_level)?;
+            #[cfg(feature = "zstdmt")]
+            encoder.multithread(*ZSTD_MULTITHREAD.lock().unwrap())?;
+
             Ok(Self {
                 file: file.try_clone()?,
                 path,
-                decoder: Decoder::new(file.try_clone()?)?,
-                encoder: Encoder::new(file, zstd_level)?,
+                decoder: Decoder::new(file)?,
+                encoder,
                 zstd_level,
             })
         }
@@ -87,12 +113,20 @@ pub mod sync_impl {
                 .write(true)
                 .open(path.clone())
                 .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
+
+            let mut encoder = Encoder::new(file.try_clone().map_err(D::Error::custom)?, zstd_level)
+                .map_err(D::Error::custom)?;
+            #[cfg(feature = "zstdmt")]
+            encoder
+                .multithread(*ZSTD_MULTITHREAD.lock().unwrap())
+                .map_err(D::Error::custom)?;
+
             Ok(Self {
                 file: file.try_clone().map_err(D::Error::custom)?,
                 path: path.into(),
                 decoder: Decoder::new(file.try_clone().map_err(D::Error::custom)?)
                     .map_err(D::Error::custom)?,
-                encoder: Encoder::new(file, zstd_level).map_err(D::Error::custom)?,
+                encoder,
                 zstd_level,
             })
         }
@@ -120,6 +154,9 @@ pub mod sync_impl {
             self.encoder.flush()?;
             self.encoder.do_finish()?;
             self.encoder = Encoder::new(self.file.try_clone()?, self.zstd_level)?;
+            #[cfg(feature = "zstdmt")]
+            self.encoder
+                .multithread(*ZSTD_MULTITHREAD.lock().unwrap())?;
             Ok(())
         }
         fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
@@ -342,6 +379,9 @@ pub mod async_impl {
     use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
     use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
 
+    #[cfg(feature = "async-zstdmt")]
+    use async_compression::zstd::CParameter;
+
     use async_trait::async_trait;
     use derive_getters::Getters;
     use futures::{executor::block_on, SinkExt, StreamExt};
@@ -358,6 +398,9 @@ pub mod async_impl {
     use uuid::Uuid;
 
     use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
+
+    #[cfg(feature = "async-zstdmt")]
+    use super::ZSTD_MULTITHREAD;
 
     /// File encoded with zstd
     pub struct ZstdFile {
@@ -399,9 +442,16 @@ pub mod async_impl {
                 file: file.try_clone().await?,
                 path,
                 decoder: ZstdDecoder::new(BufReader::new(file.try_clone().await?)),
+                #[cfg(not(feature = "async-zstdmt"))]
                 encoder: ZstdEncoder::with_quality(
                     file,
                     async_compression::Level::Precise(zstd_level),
+                ),
+                #[cfg(feature = "async-zstdmt")]
+                encoder: ZstdEncoder::with_quality_and_params(
+                    file,
+                    async_compression::Level::Precise(zstd_level),
+                    &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
                 ),
                 zstd_level,
             })
@@ -441,9 +491,16 @@ pub mod async_impl {
                     decoder: ZstdDecoder::new(BufReader::new(
                         file.try_clone().await.map_err(D::Error::custom)?,
                     )),
+                    #[cfg(not(feature = "async-zstdmt"))]
                     encoder: ZstdEncoder::with_quality(
                         file,
                         async_compression::Level::Precise(zstd_level),
+                    ),
+                    #[cfg(feature = "async-zstdmt")]
+                    encoder: ZstdEncoder::with_quality_and_params(
+                        file,
+                        async_compression::Level::Precise(zstd_level),
+                        &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
                     ),
                     zstd_level,
                 })
