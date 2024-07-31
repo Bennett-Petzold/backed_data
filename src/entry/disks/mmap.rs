@@ -18,7 +18,7 @@ use memmap2::Advice;
 use memmap2::RemapOptions;
 
 #[cfg(target_os = "windows")]
-use std::os::unix::fs::MetadataExt;
+use std::os::windows::fs::MetadataExt;
 
 use crate::utils::BorrowExtender;
 
