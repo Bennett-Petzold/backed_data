@@ -1,6 +1,6 @@
-use std::ops::Range;
+use std::{iter::FusedIterator, ops::Range, pin::Pin, sync::Arc};
 
-use futures::{stream, Stream, StreamExt};
+use futures::{stream, Future, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -334,40 +334,217 @@ impl<
 
 // ---------- Stream Returns ---------- //
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
-    /// Provides a stream over each backed item.
-    ///
-    /// There is not an efficient skip mechanism, every prior backing store to
-    /// an entry will be loaded and stay loaded.
-    pub fn stream<'a>(
-        &'a self,
-    ) -> impl Stream<Item = Result<<E::Unwrapped as Container>::Ref<'a>, E::AsyncReadError>> + '_
-    where
-        E: 'a,
-    {
-        stream::iter(self.entries.ref_iter())
-            .then(|ent| {
-                let ent = BorrowExtender::new(ent, |ent| {
-                    let ent_ptr: *const _ = ent;
-                    let ent = unsafe { &*ent_ptr }.as_ref();
-                    BorrowExtender::new(ent, |ent| {
-                        let ent_ptr: *const _ = ent;
-                        unsafe { &*ent_ptr }.as_ref()
-                    })
-                });
-                ent.a_load()
-            })
-            .flat_map(|ent| match ent {
-                Ok(loaded) => stream::iter(0..loaded.c_len())
-                    .map(move |idx| Ok(loaded.c_get(idx).unwrap()))
-                    .left_stream(),
-                Err(e) => stream::iter([Err(e)]).right_stream(),
-            })
+/// Iterates over a backed array, returning each item future in order.
+///
+/// See [`BackedArrayFutIterSend`] for the Send + Sync version.
+///
+/// To keep an accurate size count, failed reads will not be retried.
+/// This will keep each disk loaded after pulling data from it.
+/// Stepping by > 1 with `nth` implementation may skip loading a disk.
+#[derive(Debug)]
+pub struct BackedArrayFutIter<'a, K, E> {
+    backed: &'a BackedArray<K, E>,
+    pos: usize,
+}
+
+/// [`BackedArrayFutIter`], but returns are `+ Send`.
+///
+/// Since closure returns are anonymous, and Iterator requires a concrete type,
+/// the future is returned as a Box<dyn Future>. This strips type information,
+/// so having a `+ Send` version requires a different return type than a
+/// `Send?` version.
+#[derive(Debug)]
+pub struct BackedArrayFutIterSend<K, E> {
+    backed: Arc<BackedArray<K, E>>,
+    pos: usize,
+}
+
+impl<'a, K, E> BackedArrayFutIter<'a, K, E> {
+    fn new(backed: &'a BackedArray<K, E>) -> Self {
+        Self { backed, pos: 0 }
+    }
+}
+
+impl<K, E> BackedArrayFutIterSend<K, E> {
+    fn new(backed: Arc<BackedArray<K, E>>) -> Self {
+        Self { backed, pos: 0 }
+    }
+}
+
+impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
+    for BackedArrayFutIter<'a, K, E>
+{
+    type Item = Pin<
+        Box<
+            dyn Future<Output = Result<<E::Unwrapped as Container>::Ref<'a>, E::AsyncReadError>>
+                + 'a,
+        >,
+    >;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.nth(0)
     }
 
-    /// Async version of [`Self::chunk_iter`].
-    pub fn chunk_stream(&mut self) -> impl Stream<Item = Result<&E::Unwrapped, E::AsyncReadError>> {
-        stream::iter(self.entries.ref_iter()).then(|ent| {
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let cur_pos = self.pos + n;
+        self.pos += n + 1;
+        let fut = self.backed.a_get(cur_pos);
+        if cur_pos < self.backed.len() {
+            Some(Box::pin(async move {
+                match fut.await {
+                    Ok(val) => Ok(val),
+                    Err(e) => match e {
+                        BackedArrayError::OutsideEntryBounds(_) => {
+                            panic!("Not possible to be outside entry bounds")
+                        }
+                        BackedArrayError::Coder(c) => Err(c),
+                    },
+                }
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.backed.len() - self.pos;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
+    for BackedArrayFutIterSend<K, E>
+where
+    K: Send + Sync + 'static,
+    for<'b> K::Ref<'b>: Send + Sync,
+    E: Send + Sync + 'static,
+    E::Coder: Send + Sync,
+    E::Disk: Send + Sync,
+    <E::Disk as AsyncReadDisk>::ReadDisk: Send + Sync,
+    E::OnceWrapper: Send + Sync,
+    for<'b> E::Ref<'b>: Send + Sync,
+    for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
+{
+    type Item = Pin<
+        Box<
+            dyn Future<
+                    Output = Result<<E::Unwrapped as Container>::Ref<'static>, E::AsyncReadError>,
+                > + Send
+                + 'static,
+        >,
+    >;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.nth(0)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let cur_pos = self.pos + n;
+        self.pos += n + 1;
+
+        // This version of the function clones the Arc and moves it inside
+        // the async closure, in order to ensure lifetime validity.
+        let backed = self.backed.clone();
+        if cur_pos < self.backed.len() {
+            Some(Box::pin(async move {
+                // Lifetime shenanigans: since this uses an owned Arc and the
+                // underlying data is static, this data will be valid for this
+                // future. But the compiler can't solve for that.
+                let backed_ptr: *const _ = &backed;
+                let fut = unsafe { &*backed_ptr }.a_get(cur_pos);
+
+                match fut.await {
+                    Ok(val) => Ok(val),
+                    Err(e) => match e {
+                        BackedArrayError::OutsideEntryBounds(_) => {
+                            panic!("Not possible to be outside entry bounds")
+                        }
+                        BackedArrayError::Coder(c) => Err(c),
+                    },
+                }
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.backed.len() - self.pos;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
+    for BackedArrayFutIter<'a, K, E>
+{
+}
+
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
+    for BackedArrayFutIterSend<K, E>
+where
+    K: Send + Sync + 'static,
+    for<'b> K::Ref<'b>: Send + Sync,
+    E: Send + Sync + 'static,
+    E::Coder: Send + Sync,
+    E::Disk: Send + Sync,
+    <E::Disk as AsyncReadDisk>::ReadDisk: Send + Sync,
+    E::OnceWrapper: Send + Sync,
+    for<'b> E::Ref<'b>: Send + Sync,
+    for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
+{
+}
+
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
+    /// Future iterator over each backed item.
+    ///
+    /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
+    /// stream by default because [`Stream`] does not have the iterator methods
+    /// that allow efficient implementations.
+    ///
+    /// Use [`Self::stream_send`] for `+ Send` bounds.
+    pub fn stream(
+        &self,
+    ) -> impl Iterator<
+        Item = impl Future<Output = Result<<E::Unwrapped as Container>::Ref<'_>, E::AsyncReadError>>,
+    > + '_ {
+        BackedArrayFutIter::new(self)
+    }
+
+    /// Version of [`Self::stream`] with `+ Send` bounds.
+    ///
+    /// If this type owns the disk (all library disks are owned), wrapping
+    /// in an Arc and calling with `BackedArray::stream_send(&this)` satisfies
+    /// all of the bounds.
+    pub fn stream_send(
+        this: &Arc<Self>,
+    ) -> impl Iterator<
+        Item = impl Future<
+            Output = Result<<E::Unwrapped as Container>::Ref<'static>, E::AsyncReadError>,
+        > + Send,
+    > + '_
+    where
+        K: Send + Sync + 'static,
+        for<'b> K::Ref<'b>: Send + Sync,
+        E: Send + Sync + 'static,
+        E::Coder: Send + Sync,
+        E::Disk: Send + Sync,
+        <E::Disk as AsyncReadDisk>::ReadDisk: Send + Sync,
+        E::OnceWrapper: Send + Sync,
+        for<'b> E::Ref<'b>: Send + Sync,
+        for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
+    {
+        BackedArrayFutIterSend::new(this.clone())
+    }
+
+    /// Future iterator over each chunk.
+    ///
+    /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
+    /// stream by default because [`Stream`] does not have the iterator methods
+    /// that allow efficient implementations.
+    pub fn chunk_stream(
+        &self,
+    ) -> impl Iterator<Item = impl Future<Output = Result<&E::Unwrapped, E::AsyncReadError>>> {
+        self.entries.ref_iter().map(|ent| {
             let ent = BorrowExtender::new(ent, |ent| {
                 let ent_ptr: *const _ = ent;
                 let ent = unsafe { &*ent_ptr }.as_ref();
@@ -389,7 +566,10 @@ mod tests {
     use stream::TryStreamExt;
     use tokio::join;
 
-    use crate::{entry::formats::AsyncBincodeCoder, test_utils::CursorVec};
+    use crate::{
+        entry::formats::AsyncBincodeCoder,
+        test_utils::{CursorVec, OwnedCursorVec},
+    };
 
     use super::*;
 
@@ -507,7 +687,11 @@ mod tests {
             .await
             .unwrap();
 
-        let collected = backed.chunk_stream().try_collect::<Vec<_>>().await.unwrap();
+        let collected = stream::iter(backed.chunk_stream())
+            .then(|x| x)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
         assert_eq!(collected[0].as_ref(), INPUT_0);
         assert_eq!(collected[1].as_ref(), INPUT_1);
         assert_eq!(collected.len(), 2);
@@ -536,10 +720,52 @@ mod tests {
             .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder {})
             .await
             .unwrap();
-        let collected = backed.stream().try_collect::<Vec<_>>().await.unwrap();
+        let collected = stream::iter(backed.stream())
+            .then(|x| x)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
         assert_eq!(collected[5], &7);
         assert_eq!(collected[2], &1);
         assert_eq!(collected.len(), 6);
+    }
+
+    #[test]
+    fn parallel_item_iteration() {
+        // Need to avoid use a runtime without I/O for Miri compatibility
+        tokio::runtime::Builder::new_multi_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                // Leak cursors to get static lifetimes
+                let back_0 = Cursor::new(Vec::new());
+                let back_vector_0 = OwnedCursorVec::new(back_0);
+                let back_1 = Cursor::new(Vec::new());
+                let back_vector_1 = OwnedCursorVec::new(back_1);
+
+                const INPUT_0: &[u8] = &[0, 1, 1];
+                const INPUT_1: &[u8] = &[2, 5, 7];
+
+                let mut backed = AsyncVecBackedArray::new();
+                backed
+                    .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder {})
+                    .await
+                    .unwrap();
+                backed
+                    .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder {})
+                    .await
+                    .unwrap();
+                let backed = Arc::new(backed);
+                let collected = stream::iter(BackedArray::stream_send(&backed))
+                    .map(|x| async { tokio::task::spawn(x).await.unwrap() })
+                    .buffered(backed.len())
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap();
+                assert_eq!(collected[5], &7);
+                assert_eq!(collected[2], &1);
+                assert_eq!(collected.len(), 6);
+            });
     }
 
     #[tokio::test]

@@ -1,6 +1,7 @@
 use core::panic;
 use std::{
     io::{Cursor, Seek},
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::Mutex,
 };
@@ -168,5 +169,68 @@ impl DerefMut for CursorVec<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let this: *mut _ = self.inner.lock().unwrap().deref_mut();
         unsafe { *this }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OwnedCursorVec<'a> {
+    #[serde(skip)]
+    pub inner: Mutex<Cursor<Vec<u8>>>,
+    _phantom: PhantomData<&'a ()>,
+}
+
+impl OwnedCursorVec<'_> {
+    pub fn new(inner: Cursor<Vec<u8>>) -> Self {
+        Self {
+            inner: Mutex::new(inner),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+/// This is deliberately breaking mutability
+impl ReadDisk for OwnedCursorVec<'_> {
+    type ReadDisk = Cursor<Vec<u8>>;
+
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        let mut this = self.inner.lock().unwrap().clone();
+        this.rewind()?;
+        Ok(this)
+    }
+}
+
+impl<'a> WriteDisk for OwnedCursorVec<'a> {
+    type WriteDisk = &'a mut Cursor<Vec<u8>>;
+
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        this.rewind()?;
+        let this: *mut _ = this.deref_mut();
+        unsafe { Ok(&mut *this) }
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncReadDisk for OwnedCursorVec<'_> {
+    type ReadDisk = Cursor<Vec<u8>>;
+
+    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        let mut this = self.inner.lock().unwrap().clone();
+        this.rewind()?;
+        Ok(this)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<'a> AsyncWriteDisk for OwnedCursorVec<'a> {
+    type WriteDisk = &'a mut Cursor<Vec<u8>>;
+
+    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        this.rewind()?;
+        let this: *mut _ = this.deref_mut();
+        unsafe { Ok(&mut *this) }
     }
 }
