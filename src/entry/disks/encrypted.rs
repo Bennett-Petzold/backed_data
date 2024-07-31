@@ -3,6 +3,7 @@ use std::{
     io::{Cursor, Read, Write},
     marker::PhantomData,
     ops::{Deref, DerefMut},
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 
@@ -11,6 +12,7 @@ use aes_gcm::{
     AeadCore, Aes256Gcm, KeyInit,
 };
 use secrets::{traits::Bytes, SecretBox, SecretVec};
+use serde::{Deserialize, Serialize};
 
 use crate::utils::BorrowExtender;
 
@@ -22,34 +24,66 @@ struct KeyNonce {
 
 unsafe impl Bytes for KeyNonce {}
 
+fn random_key_nonce() -> SecretBox<KeyNonce> {
+    SecretBox::random()
+}
+
 /// A resource encrypted with Aes256Gcm.
 ///
 /// Secrets and decrypted data are stored in [`SecretBox`], which minimizes
 /// the risk of memory being snooped (see [`secrets`] for details).
+///
+/// The secrets are excluded from serialization and deserialization, being
+/// set with garbage data on deserialization. Use [`Self::set_key`] and
+/// [`Self::set_nonce`] to initialize secrets after deserialization.
+#[derive(Serialize, Deserialize)]
 pub struct Encrypted<'a, B> {
     inner: B,
+    #[serde(skip)]
+    #[serde(default = "random_key_nonce")]
     secrets: SecretBox<KeyNonce>,
     _phantom: PhantomData<&'a ()>,
+}
+
+impl<B> From<Encrypted<'_, B>> for PathBuf
+where
+    PathBuf: From<B>,
+{
+    fn from(val: Encrypted<'_, B>) -> Self {
+        Self::from(val.inner)
+    }
+}
+
+impl<B: AsRef<Path>> AsRef<Path> for Encrypted<'_, B> {
+    fn as_ref(&self) -> &Path {
+        self.inner.as_ref()
+    }
 }
 
 unsafe impl<B: Send> Send for Encrypted<'_, B> {}
 unsafe impl<B: Sync> Sync for Encrypted<'_, B> {}
 
 impl<B: Bytes> Encrypted<'_, B> {
-    pub fn new(
-        inner: B,
-        key: Option<&SecretBox<[u8; 32]>>,
-        nonce: Option<&SecretBox<[u8; 96]>>,
-    ) -> Self {
+    /// Create a new [`Encrypted`].
+    ///
+    /// # Parameters
+    /// * `inner`: Underlying disk written to / read from
+    /// * `key`: Aes256Gcm key. Generated with [`OsRng`] if not provided.
+    /// * `nonce`: Aes256Gcm nonce. Generated with [`OsRng`] if not provided.
+    pub fn new<K, N>(inner: B, key: Option<K>, nonce: Option<N>) -> Self
+    where
+        K: AsRef<[u8; 32]>,
+        N: AsRef<[u8; 96]>,
+    {
         Self {
             inner,
             secrets: SecretBox::new(|s| {
                 *s = KeyNonce {
                     key: key
-                        .map(|k| *k.borrow())
+                        .map(|k| *k.as_ref())
                         .unwrap_or(Aes256Gcm::generate_key(OsRng).into()),
-                    nonce: nonce.map(|n| *n.borrow()).unwrap_or(
-                        Aes256Gcm::generate_nonce(&mut OsRng)
+                    nonce: nonce.map(|n| *n.as_ref()).unwrap_or(
+                        Aes256Gcm::generate_nonce(OsRng)
                             .as_slice()
                             .try_into()
                             .unwrap(),
@@ -58,6 +92,30 @@ impl<B: Bytes> Encrypted<'_, B> {
             }),
             _phantom: PhantomData,
         }
+    }
+
+    pub fn set_key(&mut self, key: &SecretBox<[u8; 32]>) -> &mut Self {
+        self.secrets
+            .borrow_mut()
+            .key
+            .copy_from_slice(key.borrow().as_slice());
+        self
+    }
+
+    pub fn set_nonce(&mut self, nonce: &SecretBox<[u8; 96]>) -> &mut Self {
+        self.secrets
+            .borrow_mut()
+            .nonce
+            .copy_from_slice(nonce.borrow().as_slice());
+        self
+    }
+
+    pub fn get_key(&self) -> impl AsRef<[u8; 32]> + '_ {
+        BorrowExtender::new(self.secrets.borrow(), |secrets| secrets.key)
+    }
+
+    pub fn get_nonce(&self) -> impl AsRef<[u8; 96]> + '_ {
+        BorrowExtender::new(self.secrets.borrow(), |secrets| secrets.nonce)
     }
 }
 
@@ -324,13 +382,17 @@ mod async_impl {
     }
 
     impl<B: Bytes, FD, FE> AsyncEncrypted<'_, B, FD, FE> {
-        pub fn new<F, R>(
+        pub fn new<K, N>(
             inner: B,
-            key: Option<&SecretBox<[u8; 32]>>,
-            nonce: Option<&SecretBox<[u8; 96]>>,
+            key: Option<K>,
+            nonce: Option<N>,
             decrypt_handle: FD,
             encrypt_handle: FE,
-        ) -> Self {
+        ) -> Self
+        where
+            K: AsRef<[u8; 32]>,
+            N: AsRef<[u8; 96]>,
+        {
             Self {
                 sync: Encrypted::new(inner, key, nonce),
                 decrypt_handle,
@@ -518,7 +580,7 @@ mod async_impl {
             if let Poll::Ready(buf) = flush_fut_res {
                 let slice_start = self.flush_slice_start;
                 let write_res =
-                    Pin::new(&mut self.inner).poll_write(cx, &buf?.borrow()[slice_start..]);
+                    Pin::new(&mut self.inner).poll_write(cx, &buf?.as_ref()[slice_start..]);
 
                 match write_res {
                     Poll::Ready(Ok(0)) => {

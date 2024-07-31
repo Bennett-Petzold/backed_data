@@ -4,19 +4,32 @@ use std::{
 };
 
 use futures::{stream, StreamExt, TryStreamExt};
-use tokio::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
+use serde::{Deserialize, Serialize};
+use tokio::{
+    fs::{copy, create_dir_all, remove_dir, remove_file, rename},
+    io::AsyncWriteExt,
+};
 use uuid::Uuid;
 
-use crate::array::{
-    async_impl::{BackedEntryContainerNestedAsync, BackedEntryContainerNestedAsyncWrite},
-    container::{
-        BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
-        ResizingContainer,
+use crate::{
+    array::{
+        async_impl::{
+            BackedEntryContainerNestedAsync, BackedEntryContainerNestedAsyncRead,
+            BackedEntryContainerNestedAsyncWrite,
+        },
+        container::{
+            BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
+            ResizingContainer,
+        },
+        sync_impl::BackedArray,
     },
-    sync_impl::BackedArray,
+    entry::{
+        disks::{AsyncReadDisk, AsyncWriteDisk},
+        formats::{AsyncDecoder, AsyncEncoder},
+    },
 };
 
-use super::DirectoryBackedArray;
+use super::{DirectoryBackedArray, META_FILE};
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
@@ -159,6 +172,43 @@ where
 {
     pub fn a_next_target(&self) -> E::Disk {
         self.directory_root.join(Uuid::new_v4().to_string()).into()
+    }
+}
+
+impl<K, E: BackedEntryContainerNestedAsyncWrite> DirectoryBackedArray<K, E>
+where
+    K: Send + Sync + Serialize,
+    E: Send + Sync + Serialize,
+    E::Disk: From<PathBuf>,
+    E::Coder: Default,
+    E::AsyncWriteError: From<std::io::Error>,
+{
+    /// Async version of [`Self::save`].
+    pub async fn a_save(&self) -> Result<&Self, E::AsyncWriteError> {
+        let disk: E::Disk = self.directory_root.join(META_FILE).into();
+        let mut disk = disk.async_write_disk().await?;
+        let coder = E::Coder::default();
+        coder.encode(self, &mut disk).await?;
+        disk.flush().await?;
+        disk.shutdown().await?;
+        Ok(self)
+    }
+}
+
+impl<K, E: BackedEntryContainerNestedAsyncRead> DirectoryBackedArray<K, E>
+where
+    K: Send + Sync + for<'de> Deserialize<'de>,
+    E: Send + Sync + for<'de> Deserialize<'de>,
+    E::Disk: From<PathBuf>,
+    E::Coder: Default,
+    E::AsyncReadError: From<std::io::Error>,
+{
+    /// Async version of [`Self::load`].
+    pub async fn a_load<P: AsRef<Path>>(root: P) -> Result<Self, E::AsyncReadError> {
+        let disk: E::Disk = root.as_ref().join(META_FILE).into();
+        let mut disk = disk.async_read_disk().await?;
+        let coder = E::Coder::default();
+        coder.decode(&mut disk).await
     }
 }
 

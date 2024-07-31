@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,12 @@ impl From<PathBuf> for Plainfile {
 impl From<Plainfile> for PathBuf {
     fn from(val: Plainfile) -> Self {
         val.path
+    }
+}
+
+impl AsRef<Path> for Plainfile {
+    fn as_ref(&self) -> &Path {
+        &self.path
     }
 }
 

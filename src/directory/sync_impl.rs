@@ -1,20 +1,29 @@
 use std::{
     fs::{copy, create_dir_all, remove_dir, remove_file, rename},
+    io::Write,
     ops::{Deref, DerefMut, Range},
     path::{Path, PathBuf},
 };
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::array::{
-    container::{
-        open_mut, BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
-        BackedEntryContainerNestedWrite, ResizingContainer,
+use crate::{
+    array::{
+        container::{
+            open_mut, BackedEntryContainer, BackedEntryContainerNested,
+            BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
+            BackedEntryContainerNestedWrite, ResizingContainer,
+        },
+        sync_impl::BackedArray,
     },
-    sync_impl::BackedArray,
+    entry::{
+        disks::{ReadDisk, WriteDisk},
+        formats::{Decoder, Encoder},
+    },
 };
 
-use super::DirectoryBackedArray;
+use super::{DirectoryBackedArray, META_FILE};
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
@@ -70,6 +79,10 @@ where
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Disk: AsRef<Path>,
 {
+    /// Append another [`self`] of the same type.
+    ///
+    /// This will move all entries of `rhs` into [`self`]'s root, and clean up the
+    /// `rhs` directory if empty after move.
     pub fn append_dir(&mut self, rhs: Self) -> Result<&mut Self, std::io::Error> {
         if self.directory_root != rhs.directory_root {
             rhs.entries()
@@ -90,9 +103,36 @@ where
                     }
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let _ = remove_file(rhs.directory_root.join(META_FILE));
             let _ = remove_dir(rhs.directory_root);
         }
         self.array.merge(rhs.array);
+        Ok(self)
+    }
+
+    /// Append an existing BackedArray.
+    ///
+    /// This will move all entries of `rhs` into [`self`]'s root.
+    pub fn append_array(&mut self, rhs: BackedArray<K, E>) -> Result<&mut Self, std::io::Error> {
+        rhs.entries()
+            .ref_iter()
+            .map(|chunk| {
+                let disk = chunk.as_ref().get_ref().get_disk().as_ref();
+                let new_loc = self.directory_root.join(disk.file_name().unwrap());
+                if disk != new_loc {
+                    match rename(disk, &new_loc) {
+                        Ok(_) => Ok(()),
+                        Err(_) => {
+                            copy(disk, &new_loc)?;
+                            remove_file(disk)
+                        }
+                    }
+                } else {
+                    Ok(())
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.array.merge(rhs);
         Ok(self)
     }
 }
@@ -174,6 +214,50 @@ impl<K, E> DirectoryBackedArray<K, E> {
     }
 }
 
+impl<K, E: BackedEntryContainerNestedWrite> DirectoryBackedArray<K, E>
+where
+    K: Serialize,
+    E: Serialize,
+    E::Disk: From<PathBuf>,
+    E::Coder: Default,
+    E::WriteError: From<std::io::Error>,
+{
+    /// Save [`self`] at `DIRECTORY_ROOT/meta.dat`.
+    ///
+    /// As [`self`] implements serialize and deserialize, it does not need to
+    /// be saved with this method. However, this provides a standard location
+    /// and format for [`Self::load`] to utilize.
+    pub fn save(&self) -> Result<&Self, E::WriteError> {
+        let disk: E::Disk = self.directory_root.join(META_FILE).into();
+        let mut disk = disk.write_disk()?;
+        let coder = E::Coder::default();
+        coder.encode(self, &mut disk)?;
+        disk.flush()?;
+        Ok(self)
+    }
+}
+
+impl<K, E: BackedEntryContainerNestedRead> DirectoryBackedArray<K, E>
+where
+    K: for<'de> Deserialize<'de>,
+    E: for<'de> Deserialize<'de>,
+    E::Disk: From<PathBuf>,
+    E::Coder: Default,
+    E::ReadError: From<std::io::Error>,
+{
+    /// Load [`self`] from `DIRECTORY_ROOT/meta.dat`.
+    ///
+    /// As [`self`] implements serialize and deserialize, it does not need to
+    /// be loaded with this method. However, this uses a standard location and
+    /// format from a [`Self::save`] call.
+    pub fn load<P: AsRef<Path>>(root: P) -> Result<Self, E::ReadError> {
+        let disk: E::Disk = root.as_ref().join(META_FILE).into();
+        let mut disk = disk.read_disk()?;
+        let coder = E::Coder::default();
+        coder.decode(&mut disk)
+    }
+}
+
 impl<K, E> DirectoryBackedArray<K, E>
 where
     E: BackedEntryContainerNested,
@@ -229,15 +313,12 @@ mod tests {
         arr.append(values).unwrap();
         arr.append_memory(second_values).unwrap();
         BincodeCoder::default()
-            .encode(
-                &arr,
-                &mut File::create(directory.join("meta.data")).unwrap(),
-            )
+            .encode(&arr, &mut File::create(directory.join(META_FILE)).unwrap())
             .unwrap();
         drop(arr);
 
         let arr: StdDirBackedArray<String, BincodeCoder> = BincodeCoder::default()
-            .decode(&mut File::open(directory.join("meta.data")).unwrap())
+            .decode(&mut File::open(directory.join(META_FILE)).unwrap())
             .unwrap();
         assert_eq!(arr.get(10).unwrap().as_ref(), &"TEST STRING");
         assert_eq!(arr.get(150).unwrap().as_ref(), &"OTHER VALUE");
