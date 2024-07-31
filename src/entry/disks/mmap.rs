@@ -1,0 +1,605 @@
+use core::panic;
+use std::{
+    cmp::max,
+    fs::File,
+    io::{Cursor, ErrorKind, Write},
+    mem::transmute,
+    ops::Deref,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
+};
+
+use memmap2::{Advice, MmapOptions, RemapOptions};
+use serde::{Deserialize, Serialize};
+
+use crate::utils::BorrowExtender;
+
+use super::{ReadDisk, WriteDisk};
+
+// ---------- Internal types ---------- //
+
+#[derive(Debug)]
+pub enum SwitchingMmap {
+    ReadMmap(memmap2::Mmap),
+    WriteMmap(MmapWriter),
+}
+
+impl SwitchingMmap {
+    fn read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let mmap = unsafe {
+            MmapOptions::new().map(
+                #[allow(clippy::suspicious_open_options)]
+                &File::options()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open(path.as_ref())?,
+            )
+        }?;
+        let _ = mmap.advise(Advice::PopulateRead);
+
+        Ok(Self::ReadMmap(mmap))
+    }
+
+    fn write<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        Ok(Self::WriteMmap(MmapWriter::new(&path)?))
+    }
+}
+
+impl AsRef<[u8]> for SwitchingMmap {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::ReadMmap(x) => x.as_ref(),
+            Self::WriteMmap(x) => x.as_ref(),
+        }
+    }
+}
+
+impl Write for SwitchingMmap {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::ReadMmap(_) => Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Cannot write to ReadMmap",
+            )),
+            Self::WriteMmap(x) => x.write(buf),
+        }
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        match self {
+            Self::ReadMmap(_) => Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Cannot write to ReadMmap",
+            )),
+            Self::WriteMmap(x) => x.write_vectored(bufs),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::ReadMmap(_) => Ok(()),
+            Self::WriteMmap(x) => x.flush(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadMmapGuard(BorrowExtender<Arc<GuardedMmap>, RwLockReadGuard<'static, SwitchingMmap>>);
+
+impl AsRef<[u8]> for ReadMmapGuard {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl Deref for ReadMmapGuard {
+    type Target = SwitchingMmap;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct WriteMmapGuard(
+    BorrowExtender<Arc<GuardedMmap>, RwLockWriteGuard<'static, SwitchingMmap>>,
+);
+
+impl AsRef<[u8]> for WriteMmapGuard {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl Deref for WriteMmapGuard {
+    type Target = SwitchingMmap;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Write for WriteMmapGuard {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        self.0.write_vectored(bufs)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+/// Guards an inner mmap to match Rust mutability requirements.
+///
+/// Allows >= 1 outstanding mmap instances for immutable access via read locks,
+/// 1 outstanding mmap instance for mutable access via a write lock, or
+/// no outstanding accesses.
+///
+/// `access_lock` is claimed for the full duration of methods getting a read
+/// or write handle, so [`Self::get_read`] can transition from a read to write
+/// access without another thread potentially claiming a lock inbetween.
+#[derive(Debug)]
+struct GuardedMmap {
+    inner: RwLock<SwitchingMmap>,
+    access_lock: Mutex<()>,
+}
+
+impl GuardedMmap {
+    fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        Ok(Self {
+            inner: RwLock::new(SwitchingMmap::read(path)?),
+            access_lock: Mutex::new(()),
+        })
+    }
+
+    /// Fails when an outstanding write is held, or on lock panic.
+    fn get_read<P: AsRef<Path>>(this: Arc<Self>, path: P) -> std::io::Result<ReadMmapGuard> {
+        // Hold exclusive access for getting locks `self.inner` during the
+        // execution of this function.
+        let _access = this
+            .access_lock
+            .lock()
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("{:#?}", e)))?;
+
+        let gen_read_lock = |this: &Arc<Self>| {
+            BorrowExtender::try_new(this.clone(), |this| {
+                let this = this.as_ref();
+                let this = unsafe { transmute::<&GuardedMmap, &'static GuardedMmap>(this) };
+                this.inner.try_read().map_err(|e| match e {
+                    TryLockError::WouldBlock => {
+                        std::io::Error::new(ErrorKind::WouldBlock, "Read lock is unavailable.")
+                    }
+                    x => std::io::Error::new(ErrorKind::Other, format!("{:#?}", x)),
+                })
+            })
+        };
+
+        let read_lock = gen_read_lock(&this)?;
+
+        let is_write = matches!(**read_lock, SwitchingMmap::WriteMmap(_));
+
+        if is_write {
+            drop(read_lock);
+            let write_lock = this.inner.write();
+
+            match write_lock {
+                Ok(mut mmap) => {
+                    if let SwitchingMmap::WriteMmap(writer) = &mut *mmap {
+                        writer.flush()?
+                    } else {
+                        panic!("It should be impossible for another thread to hold and modify the RwLock.");
+                    };
+                    *mmap = SwitchingMmap::read(path.as_ref())?;
+
+                    drop(mmap);
+                    Ok(ReadMmapGuard(gen_read_lock(&this)?))
+                }
+                Err(e) => Err(std::io::Error::new(ErrorKind::Other, format!("{:#?}", e))),
+            }
+        } else {
+            Ok(ReadMmapGuard(read_lock))
+        }
+    }
+
+    /// Fails when an outstanding write is held, or on lock panic.
+    fn get_write<P: AsRef<Path>>(this: Arc<Self>, path: P) -> std::io::Result<WriteMmapGuard> {
+        // Hold exclusive access for getting locks `self.inner` during the
+        // execution of this function.
+        let _access = this
+            .access_lock
+            .lock()
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("{:#?}", e)))?;
+
+        let mut write_lock = BorrowExtender::try_new(this.clone(), |this| {
+            let this = this.as_ref();
+            let this = unsafe { transmute::<&GuardedMmap, &'static GuardedMmap>(this) };
+            this.inner.try_write().map_err(|e| match e {
+                TryLockError::WouldBlock => {
+                    std::io::Error::new(ErrorKind::WouldBlock, "Write lock is unavailable.")
+                }
+                x => std::io::Error::new(ErrorKind::Other, format!("{:#?}", x)),
+            })
+        })?;
+
+        let is_read = matches!(**write_lock, SwitchingMmap::ReadMmap(_));
+
+        if is_read {
+            **write_lock = SwitchingMmap::write(path)?;
+        }
+
+        Ok(WriteMmapGuard(write_lock))
+    }
+}
+
+// ---------- END Internal types ---------- //
+
+/// An mmaped file entry.
+///
+/// This is used to open a [`File`] on demand, but drop the handle when unused.
+/// Large collections of [`BackedEntry`](`super::super::BackedEntry`)s would otherwise risk overwhelming
+/// OS limts on the number of open file descriptors.
+#[derive(Debug)]
+pub struct Mmap {
+    /// File location.
+    path: PathBuf,
+    mmap: Arc<GuardedMmap>,
+}
+
+// ---------- Serde impls ---------- //
+
+impl Serialize for Mmap {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.path.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Mmap {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let path = PathBuf::deserialize(deserializer)?;
+        let mmap = GuardedMmap::new(&path)
+            .map_err(serde::de::Error::custom)?
+            .into();
+
+        Ok(Mmap { path, mmap })
+    }
+}
+
+// ---------- END Serde impls ---------- //
+
+impl From<PathBuf> for Mmap {
+    fn from(value: PathBuf) -> Self {
+        let mmap = GuardedMmap::new(&value)
+            .unwrap_or_else(|_| panic!("Path could not be opened through mmap: {:#?}", &value))
+            .into();
+        Self { path: value, mmap }
+    }
+}
+
+impl From<Mmap> for PathBuf {
+    fn from(val: Mmap) -> Self {
+        val.path
+    }
+}
+
+impl AsRef<Path> for Mmap {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Mmap {
+    pub fn new(path: PathBuf) -> Self {
+        path.into()
+    }
+}
+
+impl ReadDisk for Mmap {
+    type ReadDisk = Cursor<ReadMmapGuard>;
+
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        let mmap = unsafe { MmapOptions::new().map(&File::open(&self.path)?) }?;
+        let _ = mmap.advise(Advice::PopulateRead);
+
+        let mmap = GuardedMmap::get_read(self.mmap.clone(), &self.path)?;
+
+        Ok(Cursor::new(mmap))
+    }
+}
+
+#[derive(Debug)]
+/// Wraps a mutable mmap,
+pub struct MmapWriter {
+    file: File,
+    mmap: memmap2::MmapMut,
+    written_len: usize,
+    reserved_len: usize,
+}
+
+impl MmapWriter {
+    fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let file = File::options()
+            .write(true)
+            .read(true)
+            .create(true)
+            .truncate(false) // Don't get rid of existing length
+            .open(path)?;
+
+        let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
+        let _ = mmap.advise(Advice::Sequential);
+        let _ = mmap.advise(Advice::PopulateWrite);
+
+        let reserved_len = mmap.len();
+
+        Ok(MmapWriter {
+            file,
+            mmap,
+            written_len: 0,
+            reserved_len,
+        })
+    }
+
+    /// Extend the underlying file to fit `buf_len` new bytes.
+    fn reserve_for(&mut self, buf_len: usize) -> std::io::Result<()> {
+        // 8 KiB, matching capacity for `std::io::BufWriter` as of 1.8.0.
+        const MIN_RESERVE_LEN: usize = 8 * 1024;
+
+        let remaining_len = self.reserved_len - self.written_len;
+        if buf_len > remaining_len {
+            let extend_len = buf_len - remaining_len;
+
+            // Set a minimum reallocation step size to avoid thrashing.
+            self.reserved_len += max(extend_len, MIN_RESERVE_LEN);
+
+            self.file.set_len(self.reserved_len as u64)?;
+            unsafe {
+                self.mmap
+                    .remap(self.reserved_len, RemapOptions::new().may_move(true))
+            }?;
+        }
+        Ok(())
+    }
+
+    /// Write buffer into the mmap.
+    ///
+    /// [`Self::reserve_for`] MUST be called first, otherwise this may write
+    /// beyond the length of the file/mapping.
+    fn write_data(&mut self, buf: &[u8]) {
+        let new_len = self.written_len + buf.len();
+        self.mmap[self.written_len..new_len].copy_from_slice(buf);
+        self.written_len = new_len;
+    }
+
+    /// Shrink to the actually written size, discarding garbage at the end.
+    fn truncate(&mut self) -> std::io::Result<()> {
+        // Shrink to the actually written size, discarding garbage at the end.
+        if self.written_len < self.reserved_len {
+            self.file.set_len(self.written_len as u64)?;
+            self.reserved_len = self.written_len;
+            unsafe {
+                self.mmap
+                    .remap(self.written_len, RemapOptions::new().may_move(true))
+            }?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Write for MmapWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let buf_len = buf.len();
+
+        self.reserve_for(buf_len)?;
+        self.write_data(buf);
+
+        Ok(buf_len)
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        let bufs_len = bufs.iter().map(|buf| buf.len()).sum();
+
+        self.reserve_for(bufs_len)?;
+        for buf in bufs {
+            self.write_data(buf)
+        }
+
+        Ok(bufs_len)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.truncate()?;
+        self.mmap.flush()
+    }
+}
+
+impl Drop for MmapWriter {
+    fn drop(&mut self) {
+        self.truncate().unwrap_or_else(|x| {
+            panic!(
+                "{} {}\n Error: {:#?}",
+                "Failed to truncate on drop, call `self.flush` first to avoid",
+                "using this panicking drop implementation.",
+                x
+            )
+        })
+    }
+}
+
+impl AsRef<[u8]> for MmapWriter {
+    fn as_ref(&self) -> &[u8] {
+        &self.mmap[0..self.written_len]
+    }
+}
+
+impl AsMut<[u8]> for MmapWriter {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.mmap[0..self.written_len]
+    }
+}
+
+impl WriteDisk for Mmap {
+    type WriteDisk = WriteMmapGuard;
+
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        GuardedMmap::get_write(self.mmap.clone(), &self.path)
+    }
+}
+
+#[cfg(test)]
+#[cfg(not(miri))] // Miri does not support file-backed memory mappings
+mod tests {
+    use std::{
+        env::temp_dir,
+        fs::remove_file,
+        io::{IoSlice, Read},
+    };
+
+    use uuid::Uuid;
+
+    use super::*;
+
+    const SEQUENCE: &[u8] = &[32, 74, 91, 3, 8, 90];
+
+    #[test]
+    fn read_empty() {
+        let temp_file = temp_dir().join(Uuid::new_v4().to_string());
+        let _ = remove_file(&temp_file);
+        File::create(&temp_file).unwrap();
+
+        let mut read_data = Vec::new();
+        Mmap::new(temp_file.clone())
+            .read_disk()
+            .unwrap()
+            .read_to_end(&mut read_data)
+            .unwrap();
+        assert_eq!(read_data, &[0; 0]);
+
+        let _ = remove_file(temp_file);
+    }
+
+    #[test]
+    fn read_extern_write() {
+        let temp_file = temp_dir().join(Uuid::new_v4().to_string());
+        let _ = remove_file(&temp_file);
+        let mut file_mut = File::create(&temp_file).unwrap();
+        file_mut.write_all(SEQUENCE).unwrap();
+        file_mut.flush().unwrap();
+
+        let mut read_data = Vec::new();
+        Mmap::new(temp_file.clone())
+            .read_disk()
+            .unwrap()
+            .read_to_end(&mut read_data)
+            .unwrap();
+        assert_eq!(read_data, SEQUENCE);
+
+        let _ = remove_file(temp_file);
+    }
+
+    #[test]
+    fn write_extern_read() {
+        let temp_file = temp_dir().join(Uuid::new_v4().to_string());
+        let _ = remove_file(&temp_file);
+
+        assert_eq!(
+            Mmap::new(temp_file.clone())
+                .write_disk()
+                .unwrap()
+                .write(SEQUENCE)
+                .unwrap(),
+            SEQUENCE.len()
+        );
+
+        let mut read_data = Vec::new();
+        let mut file = File::open(&temp_file).unwrap();
+        file.read_to_end(&mut read_data).unwrap();
+        assert_eq!(read_data, SEQUENCE);
+
+        let _ = remove_file(temp_file);
+    }
+
+    #[test]
+    fn write_and_read_interleave() {
+        let temp_file = temp_dir().join(Uuid::new_v4().to_string());
+        let _ = remove_file(&temp_file);
+
+        let mmap = Mmap::new(temp_file.clone());
+
+        let mut write_disk = mmap.write_disk().unwrap();
+        assert_eq!(
+            write_disk
+                .write_vectored(&[IoSlice::new(SEQUENCE); 8])
+                .unwrap(),
+            SEQUENCE.len() * 8
+        );
+        write_disk.flush().unwrap();
+
+        // Should see all eight copies, no more and no less.
+        assert_eq!(write_disk.as_ref(), ([SEQUENCE; 8].concat()));
+
+        assert_eq!(write_disk.write(SEQUENCE).unwrap(), SEQUENCE.len());
+        write_disk.flush().unwrap();
+
+        drop(write_disk);
+
+        // Should see an extra copy.
+        let mut read_data = Vec::new();
+        mmap.read_disk()
+            .unwrap()
+            .read_to_end(&mut read_data)
+            .unwrap();
+        assert_eq!(read_data.len(), SEQUENCE.len() * 9);
+        assert_eq!(read_data, [SEQUENCE; 9].concat());
+
+        let _ = remove_file(temp_file);
+    }
+
+    #[test]
+    fn write_flush_truncation() {
+        const GARBAGE_LEN: usize = SEQUENCE.len() * 10;
+
+        let temp_file = temp_dir().join(Uuid::new_v4().to_string());
+        let _ = remove_file(&temp_file);
+        let mut file_mut = File::create(&temp_file).unwrap();
+        file_mut.set_len(GARBAGE_LEN as u64).unwrap();
+        file_mut.flush().unwrap();
+
+        let mmap = Mmap::new(temp_file.clone());
+
+        let read_check = |expected| {
+            let mut read_data = Vec::new();
+            mmap.read_disk()
+                .unwrap()
+                .read_to_end(&mut read_data)
+                .unwrap();
+            assert_eq!(read_data.len(), expected);
+        };
+
+        let mut write_disk = mmap.write_disk().unwrap();
+        assert_eq!(write_disk.write(SEQUENCE).unwrap(), SEQUENCE.len());
+
+        // Should see the extra garbage prior to flush.
+        {
+            let mut read_data = Vec::new();
+            File::open(&temp_file)
+                .unwrap()
+                .read_to_end(&mut read_data)
+                .unwrap();
+            assert_eq!(read_data.len(), GARBAGE_LEN);
+        }
+
+        drop(write_disk);
+
+        // Should see an only the actual data after flush.
+        read_check(SEQUENCE.len());
+
+        let _ = remove_file(temp_file);
+    }
+}

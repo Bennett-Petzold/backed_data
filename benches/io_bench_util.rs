@@ -268,6 +268,7 @@ where
 #[macro_export]
 macro_rules! create_fn {
     (async parallel $fn_name: ident, $output_type: ty, $($extra_generics: tt)*) => {
+        #[allow(clippy::type_complexity)]
         async fn $fn_name<$($extra_generics)* P: AsRef<Path> + Clone + Send + Sync + 'static>(
             path: P,
             data: &[String]
@@ -276,6 +277,7 @@ macro_rules! create_fn {
         }
     };
     (async concurrent $fn_name: ident, $output_type: ty, $($extra_generics: tt)*) => {
+        #[allow(clippy::type_complexity)]
         async fn $fn_name<$($extra_generics)* P: AsRef<Path> + Clone>(
             path: P,
             data: &[String]
@@ -284,6 +286,7 @@ macro_rules! create_fn {
         }
     };
     (async $fn_name: ident, $output_type: ty, $($extra_generics: tt)*) => {
+        #[allow(clippy::type_complexity)]
         async fn $fn_name<$($extra_generics)* P: AsRef<Path>>(
             path: P,
             data: &[String]
@@ -292,6 +295,7 @@ macro_rules! create_fn {
         }
     };
     (parallel $fn_name: ident, $output_type: ty, $( $extra_generics: tt )*) => {
+        #[allow(clippy::type_complexity)]
         fn $fn_name<$($extra_generics)* P: AsRef<Path> + Send + 'static>(
             path: P,
             data: &'static [String]
@@ -300,6 +304,7 @@ macro_rules! create_fn {
         }
     };
     ($fn_name: ident, $output_type: ty, $( $extra_generics: tt )*) => {
+        #[allow(clippy::type_complexity)]
         fn $fn_name<$($extra_generics)* P: AsRef<Path>>(
             path: P,
             data: &[String]
@@ -400,6 +405,7 @@ where
 #[macro_export]
 macro_rules! read_dir {
     (async parallel $fn_name: ident, $( $type: tt )+) => {
+        #[allow(clippy::type_complexity)]
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::{
                 array::BackedArray,
@@ -420,6 +426,7 @@ macro_rules! read_dir {
         }
     };
     (async concurrent $fn_name: ident, $( $type: tt )+) => {
+        #[allow(clippy::type_complexity)]
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::{
                 entry::formats::AsyncBincodeCoder,
@@ -433,6 +440,7 @@ macro_rules! read_dir {
         }
     };
     (async $fn_name: ident, $( $type: tt )+) => {
+        #[allow(clippy::type_complexity)]
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::{
                 entry::formats::AsyncBincodeCoder,
@@ -445,6 +453,7 @@ macro_rules! read_dir {
         }
     };
     (generic $fn_name: ident, $( $type: tt )+) => {
+        #[allow(clippy::type_complexity)]
         fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::directory::DirectoryBackedArray;
 
@@ -453,6 +462,7 @@ macro_rules! read_dir {
         }
     };
     ($fn_name: ident, $( $type: tt )+) => {
+        #[allow(clippy::type_complexity)]
         fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::directory::DirectoryBackedArray;
 
