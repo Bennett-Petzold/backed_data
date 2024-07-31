@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+#[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
 use lazy_static::lazy_static;
 
 #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
