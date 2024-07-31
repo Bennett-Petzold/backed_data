@@ -3,7 +3,7 @@ use std::{ops::Range, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    array::sync_impl::BackedArray,
+    array::BackedArray,
     entry::{
         disks::{Plainfile, ZstdDisk},
         BackedEntryArr,

@@ -15,9 +15,7 @@ use crate::{
 
 use super::{
     container::{BackedEntryContainer, Container, ResizingContainer},
-    internal_idx, multiple_internal_idx_strict,
-    sync_impl::BackedArray,
-    BackedArrayError,
+    internal_idx, multiple_internal_idx_strict, BackedArray, BackedArrayError,
 };
 
 /// A [`BackedEntryContainer`] inside a [`Container`].

@@ -56,10 +56,10 @@ jobs:
     - uses: taiki-e/install-action@cargo-llvm-cov
 
     - name: Regular Tests
-      run: cargo llvm-cov test --no-report --all-targets --features all_formats,all_disks,directory,async,test
+      run: cargo llvm-cov test --no-report --all-targets --all-features
 
     - name: Doc Tests
-      run: cargo llvm-cov test --no-report --doc --features all_formats,all_disks,directory,async,test
+      run: cargo llvm-cov test --no-report --doc --all-features
 
     - name: Coverage Report
       run: cargo llvm-cov report --doctests --html

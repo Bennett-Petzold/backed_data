@@ -15,7 +15,7 @@ use crate::{
             BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
             BackedEntryContainerNestedWrite, ResizingContainer,
         },
-        sync_impl::BackedArray,
+        BackedArray,
     },
     entry::{
         disks::{ReadDisk, WriteDisk},

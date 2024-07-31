@@ -20,5 +20,4 @@ jobs:
       - name: Test with Miri
         run: |
           MIRIFLAGS="-Zmiri-disable-isolation" \
-            cargo miri test --features \
-            all_formats,all_disks,directory,async,test
+            cargo miri test --all-features
