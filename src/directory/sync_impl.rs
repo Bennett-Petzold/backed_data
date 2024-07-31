@@ -165,7 +165,7 @@ impl<T> DirectoryBackedArray<T> {
     /// Updates the root of the directory backed array.
     ///
     /// Does not move any files or directories, just changes pointers.
-    pub fn update_root(&mut self, new_root: PathBuf) -> &Self {
+    pub fn update_root(&mut self, new_root: PathBuf) -> &mut Self {
         self.array.get_disks_mut().iter_mut().for_each(|disk| {
             disk.path = new_root.join(disk.path.file_name().unwrap());
         });
@@ -174,7 +174,7 @@ impl<T> DirectoryBackedArray<T> {
     }
 
     /// Moves the directory to a new location wholesale.
-    pub fn move_root(&mut self, new_root: PathBuf) -> std::io::Result<&Self> {
+    pub fn move_root(&mut self, new_root: PathBuf) -> std::io::Result<&mut Self> {
         if rename(self.directory_root.clone(), new_root.clone()).is_err() {
             create_dir_all(new_root.clone())?;
             self.array
