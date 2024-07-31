@@ -4,7 +4,6 @@
 /// privately. Use `--document-private-items` when building docs to see it.
 use std::{
     cell::{OnceCell, UnsafeCell},
-    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::{Mutex, MutexGuard, OnceLock},
 };

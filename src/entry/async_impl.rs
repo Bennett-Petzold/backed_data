@@ -1,17 +1,13 @@
 use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-    marker::PhantomData,
     ops::{Deref, DerefMut},
-    path::PathBuf,
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 use itertools::Either;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, sync::OnceCell};
 
-use crate::utils::{Once, ToMut};
+use crate::utils::Once;
 
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},

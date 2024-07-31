@@ -127,13 +127,13 @@ mod simd_json_formats {
             &self,
             source: &mut Source,
         ) -> Result<T, Self::Error> {
-            simd_json::from_reader(source).map_err(|e| e.into())
+            simd_json::from_reader(source)
         }
     }
     impl<Target: Write> Encoder<Target> for SimdJsonCoder {
         type Error = simd_json::Error;
         fn encode<T: Serialize>(&self, data: &T, target: &mut Target) -> Result<(), Self::Error> {
-            simd_json::to_writer_pretty(target, data).map_err(|e| e.into())
+            simd_json::to_writer_pretty(target, data)
         }
     }
 }

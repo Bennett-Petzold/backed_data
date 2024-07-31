@@ -1,31 +1,16 @@
-use std::{
-    cell::{OnceCell, UnsafeCell},
-    fmt::Debug,
-    io::{Read, Write},
-    iter::FusedIterator,
-    marker::PhantomData,
-    ops::Range,
-    rc::Rc,
-    sync::{Mutex, MutexGuard},
-};
+use std::{fmt::Debug, iter::FusedIterator, ops::Range};
 
-use bincode::{deserialize_from, serialize_into};
 use derive_getters::Getters;
-use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    entry::{
-        disks::{ReadDisk, WriteDisk},
-        formats::{Decoder, Encoder},
-        sync_impl::{BackedEntryMut, BackedEntryWrite},
-        BackedEntry, BackedEntryArr,
-    },
-    utils::{AsRefMut, BorrowExtender, Once, ToMut, ToRef},
+    entry::{sync_impl::BackedEntryMut, BackedEntry, BackedEntryArr},
+    utils::BorrowExtender,
 };
 
 use super::{
     internal_idx, multiple_internal_idx, multiple_internal_idx_strict, open_mut, open_ref,
-    ArrayLoc, BackedArrayEntry, BackedArrayError, BackedEntryContainer, BackedEntryContainerNested,
+    BackedArrayError, BackedEntryContainer, BackedEntryContainerNested,
     BackedEntryContainerNestedAll, BackedEntryContainerNestedRead, BackedEntryContainerNestedWrite,
     Container, ResizingContainer,
 };
@@ -382,36 +367,6 @@ impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArra
 
 // ---------- Iterator Returns ---------- //
 
-/// Returns the next valid location, if any.
-///
-/// Result::Err on a load violation, None when past all entries.
-fn step_loc<E: BackedEntryContainerNestedRead>(
-    entries: &E,
-    mut loc: ArrayLoc, // position inside entries
-    step_size: usize,
-) -> Result<Option<ArrayLoc>, E::ReadError> {
-    if let Some(entry) = entries.c_get(loc.entry_idx) {
-        let entry = open_ref!(entry);
-        let entry_len = entry.load()?.c_len();
-        if loc.inside_entry_idx + step_size < entry_len {
-            // Can advance inside entry
-            loc.inside_entry_idx += step_size;
-            Ok(Some(loc))
-        } else {
-            // Try going to next entry. Further calls will continue until
-            // inside_entry_idx is reduced to < entry_len, or all entries
-            // are passed.
-            loc.entry_idx += 1;
-            loc.inside_entry_idx -= entry_len - step_size;
-
-            step_loc(entries, loc, 0)
-        }
-    } else {
-        // Went beyond last entry
-        Ok(None)
-    }
-}
-
 /// Iterates over a backed array, returning each item in order.
 ///
 /// To keep an accurate size count, failed reads will not be retried.
@@ -519,7 +474,7 @@ impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArra
 #[cfg(test)]
 #[cfg(feature = "bincode")]
 mod tests {
-    use std::io::Cursor;
+    use std::{io::Cursor, sync::Mutex};
 
     use itertools::Itertools;
 

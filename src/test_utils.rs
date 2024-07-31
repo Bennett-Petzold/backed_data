@@ -1,6 +1,5 @@
 use core::panic;
 use std::{
-    cell::UnsafeCell,
     io::{Cursor, Seek},
     ops::{Deref, DerefMut},
     sync::Mutex,
@@ -136,13 +135,13 @@ impl Deref for CursorVec<'_> {
     type Target = Cursor<Vec<u8>>;
     fn deref(&self) -> &Self::Target {
         let this: *const _ = self.inner.lock().unwrap().deref();
-        unsafe { &*this }
+        unsafe { *this }
     }
 }
 
 impl DerefMut for CursorVec<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let this: *mut _ = self.inner.lock().unwrap().deref_mut();
-        unsafe { &mut *this }
+        unsafe { *this }
     }
 }

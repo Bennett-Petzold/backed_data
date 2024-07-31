@@ -1,26 +1,21 @@
-use std::{
-    env::temp_dir,
-    fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
-    io::{Seek, Write},
-    iter::repeat,
-    path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
-    time::Duration,
-};
+use std::time::Duration;
 
-use backed_array::{
+/*
+use backed_data::{
     directory::sync_impl::DirectoryBackedArray, meta::sync_impl::BackedArrayWrapper,
     zstd::sync_impl::ZstdDirBackedArray,
 };
 use chrono::Local;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+*/
+use criterion::{criterion_group, criterion_main, Criterion};
+/*
 use fs_extra::dir::get_size;
 use humansize::{format_size, BINARY};
 use tokio::runtime;
 
 #[cfg(feature = "async")]
 use {
-    backed_array::{
+    backed_data::{
         directory::async_impl::DirectoryBackedArray as AsyncDirBacked,
         meta::async_impl::BackedArrayWrapper as AsyncWrapper,
     },
@@ -155,7 +150,9 @@ async fn create_zstdfiles_async_parallel(
     combined
 }
 
+*/
 fn file_creation_bench(c: &mut Criterion) {
+    /*
     let data = complete_works();
 
     let path = temp_dir().join("file_creation_bench");
@@ -291,7 +288,9 @@ fn file_creation_bench(c: &mut Criterion) {
     }
 
     remove_dir_all(path.clone()).unwrap();
+    */
 }
+/*
 
 fn read_plainfiles(f: &mut File) -> usize {
     f.rewind().unwrap();
@@ -338,7 +337,9 @@ async fn read_zstdfiles_async(path: PathBuf) -> usize {
     collect.len()
 }
 
+*/
 fn file_load_bench(c: &mut Criterion) {
+    /*
     let data = complete_works();
 
     let path = temp_dir().join("file_load_bench");
@@ -441,188 +442,191 @@ fn file_load_bench(c: &mut Criterion) {
     }
 
     remove_dir_all(path.clone()).unwrap();
+    */
 }
 
 #[cfg(feature = "zstd")]
 fn zstd_setting_benches(c: &mut Criterion) {
-    #[cfg(any(feature = "zstdmt", feature = "zstdmt-async"))]
-    use backed_array::zstd::set_zstd_multithread;
-
-    use criterion::BenchmarkId;
-
-    let data = complete_works();
-
-    let path = temp_dir().join("file_creation_bench");
-
-    #[cfg(feature = "async-zstd")]
-    let rt = runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
-    let mut group = c.benchmark_group("zstd_setting_benches");
-    for zstd_level in 0..22 {
+    /*
         #[cfg(any(feature = "zstdmt", feature = "zstdmt-async"))]
-        set_zstd_multithread(0);
+        use backed_array::zstd::set_zstd_multithread;
 
-        let _ = create_dir(path.clone());
+        use criterion::BenchmarkId;
 
-        group.bench_with_input(
-            BenchmarkId::new("zstd_write", format!("Compression Level: {zstd_level}")),
-            &zstd_level,
-            |b, zstd_level| {
-                let _ = remove_dir_all(path.clone());
-                create_dir(path.clone()).unwrap();
-                b.iter(|| {
-                    create_zstdfiles(black_box(path.clone()), black_box(data), Some(*zstd_level))
-                })
-            },
-        );
+        let data = complete_works();
 
-        sync_all_dir(path.clone());
-        println!(
-            "Zstdfiles size with compression {}: {}",
-            zstd_level,
-            format_size(get_size(path.clone()).unwrap(), BINARY)
-        );
-        writeln!(
-            logfile().lock().unwrap(),
-            "Zstdfiles size with compression {}: {}",
-            zstd_level,
-            format_size(get_size(path.clone()).unwrap(), BINARY)
-        )
-        .unwrap();
-
-        let mut file = File::options()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(true)
-            .open(path.join("CONFIG"))
-            .unwrap();
-        create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
-            .save_to_disk(file.try_clone().unwrap())
-            .unwrap();
-        group.bench_with_input(
-            BenchmarkId::new("zstd_read", format!("Compression Level: {zstd_level}")),
-            &(),
-            |b, _| b.iter(|| black_box(read_zstdfiles(&mut file))),
-        );
+        let path = temp_dir().join("file_creation_bench");
 
         #[cfg(feature = "async-zstd")]
-        {
+        let rt = runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let mut group = c.benchmark_group("zstd_setting_benches");
+        for zstd_level in 0..22 {
+            #[cfg(any(feature = "zstdmt", feature = "zstdmt-async"))]
+            set_zstd_multithread(0);
+
+            let _ = create_dir(path.clone());
+
             group.bench_with_input(
-                BenchmarkId::new(
-                    "zstd_write_async",
-                    format!("Compression Level: {zstd_level}"),
-                ),
+                BenchmarkId::new("zstd_write", format!("Compression Level: {zstd_level}")),
                 &zstd_level,
                 |b, zstd_level| {
                     let _ = remove_dir_all(path.clone());
                     create_dir(path.clone()).unwrap();
-                    b.to_async(&rt).iter(|| {
-                        create_zstdfiles_async(
-                            black_box(path.clone()),
-                            black_box(data),
-                            Some(*zstd_level),
-                        )
+                    b.iter(|| {
+                        create_zstdfiles(black_box(path.clone()), black_box(data), Some(*zstd_level))
                     })
                 },
             );
 
             sync_all_dir(path.clone());
             println!(
-                "Zstdfiles async size with compression {}: {}",
+                "Zstdfiles size with compression {}: {}",
                 zstd_level,
                 format_size(get_size(path.clone()).unwrap(), BINARY)
             );
             writeln!(
                 logfile().lock().unwrap(),
-                "Zstdfiles async size with compression {}: {}",
+                "Zstdfiles size with compression {}: {}",
                 zstd_level,
                 format_size(get_size(path.clone()).unwrap(), BINARY)
             )
             .unwrap();
 
-            let _ = remove_dir_all(path.clone());
-            create_dir(path.clone()).unwrap();
-
-            rt.block_on(async {
-                let mut file = AsyncFile::options()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(path.join("CONFIG"))
-                    .await
-                    .unwrap();
-                let mut arr = create_zstdfiles_async(path.clone(), data, None).await;
-                arr.save_to_disk(&mut file).await.unwrap();
-            });
-            sync_all_dir(path.clone());
-
+            let mut file = File::options()
+                .create(true)
+                .read(true)
+                .write(true)
+                .truncate(true)
+                .open(path.join("CONFIG"))
+                .unwrap();
+            create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
+                .save_to_disk(file.try_clone().unwrap())
+                .unwrap();
             group.bench_with_input(
-                BenchmarkId::new(
-                    "zstd_read_async",
-                    format!("Compression Level: {zstd_level}"),
-                ),
+                BenchmarkId::new("zstd_read", format!("Compression Level: {zstd_level}")),
                 &(),
-                |b, _| {
-                    b.to_async(&rt)
-                        .iter(|| black_box(read_zstdfiles_async(black_box(path.join("CONFIG")))))
-                },
+                |b, _| b.iter(|| black_box(read_zstdfiles(&mut file))),
             );
+
+            #[cfg(feature = "async-zstd")]
+            {
+                group.bench_with_input(
+                    BenchmarkId::new(
+                        "zstd_write_async",
+                        format!("Compression Level: {zstd_level}"),
+                    ),
+                    &zstd_level,
+                    |b, zstd_level| {
+                        let _ = remove_dir_all(path.clone());
+                        create_dir(path.clone()).unwrap();
+                        b.to_async(&rt).iter(|| {
+                            create_zstdfiles_async(
+                                black_box(path.clone()),
+                                black_box(data),
+                                Some(*zstd_level),
+                            )
+                        })
+                    },
+                );
+
+                sync_all_dir(path.clone());
+                println!(
+                    "Zstdfiles async size with compression {}: {}",
+                    zstd_level,
+                    format_size(get_size(path.clone()).unwrap(), BINARY)
+                );
+                writeln!(
+                    logfile().lock().unwrap(),
+                    "Zstdfiles async size with compression {}: {}",
+                    zstd_level,
+                    format_size(get_size(path.clone()).unwrap(), BINARY)
+                )
+                .unwrap();
+
+                let _ = remove_dir_all(path.clone());
+                create_dir(path.clone()).unwrap();
+
+                rt.block_on(async {
+                    let mut file = AsyncFile::options()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(path.join("CONFIG"))
+                        .await
+                        .unwrap();
+                    let mut arr = create_zstdfiles_async(path.clone(), data, None).await;
+                    arr.save_to_disk(&mut file).await.unwrap();
+                });
+                sync_all_dir(path.clone());
+
+                group.bench_with_input(
+                    BenchmarkId::new(
+                        "zstd_read_async",
+                        format!("Compression Level: {zstd_level}"),
+                    ),
+                    &(),
+                    |b, _| {
+                        b.to_async(&rt)
+                            .iter(|| black_box(read_zstdfiles_async(black_box(path.join("CONFIG")))))
+                    },
+                );
+            }
+
+            #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
+            for t_count in 0..5 {
+                set_zstd_multithread(t_count);
+                #[cfg(feature = "zstdmt")]
+                group.bench_with_input(
+                    BenchmarkId::new(
+                        "zstd_write_mt",
+                        format!("Compression Level: {zstd_level}, Thread Count: {t_count}"),
+                    ),
+                    &zstd_level,
+                    |b, zstd_level| {
+                        let _ = remove_dir_all(path.clone());
+                        create_dir(path.clone()).unwrap();
+                        b.iter(|| {
+                            create_zstdfiles(
+                                black_box(path.clone()),
+                                black_box(data),
+                                Some(*zstd_level),
+                            )
+                        })
+                    },
+                );
+
+                #[cfg(feature = "async-zstdmt")]
+                group.bench_with_input(
+                    BenchmarkId::new(
+                        "zstd_write_async_mt",
+                        format!("Compression Level: {zstd_level}, Thread Count: {t_count}"),
+                    ),
+                    &zstd_level,
+                    |b, zstd_level| {
+                        let _ = remove_dir_all(path.clone());
+                        create_dir(path.clone()).unwrap();
+                        b.to_async(&rt).iter(|| {
+                            create_zstdfiles_async(
+                                black_box(path.clone()),
+                                black_box(data),
+                                Some(*zstd_level),
+                            )
+                        })
+                    },
+                );
+            }
         }
+        group.finish();
 
-        #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
-        for t_count in 0..5 {
-            set_zstd_multithread(t_count);
-            #[cfg(feature = "zstdmt")]
-            group.bench_with_input(
-                BenchmarkId::new(
-                    "zstd_write_mt",
-                    format!("Compression Level: {zstd_level}, Thread Count: {t_count}"),
-                ),
-                &zstd_level,
-                |b, zstd_level| {
-                    let _ = remove_dir_all(path.clone());
-                    create_dir(path.clone()).unwrap();
-                    b.iter(|| {
-                        create_zstdfiles(
-                            black_box(path.clone()),
-                            black_box(data),
-                            Some(*zstd_level),
-                        )
-                    })
-                },
-            );
+        #[cfg(feature = "async-zstd")]
+        rt.shutdown_background();
 
-            #[cfg(feature = "async-zstdmt")]
-            group.bench_with_input(
-                BenchmarkId::new(
-                    "zstd_write_async_mt",
-                    format!("Compression Level: {zstd_level}, Thread Count: {t_count}"),
-                ),
-                &zstd_level,
-                |b, zstd_level| {
-                    let _ = remove_dir_all(path.clone());
-                    create_dir(path.clone()).unwrap();
-                    b.to_async(&rt).iter(|| {
-                        create_zstdfiles_async(
-                            black_box(path.clone()),
-                            black_box(data),
-                            Some(*zstd_level),
-                        )
-                    })
-                },
-            );
-        }
-    }
-    group.finish();
-
-    #[cfg(feature = "async-zstd")]
-    rt.shutdown_background();
-
-    remove_dir_all(path.clone()).unwrap();
+        remove_dir_all(path.clone()).unwrap();
+    */
 }
 
 criterion_group! {
