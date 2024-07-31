@@ -21,7 +21,9 @@ default = ["bincode", "directory", "zstd"]
 array = ["dep:stable_deref_trait"]
 unsafe_array = ["array"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
-async = ["dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-scoped"]
+async = ["dep:futures", "dep:async-scoped", "dep:cfg-if"]
+tokio = ["async", "dep:tokio", "dep:tokio-util"]
+smol = ["async", "dep:smol"]
 
 # START FORMATS
 all_formats = ["bincode", "serde_json", "simd_json", "csv", "async_bincode", "async_csv"]
@@ -41,7 +43,7 @@ all_disks = ["mmap", "zstd", "async_zstd", "encrypted"]
 
 encrypted = ["dep:secrets", "dep:aes-gcm", "dep:stable_deref_trait"]
 mmap = ["dep:mmap"]
-network = ["dep:reqwest", "dep:bytes"]
+network = ["dep:reqwest", "dep:bytes", "dep:http-serde"]
 
 # zstd features
 zstd = ["array", "dep:zstd", "dep:num-traits"]
@@ -81,10 +83,13 @@ bytes = { version = "*", optional = true } # Synced with reqwest
 
 # Async dependencies
 async-compression = { version = "0.4.8", optional = true, features = ["futures-io"] }
-tokio = { version = "1.37.0", optional = true, features = ["rt", "io-util", "fs"] }
-tokio-util = { version = "0.7.10", optional = true, features = ["io", "io-util"] }
 futures =  { version = "0.3.30", optional = true }
 async-scoped = { version = "0.9.0", optional = true, features = ["use-tokio"] }
+
+# Async executors
+tokio = { version = "1.37.0", optional = true, features = ["rt", "io-util", "fs"] }
+tokio-util = { version = "0.7.10", optional = true, features = ["io", "io-util"] }
+smol = { version = "2.0.0", optional = true }
 
 # Async format dependencies
 async-bincode = { version = "0.7.2", optional = true, default-features = false, features = ["futures"] }
@@ -92,7 +97,11 @@ csv-async = { version = "1.3.0", optional = true, features = ["with_serde"] }
 
 # Directory dependencies
 uuid = { version = "1.8.0", features = ["v4"], optional = true }
-http-serde = "2.1.1"
+http-serde = { version = "2.1.1", optional = true }
+cfg-if = { version = "1.0.0", optional = true }
+
+[build-dependencies]
+cfg_aliases = "0.2.1" # Reducing cfg boilerplate
 
 [dev-dependencies]
 # Multithread test runtime
@@ -107,8 +116,7 @@ itertools = "0.13.0"
 humansize = "2.1.3"
 chrono = "0.4.37"
 seq-macro = "0.3.5"
-zip = "2.1.5"
-smol = "2.0.0"
+async_zip = "0.0.17"
 
 [[bench]]
 name = "io_bench"
