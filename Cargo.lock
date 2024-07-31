@@ -41,6 +41,7 @@ dependencies = [
  "futures-core",
  "memchr",
  "pin-project-lite",
+ "tokio",
  "zstd",
  "zstd-safe",
 ]
