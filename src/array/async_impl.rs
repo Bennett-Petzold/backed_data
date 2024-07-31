@@ -237,7 +237,7 @@ impl<
     /// rt.block_on(array.a_append(values.0, file_0.into(), AsyncBincodeCoder {}));
     /// rt.block_on(array.a_append(values.1, file_1.into(), AsyncBincodeCoder {}));
     ///
-    /// assert_eq!(rt.block_on(array.a_get(4)).unwrap().as_ref(), &3);
+    /// assert_eq!(*rt.block_on(array.a_get(4)).unwrap(), 3);
     /// remove_dir_all(FILENAME_BASE).unwrap();
     /// }
     /// ```
@@ -293,7 +293,7 @@ impl<
     ///     // Overwrite file, making disk pointer for first array invalid
     ///     rt.block_on(array.a_append_memory(values.1, FILENAME.clone().into(), AsyncBincodeCoder {}));
     ///
-    ///     assert_eq!(rt.block_on(array.a_get(0)).unwrap().as_ref(), &0);
+    ///     assert_eq!(*rt.block_on(array.a_get(0)).unwrap(), 0);
     ///     remove_file(FILENAME).unwrap();
     /// }
     /// ```
