@@ -5,7 +5,6 @@ use std::{
     path::PathBuf,
 };
 
-use bincode::{deserialize_from, serialize_into};
 use derive_getters::Getters;
 use serde::{
     de::{DeserializeOwned, Error},
@@ -235,21 +234,6 @@ impl<'a, T> Deref for ZstdDirBackedArray<'a, T> {
 impl<T> DerefMut for ZstdDirBackedArray<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.array
-    }
-}
-
-impl<T: Serialize> ZstdDirBackedArray<'_, T> {
-    /// Wraps [`BackedArray::save_to_disk`] to include its own metadata
-    pub fn save_to_disk<W: Write>(&mut self, writer: W) -> bincode::Result<()> {
-        self.array.clear_memory();
-        serialize_into(writer, self)
-    }
-}
-
-impl<T: DeserializeOwned> ZstdDirBackedArray<'_, T> {
-    /// Wraps [`BackedArray::load`] to include its own metadata
-    pub fn load<W: Read>(writer: W) -> bincode::Result<Self> {
-        deserialize_from(writer)
     }
 }
 
