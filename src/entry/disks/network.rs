@@ -1,5 +1,6 @@
 use std::{
     cell::UnsafeCell,
+    cmp::min,
     future::Future,
     pin::Pin,
     sync::{Mutex, OnceLock},
@@ -8,10 +9,10 @@ use std::{
 };
 
 use bytes::Bytes;
+use futures::io::AsyncRead;
 use reqwest::{header::HeaderMap, Client, Method, Request, Response, Url, Version};
 use secrets::traits::AsContiguousBytes;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, ReadBuf};
 
 #[cfg(feature = "async")]
 use super::AsyncReadDisk;
@@ -128,26 +129,27 @@ impl AsyncRead for ReqwestRead {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
         // Check for leftovers and fill those in first.
         {
             let self_mut = self.as_mut().get_mut();
             let leftover_slice = Pin::new(&mut self_mut.leftover_slice);
             if let Some(leftover_slice) = leftover_slice.get_mut() {
-                let remaining = buf.remaining();
+                let buf_len = buf.len();
+                let num_bytes = min(leftover_slice.len(), buf_len);
 
-                if leftover_slice.len() > remaining {
+                if leftover_slice.len() > buf_len {
                     // Write partial and advance
-                    buf.put_slice(&leftover_slice[..remaining]);
-                    self_mut.leftover_slice = Some(leftover_slice[remaining..].to_vec());
+                    buf.copy_from_slice(&leftover_slice[..buf_len]);
+                    self_mut.leftover_slice = Some(leftover_slice[buf_len..].to_vec());
                 } else {
                     // Write full and clear
-                    buf.put_slice(leftover_slice);
+                    buf[..leftover_slice.len()].copy_from_slice(leftover_slice);
                     self_mut.leftover_slice = None;
                 };
 
-                return Poll::Ready(Ok(()));
+                return Poll::Ready(Ok(num_bytes));
             }
         }
 
@@ -160,7 +162,7 @@ impl AsyncRead for ReqwestRead {
         match chunk_res {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(x)) => Poll::Ready(Err(reqwest_err_to_io(x))),
-            Poll::Ready(Ok(None)) => Poll::Ready(Ok(())),
+            Poll::Ready(Ok(None)) => Poll::Ready(Ok(0)),
             Poll::Ready(Ok(Some(x))) => {
                 // Just a little laundry to grab out the next future.
                 let this: *mut _ = self.as_mut().get_mut();
@@ -171,18 +173,21 @@ impl AsyncRead for ReqwestRead {
                 let chunk = Pin::new(&mut self_mut.chunk);
                 *chunk.get_mut() = new_chunk;
 
-                // Write in current chunk data.
+                // Get current chunk metadata
                 let x = x.as_bytes();
-                let remaining = buf.remaining();
-                if x.len() > remaining {
+                let buf_len = buf.len();
+                let num_bytes = min(x.len(), buf_len);
+
+                // Write in current chunk data.
+                if x.len() > buf_len {
                     // Write partial and advance
-                    buf.put_slice(&x[..remaining]);
-                    self_mut.leftover_slice = Some(x[remaining..].to_vec());
+                    buf.copy_from_slice(&x[..buf_len]);
+                    self_mut.leftover_slice = Some(x[buf_len..].to_vec());
                 } else {
                     // Write full, no need to create leftovers
-                    buf.put_slice(x);
+                    buf[..x.len()].copy_from_slice(x);
                 };
-                Poll::Ready(Ok(()))
+                Poll::Ready(Ok(num_bytes))
             }
         }
     }

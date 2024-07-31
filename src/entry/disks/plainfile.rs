@@ -11,6 +11,9 @@ use super::{ReadDisk, WriteDisk};
 #[cfg(feature = "async")]
 use super::{AsyncReadDisk, AsyncWriteDisk};
 
+#[cfg(feature = "async")]
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
+
 /// A regular file entry.
 ///
 /// This is used to open a [`File`] on demand, but drop the handle when unused.
@@ -70,27 +73,28 @@ impl WriteDisk for Plainfile {
 
 #[cfg(feature = "async")]
 impl AsyncReadDisk for Plainfile {
-    type ReadDisk = tokio::io::BufReader<tokio::fs::File>;
+    type ReadDisk = futures::io::BufReader<Compat<tokio::fs::File>>;
 
     async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(tokio::io::BufReader::new(
-            tokio::fs::File::open(self.path.clone()).await?,
+        Ok(futures::io::BufReader::new(
+            tokio::fs::File::open(self.path.clone()).await?.compat(),
         ))
     }
 }
 
 #[cfg(feature = "async")]
 impl AsyncWriteDisk for Plainfile {
-    type WriteDisk = tokio::io::BufWriter<tokio::fs::File>;
+    type WriteDisk = futures::io::BufWriter<Compat<tokio::fs::File>>;
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        Ok(tokio::io::BufWriter::new(
+        Ok(futures::io::BufWriter::new(
             tokio::fs::File::options()
                 .write(true)
                 .create(true)
                 .truncate(true)
                 .open(self.path.clone())
-                .await?,
+                .await?
+                .compat_write(),
         ))
     }
 }

@@ -1,13 +1,7 @@
-#![cfg(all(feature = "async_csv", feature = "network"))]
-
 use std::{str::FromStr, time::SystemTime};
 
 use backed_data::{
-    entry::{
-        disks::Network,
-        formats::{AsyncCsvCoder, CsvCoder},
-        BackedEntryAsync,
-    },
+    entry::{disks::Network, formats::AsyncCsvCoder, BackedEntryAsync},
     test_utils::csv_data::IouZipcodes,
 };
 use reqwest::{Method, Request, Url};
@@ -27,13 +21,13 @@ async fn main() {
 
     // Load in the dataset and check length.
     let num_rows = backed_entry.a_load().await.unwrap().len();
-    println!("Number of rows: {}", num_rows);
     println!(
         "Time to load from network: {:#?}\n",
         SystemTime::now()
             .duration_since(prior_to_first_load)
             .unwrap()
     );
+    println!("Number of rows: {}", num_rows);
     println!(
         "Dataset size: {:.2} MiB",
         ((num_rows * size_of::<IouZipcodes>()) as f64) / ((1024 * 1024) as f64)
@@ -57,11 +51,11 @@ async fn main() {
     let prior_to_third_load = SystemTime::now();
 
     let entry = backed_entry.a_load().await.unwrap().get(10_000).unwrap();
-    println!("Line 10,000: {:#?}", entry);
     println!(
         "Time to load from network (again): {:#?}",
         SystemTime::now()
             .duration_since(prior_to_third_load)
             .unwrap()
     );
+    println!("Line 10,000: {:#?}", entry);
 }

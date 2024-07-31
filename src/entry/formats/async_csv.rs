@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
 use csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, QuoteStyle, Terminator, Trim};
+use futures::io::{AsyncRead, AsyncWrite};
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use super::{AsyncDecoder, AsyncEncoder};
 
@@ -146,7 +145,7 @@ where
     type T = T;
     async fn decode(&self, source: &mut Source) -> Result<Self::T, Self::Error> {
         self.reader_builder()
-            .create_deserializer(source.compat())
+            .create_deserializer(source)
             .deserialize()
             .try_collect::<Vec<E>>()
             .await
@@ -163,9 +162,7 @@ where
     type Error = csv_async::Error;
     type T = T;
     async fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
-        let mut writer = self
-            .writer_builder()
-            .create_serializer(target.compat_write());
+        let mut writer = self.writer_builder().create_serializer(target);
 
         for line in data.as_ref() {
             writer.serialize(line).await?
@@ -234,7 +231,10 @@ mod tests {
 
     use tokio::runtime::Builder;
 
-    use crate::test_utils::csv_data::{IouZipcodes, FIRST_ENTRY, LAST_ENTRY};
+    use crate::{
+        test_utils::csv_data::{IouZipcodes, FIRST_ENTRY, LAST_ENTRY},
+        utils::AsyncCompatCursor,
+    };
 
     use super::*;
     #[test]
@@ -243,9 +243,10 @@ mod tests {
             .build()
             .unwrap()
             .block_on(async {
-                let mut buf = Cursor::new(include_bytes!(
+                let mut buf: AsyncCompatCursor<_> = Cursor::new(include_bytes!(
                     "../../../test_data/iou_zipcodes_2020_stub.csv"
-                ));
+                ))
+                .into();
 
                 let coder = AsyncCsvCoder::<Vec<_>, _>::default();
 
@@ -263,10 +264,11 @@ mod tests {
             .build()
             .unwrap()
             .block_on(async {
-                let mut buf = Cursor::new(include_bytes!(
+                let mut buf: AsyncCompatCursor<_> = Cursor::new(include_bytes!(
                     "../../../test_data/iou_zipcodes_2020_stub.csv"
-                ));
-                let mut write_buf = Cursor::new(Vec::new());
+                ))
+                .into();
+                let mut write_buf: AsyncCompatCursor<_> = Cursor::new(Vec::new()).into();
 
                 let coder = AsyncCsvCoder::<Vec<_>, _>::default();
 

@@ -80,14 +80,14 @@ url = { version = "2.5.2", optional = true, features = ["serde"] }
 bytes = { version = "*", optional = true } # Synced with reqwest
 
 # Async dependencies
-async-compression = { version = "0.4.8", optional = true, features = ["tokio"] }
+async-compression = { version = "0.4.8", optional = true, features = ["futures-io"] }
 tokio = { version = "1.37.0", optional = true, features = ["rt", "io-util", "fs"] }
 tokio-util = { version = "0.7.10", optional = true, features = ["io", "io-util"] }
 futures =  { version = "0.3.30", optional = true }
 async-scoped = { version = "0.9.0", optional = true, features = ["use-tokio"] }
 
 # Async format dependencies
-async-bincode = { version = "0.7.2", optional = true }
+async-bincode = { version = "0.7.2", optional = true, default-features = false, features = ["futures"] }
 csv-async = { version = "1.3.0", optional = true, features = ["with_serde"] }
 
 # Directory dependencies
@@ -96,7 +96,7 @@ http-serde = "2.1.1"
 
 [dev-dependencies]
 # Multithread test runtime
-tokio = { version = "1.37.0", features = ["rt-multi-thread", "io-util", "fs", "macros"] }
+tokio = { version = "1.37.0", features = ["rt", "rt-multi-thread", "io-util", "fs", "macros"] }
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
@@ -108,6 +108,7 @@ humansize = "2.1.3"
 chrono = "0.4.37"
 seq-macro = "0.3.5"
 zip = "2.1.5"
+smol = "2.0.0"
 
 [[bench]]
 name = "io_bench"
@@ -118,6 +119,11 @@ required-features = ["bincode", "directory", "unsafe_array"]
 name = "zstd_bench"
 harness = false
 required-features = ["bincode", "directory", "zstd", "unsafe_array"]
+
+[[example]]
+name = "remote_loading"
+path = "examples/remote_loading.rs"
+required-features = ["async_csv", "network"]
 
 [profile.bench]
 debug = true

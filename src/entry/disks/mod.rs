@@ -2,8 +2,8 @@ use std::io::{Read, Write};
 
 #[cfg(feature = "async")]
 use {
-    futures::Future,
-    tokio::io::{AsyncRead, AsyncWrite},
+    futures::io::{AsyncRead, AsyncWrite},
+    std::future::Future,
 };
 
 pub trait ReadDisk {

@@ -14,3 +14,6 @@ pub use refs::*;
 
 mod once;
 pub use once::*;
+
+mod async_compat_cursor;
+pub use async_compat_cursor::*;

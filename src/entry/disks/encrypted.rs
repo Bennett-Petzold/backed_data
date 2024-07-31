@@ -1,5 +1,4 @@
 use std::{
-    borrow::BorrowMut,
     io::{Cursor, Read, Write},
     marker::PhantomData,
     mem::transmute,
@@ -16,7 +15,7 @@ use secrets::{traits::Bytes, SecretBox, SecretVec};
 use serde::{de::Visitor, Deserialize, Serialize};
 use stable_deref_trait::StableDeref;
 
-use crate::utils::BorrowExtender;
+use crate::utils::{AsyncCompatCursor, BorrowExtender};
 
 #[derive(Debug, Clone, Copy)]
 struct KeyNonce {
@@ -392,13 +391,13 @@ impl Buffer for SecretVecBuffer<'_> {
 
 #[derive(Debug)]
 pub struct SecretReadVec<'a> {
-    inner: Cursor<SecretVecU8<'a>>,
+    inner: AsyncCompatCursor<SecretVecU8<'a>>,
 }
 
 impl From<SecretVec<u8>> for SecretReadVec<'_> {
     fn from(value: SecretVec<u8>) -> Self {
         Self {
-            inner: Cursor::new(value.into()),
+            inner: Cursor::new(value.into()).into(),
         }
     }
 }
@@ -406,7 +405,7 @@ impl From<SecretVec<u8>> for SecretReadVec<'_> {
 impl<'a> From<SecretVecU8<'a>> for SecretReadVec<'a> {
     fn from(value: SecretVecU8<'a>) -> Self {
         Self {
-            inner: Cursor::new(value),
+            inner: Cursor::new(value).into(),
         }
     }
 }
@@ -420,10 +419,10 @@ impl<'a> From<SecretVecBuffer<'a>> for SecretReadVec<'a> {
 
 impl Read for SecretReadVec<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        std::io::Read::read(&mut self.inner, buf)
+        self.inner.read(buf)
     }
     fn read_vectored(&mut self, bufs: &mut [std::io::IoSliceMut<'_>]) -> std::io::Result<usize> {
-        self.inner.borrow_mut().read_vectored(bufs)
+        self.inner.read_vectored(bufs)
     }
 }
 
@@ -512,6 +511,7 @@ use super::{Plainfile, ReadDisk, WriteDisk};
 #[cfg(feature = "async")]
 mod async_impl {
 
+    use std::io::SeekFrom;
     use std::pin::Pin;
     use std::sync::{Arc, Mutex};
     use std::task::{Context, Poll};
@@ -521,9 +521,9 @@ mod async_impl {
 
     use super::*;
 
+    use futures::io::{AsyncRead, AsyncWrite};
+    use futures::io::{AsyncReadExt, AsyncSeek};
     use futures::Future;
-    use tokio::io::{AsyncRead, AsyncWrite};
-    use tokio::io::{AsyncReadExt, AsyncSeek};
 
     /// Async wrapper of [`Encrypted`], which derefs to the sync variant.
     ///
@@ -588,24 +588,19 @@ mod async_impl {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            buf: &mut tokio::io::ReadBuf,
-        ) -> std::task::Poll<std::io::Result<()>> {
+            buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
             Pin::new(&mut self.get_mut().inner).poll_read(cx, buf)
         }
     }
 
     impl AsyncSeek for SecretReadVec<'_> {
-        fn poll_complete(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<std::io::Result<u64>> {
-            Pin::new(&mut self.get_mut().inner).poll_complete(cx)
-        }
-        fn start_seek(
-            self: std::pin::Pin<&mut Self>,
-            position: std::io::SeekFrom,
-        ) -> std::io::Result<()> {
-            Pin::new(&mut self.get_mut().inner).start_seek(position)
+        fn poll_seek(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            position: SeekFrom,
+        ) -> Poll<std::io::Result<u64>> {
+            Pin::new(&mut self.get_mut().inner).poll_seek(cx, position)
         }
     }
 
@@ -767,13 +762,10 @@ mod async_impl {
             }
         }
 
-        fn poll_shutdown(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<Result<(), std::io::Error>> {
+        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
             if let Poll::Ready(poll_status) = self.as_mut().poll_flush(cx) {
                 poll_status?;
-                Pin::new(&mut self.inner).poll_shutdown(cx)
+                Pin::new(&mut self.inner).poll_close(cx)
             } else {
                 Poll::Pending
             }

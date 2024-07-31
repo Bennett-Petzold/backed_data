@@ -4,9 +4,10 @@ use std::{
 };
 
 use either::Either;
+use futures::io::AsyncWriteExt;
 use futures::Future;
 use serde::{Deserialize, Serialize};
-use tokio::{io::AsyncWriteExt, sync::OnceCell};
+use tokio::sync::OnceCell;
 
 use crate::utils::{blocking::BlockingFn, Once};
 
@@ -28,7 +29,7 @@ where
 
             // Make sure buffer is emptied
             disk.flush().await?;
-            disk.shutdown().await?;
+            disk.close().await?;
         }
         Ok(())
     }
@@ -40,7 +41,7 @@ where
 
         // Make sure buffer is emptied
         disk.flush().await?;
-        disk.shutdown().await?;
+        disk.close().await?;
 
         // Drop previous value and write in new.
         // value.set() only works when uninitialized.
@@ -77,7 +78,7 @@ where
         self.coder.encode(&new_value.into(), &mut disk).await?;
         // Make sure buffer is emptied
         disk.flush().await?;
-        disk.shutdown().await?;
+        disk.close().await?;
         Ok(())
     }
 }
