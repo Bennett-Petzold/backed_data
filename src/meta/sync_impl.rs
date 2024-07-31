@@ -22,9 +22,9 @@ pub trait BackedArrayWrapper<T>:
 {
     /// Underlying storage struct
     type Storage: ReadDisk + WriteDisk;
-    type KeyContainer: Container<Output = Range<usize>>;
-    //type EntryContainer: Container<Output: BackedEntryUnload>;
-    type EntryContainer: Container<Output = BackedEntryArr<T, Self::Storage>>;
+    type KeyContainer: Container<Data = Range<usize>>;
+    //type EntryContainer: Container<Data: BackedEntryUnload>;
+    type EntryContainer: Container<Data = BackedEntryArr<T, Self::Storage>>;
 
     // Serial handling wrappers with default implementations
     /// Wraps [`BackedArray::save_to_disk`] to include its own metadata.
