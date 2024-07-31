@@ -50,6 +50,7 @@ pub mod sync_impl {
     use std::{
         io::{Read, Seek, Write},
         ops::Range,
+        ptr::{from_mut, from_ref},
     };
 
     use bincode::{deserialize_from, serialize_into};
@@ -347,6 +348,137 @@ pub mod sync_impl {
             self.keys.append(&mut rhs.keys);
             self.entries.append(&mut rhs.entries);
             self
+        }
+    }
+
+    /// Iterator over all stored items.
+    ///
+    /// Keeps all loaded values in memory while alive.
+    ///
+    /// # Arguments
+    /// * `pos`: Current position in chunks
+    /// * `backed_entry`: The underlying array
+    pub struct BackedEntryChunkIter<'a, T, Disk> {
+        pos: usize,
+        backed_entry: &'a mut BackedArray<T, Disk>,
+    }
+
+    impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIter<'a, T, Disk> {
+        type Item = bincode::Result<&'a [T]>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            // No GAT support, so we make do with pointers
+            // The lifetimes work out, but the compiler doesn't know that
+            unsafe {
+                let val_ptr: Option<bincode::Result<*const [T]>> = self
+                    .backed_entry
+                    .entries
+                    .get_mut(self.pos)
+                    .map(move |x| x.load().map(|y| y as *const [T]));
+                val_ptr.map(|y| y.map(|x| &*x))
+            }
+        }
+    }
+
+    /// Iterator over all stored items.
+    ///
+    /// Keeps all loaded values in memory while alive.
+    ///
+    /// # Arguments
+    /// * `outer_pos`: Current position in entries
+    /// * `inner_pos`: Current position in entries
+    /// * `backed_entry`: The underlying array
+    pub struct BackedEntryItemIter<'a, T, Disk> {
+        outer_pos: usize,
+        inner_pos: usize,
+        backed_entry: &'a mut BackedArray<T, Disk>,
+    }
+
+    impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
+        for BackedEntryItemIter<'a, T, Disk>
+    {
+        type Item = bincode::Result<&'a T>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            // TODO: explain why this is safe
+            // For now just trust me, this is a very safe function
+            unsafe {
+                let self_ptr = from_mut(self);
+                let entry: Option<bincode::Result<*const T>> = (*self_ptr)
+                    .backed_entry
+                    .entries
+                    .get_mut(self.outer_pos)
+                    .and_then(move |entry_arr| {
+                        entry_arr
+                            .load()
+                            .map(|loaded_arr| {
+                                loaded_arr
+                                    .get(self.inner_pos)
+                                    .map(|x| {
+                                        self.inner_pos += 1; // Advance iterator
+                                        Ok(from_ref(x))
+                                    })
+                                    .or_else(|| {
+                                        // Go to next chunk
+                                        self.outer_pos += 1;
+                                        self.inner_pos = 0;
+                                        self.next().map(|y| y.map(|x| from_ref(x)))
+                                    })
+                            })
+                            .transpose()
+                    })
+                    .map(|outer_res| match outer_res {
+                        Ok(x) => x,
+                        Err(y) => Err(y),
+                    });
+                entry.map(|y| y.map(|x| &*x))
+            }
+        }
+    }
+
+    // Iterator returns
+    impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
+        /// Return a [`BackedEntryItemIter`] that returns items in order.
+        ///
+        /// # Arguments
+        /// * `offset`: Starting position
+        pub fn item_iter(&mut self, offset: usize) -> BackedEntryItemIter<T, Disk> {
+            // Defaults to force a None return from iterator
+            let mut outer_pos = usize::MAX;
+            let mut inner_pos = usize::MAX;
+
+            if let Some(loc) = internal_idx(&self.keys, offset) {
+                outer_pos = loc.entry_idx;
+                inner_pos = loc.inside_entry_idx;
+            };
+
+            BackedEntryItemIter {
+                outer_pos,
+                inner_pos,
+                backed_entry: self,
+            }
+        }
+
+        /// Default for [`BackedEntryItemIter`]
+        pub fn item_iter_default(&mut self) -> BackedEntryItemIter<T, Disk> {
+            self.item_iter(0)
+        }
+
+        /// Return a [`BackedEntryChunkIter`] that returns underlying chunks
+        /// in order.
+        ///
+        /// # Arguments
+        /// * `offset`: Starting chunk
+        pub fn chunk_iter(&mut self, offset: usize) -> BackedEntryChunkIter<T, Disk> {
+            BackedEntryChunkIter {
+                pos: offset,
+                backed_entry: self,
+            }
+        }
+
+        /// Default for [`BackedEntryChunkIter`]
+        pub fn chunk_iter_default(&mut self) -> BackedEntryChunkIter<T, Disk> {
+            self.chunk_iter(0)
         }
     }
 
