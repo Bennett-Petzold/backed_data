@@ -11,6 +11,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::array::ArrayLoc;
 use crate::entry::{sync_impl::BackedEntryMut, BackedEntry};
 
 use super::super::{
@@ -30,6 +31,13 @@ where
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
 {
+    fn get_loc(&self, loc: &ArrayLoc) -> Result<&E::InnerData, BackedArrayError<E::ReadError>> {
+        let wrapped_container = &self.entries.as_ref()[loc.entry_idx];
+        let backed_entry = BackedEntryContainer::get_ref(wrapped_container);
+        let entry = backed_entry.load().map_err(BackedArrayError::Coder)?;
+        Ok(&entry.as_ref()[loc.inside_entry_idx])
+    }
+
     /// Return a value (potentially loading its backing array).
     ///
     /// Backing arrays stay in memory until freed by a mutable function.
@@ -41,10 +49,7 @@ where
         )
         .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
-        let wrapped_container = &self.entries.as_ref()[loc.entry_idx];
-        let backed_entry = BackedEntryContainer::get_ref(wrapped_container);
-        let entry = backed_entry.load().map_err(BackedArrayError::Coder)?;
-        Ok(&entry.as_ref()[loc.inside_entry_idx])
+        self.get_loc(&loc)
     }
 }
 
@@ -55,11 +60,19 @@ where
 pub struct BackedArrayIter<'a, K, E> {
     backed: &'a BackedArray<K, E>,
     pos: usize,
+    loc: ArrayLoc,
 }
 
 impl<'a, K, E> BackedArrayIter<'a, K, E> {
     fn new(backed: &'a BackedArray<K, E>) -> Self {
-        Self { backed, pos: 0 }
+        Self {
+            backed,
+            pos: 0,
+            loc: ArrayLoc {
+                entry_idx: 0,
+                inside_entry_idx: 0,
+            },
+        }
     }
 }
 
@@ -76,16 +89,38 @@ where
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.pos += n;
-        match self.backed.get(self.pos) {
+        let cur_key_range = |this: &Self| {
+            Some(
+                *this.backed.key_ends.c_get(this.loc.entry_idx)?
+                    - *this.backed.key_starts.c_get(this.loc.entry_idx)?,
+            )
+        };
+
+        let advance = |this: &mut Self, n: usize| {
+            this.pos += n;
+            this.loc.inside_entry_idx += n;
+            while this.loc.inside_entry_idx >= cur_key_range(this)? {
+                this.loc.inside_entry_idx -= cur_key_range(this)?;
+                this.loc.entry_idx += 1;
+            }
+            Some(())
+        };
+
+        advance(self, n)?;
+
+        if self.loc.entry_idx >= self.backed.key_ends.c_len() {
+            return None;
+        }
+
+        match self.backed.get_loc(&self.loc) {
             Ok(val) => {
-                self.pos += 1;
+                let _ = advance(self, 1);
                 Some(Ok(val))
             }
             Err(e) => match e {
                 BackedArrayError::OutsideEntryBounds(_) => None,
                 BackedArrayError::Coder(c) => {
-                    self.pos += 1;
+                    let _ = advance(self, 1);
                     Some(Err(c))
                 }
             },

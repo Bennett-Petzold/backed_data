@@ -9,7 +9,7 @@ use std::{
 use stable_deref_trait::StableDeref;
 
 use crate::{
-    array::container::open_mut,
+    array::{container::open_mut, ArrayLoc},
     entry::{sync_impl::BackedEntryMut, BackedEntry},
     utils::{BorrowExtender, BorrowNest, NestDeref},
 };
@@ -27,22 +27,15 @@ use super::{
 
 /// Read implementations
 impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
-    /// Implementor for [`Self::get`] that retains type information.
     #[allow(clippy::type_complexity)]
-    fn internal_get(
+    fn generic_get_loc(
         &self,
+        loc: &ArrayLoc,
         idx: usize,
     ) -> Result<
         BorrowNest<E::Ref<'_>, &E::Unwrapped, <E::Unwrapped as Container>::Ref<'_>>,
         BackedArrayError<E::ReadError>,
     > {
-        let loc = internal_idx(
-            self.key_starts.c_ref().as_ref(),
-            self.key_ends.c_ref().as_ref(),
-            idx,
-        )
-        .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-
         let wrapped_container = self
             .entries
             .c_get(loc.entry_idx)
@@ -81,6 +74,25 @@ impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<
         })
     }
 
+    /// Implementor for [`Self::get`] that retains type information.
+    #[allow(clippy::type_complexity)]
+    fn internal_get(
+        &self,
+        idx: usize,
+    ) -> Result<
+        BorrowNest<E::Ref<'_>, &E::Unwrapped, <E::Unwrapped as Container>::Ref<'_>>,
+        BackedArrayError<E::ReadError>,
+    > {
+        let loc = internal_idx(
+            self.key_starts.c_ref().as_ref(),
+            self.key_ends.c_ref().as_ref(),
+            idx,
+        )
+        .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+
+        self.generic_get_loc(&loc, idx)
+    }
+
     /// [`Self::get`] that works on containers that don't directly dereference
     /// to slices.
     pub fn generic_get(
@@ -101,12 +113,20 @@ impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<
 #[derive(Debug)]
 pub struct BackedArrayGenericIter<'a, K, E> {
     backed: &'a BackedArray<K, E>,
+    loc: ArrayLoc,
     pos: usize,
 }
 
 impl<'a, K, E> BackedArrayGenericIter<'a, K, E> {
     fn new(backed: &'a BackedArray<K, E>) -> Self {
-        Self { backed, pos: 0 }
+        Self {
+            backed,
+            loc: ArrayLoc {
+                entry_idx: 0,
+                inside_entry_idx: 0,
+            },
+            pos: 0,
+        }
     }
 }
 
@@ -123,16 +143,38 @@ impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedRead> Iterator
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.pos += n;
-        match self.backed.internal_get(self.pos) {
+        let cur_key_range = |this: &Self| {
+            Some(
+                *this.backed.key_ends.c_get(this.loc.entry_idx)?
+                    - *this.backed.key_starts.c_get(this.loc.entry_idx)?,
+            )
+        };
+
+        let advance = |this: &mut Self, n: usize| {
+            this.pos += n;
+            this.loc.inside_entry_idx += n;
+            while this.loc.inside_entry_idx >= cur_key_range(this)? {
+                this.loc.inside_entry_idx -= cur_key_range(this)?;
+                this.loc.entry_idx += 1;
+            }
+            Some(())
+        };
+
+        advance(self, n)?;
+
+        if self.loc.entry_idx >= self.backed.key_ends.c_len() {
+            return None;
+        }
+
+        match self.backed.generic_get_loc(&self.loc, self.pos) {
             Ok(val) => {
-                self.pos += 1;
+                let _ = advance(self, 1);
                 Some(Ok(NestDeref::from(val)))
             }
             Err(e) => match e {
                 BackedArrayError::OutsideEntryBounds(_) => None,
                 BackedArrayError::Coder(c) => {
-                    self.pos += 1;
+                    let _ = advance(self, 1);
                     Some(Err(c))
                 }
             },
