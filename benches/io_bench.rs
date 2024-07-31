@@ -63,6 +63,8 @@ read_dir!(async concurrent read_zstdfiles_async_con, AsyncZstdDirBackedArray<0, 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 read_dir!(async parallel read_zstdfiles_async_par, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
 
+const SIX_MIB: usize = 6 * 1024 * 1024;
+
 fn file_creation_benches(c: &mut Criterion) {
     let data = complete_works();
     let mut path_cell = None;
