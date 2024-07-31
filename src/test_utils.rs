@@ -1,23 +1,22 @@
 use core::panic;
 use std::{
+    cell::UnsafeCell,
     io::{Cursor, Seek},
     ops::{Deref, DerefMut},
+    sync::Mutex,
 };
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "async")]
-use crate::entry::async_impl::{AsyncReadDisk, AsyncWriteDisk};
+use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
 
-use crate::entry::{
-    sync_impl::{ReadDisk, WriteDisk},
-    DiskOverwritable,
-};
+use crate::entry::disks::{ReadDisk, WriteDisk};
 
 #[derive(Debug, Serialize)]
 pub struct CursorVec<'a> {
     #[serde(skip)]
-    pub inner: &'a mut Cursor<Vec<u8>>,
+    pub inner: Mutex<&'a mut Cursor<Vec<u8>>>,
 }
 
 impl<'de> Deserialize<'de> for CursorVec<'_> {
@@ -38,27 +37,26 @@ impl<'de> Deserialize<'de> for &mut CursorVec<'_> {
     }
 }
 
-impl DiskOverwritable for CursorVec<'_> {}
-impl DiskOverwritable for &mut CursorVec<'_> {}
-
+/// This is deliberately breaking mutability
 impl<'a> ReadDisk for CursorVec<'a> {
     type ReadDisk = &'a mut Cursor<Vec<u8>>;
 
-    fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        self.inner.lock().unwrap().rewind()?;
+        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
+        Ok(unsafe { &mut *this })
     }
 }
 
 impl<'a> WriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        self.inner.get_mut().clear();
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        this.rewind()?;
+        let this: *mut _ = this.deref_mut();
+        unsafe { Ok(&mut *this) }
     }
 }
 
@@ -66,10 +64,10 @@ impl<'a> WriteDisk for CursorVec<'a> {
 impl<'a> AsyncReadDisk for CursorVec<'a> {
     type ReadDisk = &'a mut Cursor<Vec<u8>>;
 
-    async fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        self.inner.lock().unwrap().rewind()?;
+        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
+        Ok(unsafe { &mut *this })
     }
 }
 
@@ -77,32 +75,34 @@ impl<'a> AsyncReadDisk for CursorVec<'a> {
 impl<'a> AsyncWriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-    async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        self.inner.get_mut().clear();
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        this.rewind()?;
+        let this: *mut _ = this.deref_mut();
+        unsafe { Ok(&mut *this) }
     }
 }
 
-impl<'a> ReadDisk for &mut CursorVec<'a> {
+impl<'a> ReadDisk for &'a mut CursorVec<'a> {
     type ReadDisk = &'a mut Cursor<Vec<u8>>;
 
-    fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        self.inner.lock().unwrap().rewind()?;
+        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
+        Ok(unsafe { &mut *this })
     }
 }
 
-impl<'a> WriteDisk for &mut CursorVec<'a> {
+impl<'a> WriteDisk for &'a mut CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        self.inner.get_mut().clear();
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        this.rewind()?;
+        let this: *mut _ = this.deref_mut();
+        unsafe { Ok(&mut *this) }
     }
 }
 
@@ -110,10 +110,10 @@ impl<'a> WriteDisk for &mut CursorVec<'a> {
 impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
     type ReadDisk = &'a mut Cursor<Vec<u8>>;
 
-    async fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        self.inner.lock().unwrap().rewind()?;
+        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
+        Ok(unsafe { &mut *this })
     }
 }
 
@@ -121,11 +121,12 @@ impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
 impl<'a> AsyncWriteDisk for &mut CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-    async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        self.inner.get_mut().clear();
-        self.inner.rewind()?;
-        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
-        unsafe { Ok(&mut *self_inner) }
+    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        this.rewind()?;
+        let this: *mut _ = this.deref_mut();
+        unsafe { Ok(&mut *this) }
     }
 }
 
@@ -134,12 +135,14 @@ impl Unpin for CursorVec<'_> {}
 impl Deref for CursorVec<'_> {
     type Target = Cursor<Vec<u8>>;
     fn deref(&self) -> &Self::Target {
-        self.inner.deref()
+        let this: *const _ = self.inner.lock().unwrap().deref();
+        unsafe { &*this }
     }
 }
 
 impl DerefMut for CursorVec<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.inner.deref_mut()
+        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
+        unsafe { &mut *this }
     }
 }
