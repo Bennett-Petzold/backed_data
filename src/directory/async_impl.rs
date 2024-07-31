@@ -14,7 +14,7 @@ use serde::{
 };
 use tokio::{
     fs::{copy, rename},
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter},
     task::JoinSet,
 };
 use tokio::{
@@ -30,35 +30,25 @@ use super::PathBufVisitor;
 /// File, but serializes based on path string
 #[derive(Debug)]
 pub struct SerialFile {
-    file: File,
+    read_file: BufReader<File>,
+    write_file: BufWriter<File>,
     path: PathBuf,
 }
 
 impl SerialFile {
     pub async fn new(path: PathBuf) -> Result<Self, tokio::io::Error> {
+        let file = File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path.clone())
+            .await?;
         Ok(Self {
-            file: File::options()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(path.clone())
-                .await?,
+            read_file: BufReader::new(file.try_clone().await?),
+            write_file: BufWriter::new(file),
             path,
         })
-    }
-}
-
-impl Deref for SerialFile {
-    type Target = File;
-    fn deref(&self) -> &Self::Target {
-        &self.file
-    }
-}
-
-impl DerefMut for SerialFile {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.file
     }
 }
 
@@ -67,30 +57,30 @@ impl AsyncWrite for SerialFile {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_shutdown(cx)
+        Pin::new(&mut (self.get_mut()).write_file).poll_shutdown(cx)
     }
     fn poll_write_vectored(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_write_vectored(cx, bufs)
+        Pin::new(&mut (self.get_mut()).write_file).poll_write_vectored(cx, bufs)
     }
     fn poll_flush(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_flush(cx)
+        Pin::new(&mut (self.get_mut()).write_file).poll_flush(cx)
     }
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_write(cx, buf)
+        Pin::new(&mut (self.get_mut()).write_file).poll_write(cx, buf)
     }
     fn is_write_vectored(&self) -> bool {
-        self.file.is_write_vectored()
+        self.write_file.is_write_vectored()
     }
 }
 
@@ -100,7 +90,7 @@ impl AsyncRead for SerialFile {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut (self.get_mut()).file).poll_read(cx, buf)
+        Pin::new(&mut (self.get_mut()).read_file).poll_read(cx, buf)
     }
 }
 
@@ -109,13 +99,13 @@ impl AsyncSeek for SerialFile {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<u64>> {
-        Pin::new(&mut (self.get_mut()).file).poll_complete(cx)
+        Pin::new(&mut (self.get_mut()).read_file).poll_complete(cx)
     }
     fn start_seek(
         self: std::pin::Pin<&mut Self>,
         position: std::io::SeekFrom,
     ) -> std::io::Result<()> {
-        Pin::new(&mut (self.get_mut()).file).start_seek(position)
+        Pin::new(&mut (self.get_mut()).read_file).start_seek(position)
     }
 }
 
@@ -141,7 +131,15 @@ impl<'de> Deserialize<'de> for SerialFile {
                 .open(path.clone())
                 .await
                 .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
-            Ok(Self { file, path })
+            Ok(Self {
+                read_file: BufReader::new(
+                    file.try_clone()
+                        .await
+                        .map_err(|err| D::Error::custom(format!("{:#?}", err)))?,
+                ),
+                write_file: BufWriter::new(file),
+                path,
+            })
         })
     }
 }
