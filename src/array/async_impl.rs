@@ -1,5 +1,7 @@
 use crate::entry::{
-    async_impl::{AsyncReadDisk, AsyncWriteDisk, BackedEntryArrAsync, BackedEntryMutAsync},
+    async_impl::{
+        AsyncReadDisk, AsyncWriteDisk, BackedEntryArrAsync, BackedEntryAsync, BackedEntryMutAsync,
+    },
     BackedEntryUnload, DiskOverwritable,
 };
 use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
@@ -10,7 +12,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{ops::Range, pin::pin};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use super::{internal_idx, multiple_internal_idx, BackedArrayError};
+use super::{
+    internal_idx, multiple_internal_idx, sync_impl::BackedArray as SyncBackedArray,
+    BackedArrayError,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
@@ -259,6 +264,47 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
+impl<T: Serialize + Clone, Disk: AsyncWriteDisk + Clone> BackedArray<T, Disk> {
+    /// Moves all entries of `rhs` into `self`
+    pub async fn append_sync_array(
+        &mut self,
+        rhs: SyncBackedArray<T, Disk>,
+    ) -> bincode::Result<&mut Self> {
+        let offset = self.keys.last().unwrap_or(&(0..0)).end;
+        let mut rhs_keys = rhs.keys().clone();
+        rhs_keys.iter_mut().for_each(|range| {
+            range.start += offset;
+            range.end += offset;
+        });
+
+        let mut rhs_entries = Vec::with_capacity(rhs.entries().len());
+        let mut rhs_stream = pin!(stream::iter(rhs.entries().iter().clone()).then(|entry| {
+            let entry = (*entry).clone();
+            async move { BackedEntryAsync::from_sync_entry(entry).await }
+        }));
+        while let Some(val) = rhs_stream.next().await {
+            rhs_entries.push(val?);
+        }
+
+        self.keys.append(&mut rhs_keys);
+        self.entries.extend(rhs_entries);
+        Ok(self)
+    }
+}
+
+impl<T: Serialize + Clone, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
+    /// Converts into a sync array
+    pub async fn to_sync_array(self) -> bincode::Result<SyncBackedArray<T, Disk>> {
+        let mut entry_vec = Vec::with_capacity(self.entries.len());
+        for entry in self.entries {
+            println!("PUSH TO ENTRY VEC");
+            entry_vec.push(entry.into_sync_entry().await?);
+        }
+
+        Ok(SyncBackedArray::from_pairs(self.keys, entry_vec))
+    }
+}
+
 // Iterator returns
 impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedArray<T, Disk> {
     /// Outputs items in order.
@@ -395,6 +441,100 @@ mod tests {
         assert_eq!(
             backed.get_multiple([5, 2, 0, 5]).await.unwrap(),
             [&5, &1, &0, &5]
+        );
+    }
+
+    #[tokio::test]
+    async fn reconvert() {
+        let mut back_vector = Cursor::new(Vec::new());
+        let back_vector_ptr: *mut _ = &mut back_vector;
+
+        let mut back_vector_wrap = CursorVec {
+            inner: unsafe { &mut *back_vector_ptr },
+        };
+
+        const INPUT: [u8; 3] = [2, 3, 5];
+
+        let mut backed = BackedArray::new();
+        backed.append(&INPUT, &mut back_vector_wrap).await.unwrap();
+
+        let back_vec_prev = back_vector.get_ref().clone();
+
+        backed
+            .chunk_mod_stream(0)
+            .for_each(|chunk| async {
+                chunk.unwrap().conv_to_sync().await.unwrap();
+            })
+            .await;
+
+        assert_eq!(
+            back_vector.get_ref()[back_vector.get_ref().len() - INPUT.len()..],
+            [2, 3, 5]
+        );
+        println!("Sync version: {:?}", back_vector.get_ref());
+
+        assert_ne!(back_vector.get_ref(), &back_vec_prev);
+
+        backed
+            .chunk_mod_stream(0)
+            .for_each(|chunk| async {
+                chunk.unwrap().conv_to_async().await.unwrap();
+            })
+            .await;
+
+        assert_eq!(backed.get(1).await.unwrap(), &3);
+
+        backed.clear_memory();
+
+        assert_eq!(back_vector.get_ref(), &back_vec_prev);
+
+        println!("Async version: {:?}", back_vector.get_ref());
+
+        assert_eq!(backed.get(1).await.unwrap(), &3);
+    }
+
+    #[tokio::test]
+    async fn cross_write() {
+        let mut back_vector = Cursor::new(Vec::new());
+        let back_vector_ptr: *mut _ = &mut back_vector;
+
+        let mut back_vector_wrap = CursorVec {
+            inner: unsafe { &mut *back_vector_ptr },
+        };
+
+        const INPUT: [u8; 3] = [2, 3, 5];
+
+        let mut backed = BackedArray::new();
+        backed.append(&INPUT, &mut back_vector_wrap).await.unwrap();
+
+        let back_vec_prev = back_vector.get_ref().clone();
+
+        backed
+            .chunk_mod_stream(0)
+            .for_each(|chunk| async {
+                chunk.unwrap().conv_to_sync().await.unwrap();
+            })
+            .await;
+
+        assert_eq!(
+            back_vector.get_ref()[back_vector.get_ref().len() - INPUT.len()..],
+            [2, 3, 5]
+        );
+        println!("Sync version: {:?}", back_vector.get_ref());
+
+        assert_ne!(back_vector.get_ref(), &back_vec_prev);
+
+        let mut backed = backed.to_sync_array().await.unwrap();
+        backed.clear_memory();
+
+        assert_eq!(
+            backed.chunk_iter(0).collect::<Result<Vec<_>, _>>().unwrap(),
+            [&[2, 3, 5]]
+        );
+
+        assert_eq!(
+            backed.item_iter(0).collect::<Result<Vec<_>, _>>().unwrap(),
+            [&2, &3, &5]
         );
     }
 }

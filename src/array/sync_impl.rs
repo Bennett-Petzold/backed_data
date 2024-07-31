@@ -456,6 +456,19 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
     }
 }
 
+impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+    pub fn from_pairs<I, J>(keys: I, disks: J) -> Self
+    where
+        I: IntoIterator<Item = Range<usize>>,
+        J: IntoIterator<Item = BackedEntry<Box<[T]>, Disk>>,
+    {
+        Self {
+            keys: keys.into_iter().collect(),
+            entries: disks.into_iter().collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;

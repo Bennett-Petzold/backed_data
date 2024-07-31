@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use bincode::{deserialize_from, serialize_into};
+use bincode::{deserialize_from, serialize_into, Options};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload};
@@ -48,7 +48,10 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntry<T, Disk> {
     /// Updates underlying storage with the current entry
     fn update(&mut self) -> bincode::Result<()> {
         let mut disk = self.disk.write_disk()?;
-        serialize_into(&mut disk, &self.value)?;
+        bincode::options()
+            .with_limit(u32::max_value() as u64)
+            .allow_trailing_bytes()
+            .serialize_into(&mut disk, &self.value)?;
         disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
@@ -58,9 +61,12 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntry<T, Disk> {
     /// See [`Self::write_unload`] to skip the memory write.
     pub fn write(&mut self, new_value: T) -> bincode::Result<()> {
         let mut disk = self.disk.write_disk()?;
-        serialize_into(&mut disk, &new_value)?;
-        disk.flush()?; // Make sure buffer is emptied
         self.value = new_value;
+        bincode::options()
+            .with_limit(u32::max_value() as u64)
+            .allow_trailing_bytes()
+            .serialize_into(&mut disk, &self.value)?;
+        disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
 }
@@ -80,7 +86,10 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryArr<T, Disk> {
         if self.value.is_empty() {
             let mut disk = self.disk.read_disk()?;
             disk.rewind()?;
-            self.value = deserialize_from(&mut disk)?;
+            self.value = bincode::options()
+                .with_limit(u32::max_value() as u64)
+                .allow_trailing_bytes()
+                .deserialize_from(disk)?;
         }
         Ok(&self.value)
     }
@@ -105,7 +114,10 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntryArr<T, Disk> {
     pub fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
         self.unload();
         let mut disk = self.disk.write_disk()?;
-        serialize_into(&mut disk, new_value)?;
+        bincode::options()
+            .with_limit(u32::max_value() as u64)
+            .allow_trailing_bytes()
+            .serialize_into(&mut disk, new_value)?;
         disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
@@ -121,7 +133,12 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryOption<T, Disk> {
         if self.value.is_none() {
             let mut disk = self.disk.read_disk()?;
             disk.rewind()?;
-            self.value = Some(deserialize_from(&mut disk)?);
+            self.value = Some(
+                bincode::options()
+                    .with_limit(u32::max_value() as u64)
+                    .allow_trailing_bytes()
+                    .deserialize_from(disk)?,
+            );
         }
         Ok(self.value.as_ref().unwrap())
     }
@@ -146,7 +163,10 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntryOption<T, Disk> {
     pub fn write_unload(&mut self, new_value: &T) -> bincode::Result<()> {
         self.unload();
         let mut disk = self.disk.write_disk()?;
-        serialize_into(&mut disk, new_value)?;
+        bincode::options()
+            .with_limit(u32::max_value() as u64)
+            .allow_trailing_bytes()
+            .serialize_into(&mut disk, new_value)?;
         disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
