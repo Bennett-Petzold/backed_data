@@ -506,6 +506,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unsafe_array")]
     fn item_mod_iter() {
         const FIB: &[u8] = &[0, 1, 1, 2, 3, 5];
         const INPUT_1: &[u8] = &[4, 6, 7];

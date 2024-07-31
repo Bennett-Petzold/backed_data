@@ -98,10 +98,12 @@ seq-macro = "0.3.5"
 [[bench]]
 name = "io_bench"
 harness = false
+required-features = ["bincode", "directory", "unsafe_array"]
 
 [[bench]]
 name = "zstd_bench"
 harness = false
+required-features = ["bincode", "directory", "zstd", "unsafe_array"]
 
 [profile.bench]
 debug = true

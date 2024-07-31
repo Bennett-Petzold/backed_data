@@ -1,5 +1,3 @@
-#![cfg(feature = "encrypted")]
-
 use std::{
     mem::transmute,
     ops::{Deref, DerefMut, Range},

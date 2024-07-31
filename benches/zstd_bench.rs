@@ -1,4 +1,9 @@
-#![cfg(all(feature = "bincode", feature = "directory", feature = "zstd"))]
+#![cfg(all(
+    feature = "bincode",
+    feature = "directory",
+    feature = "zstd",
+    feature = "unsafe_array"
+))]
 
 use std::{path::Path, time::Duration};
 

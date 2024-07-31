@@ -1,3 +1,5 @@
+#![cfg(feature = "unsafe_array")]
+
 use std::{
     env::temp_dir,
     fmt::Debug,
