@@ -802,12 +802,40 @@
 <a href="#802" id="802">802</a>
 <a href="#803" id="803">803</a>
 <a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a>
+<a href="#820" id="820">820</a>
+<a href="#821" id="821">821</a>
+<a href="#822" id="822">822</a>
+<a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
     io::{Cursor, ErrorKind, Write},
     mem::transmute,
     ops::Deref,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
@@ -840,15 +868,6 @@
         .create(<span class="bool-val">true</span>)
         .truncate(<span class="bool-val">false</span>)
         .open(path.as_ref())<span class="question-mark">?</span>;
-
-    <span class="comment">// Windows cannot handle an mmap of length zero, if the file is empty we
-    // need to give it some garbage to work with.
-    </span><span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
-    </span>{
-        <span class="kw">if </span>f.metadata()<span class="question-mark">?</span>.len() == <span class="number">0 </span>{
-            f.set_len(<span class="number">1</span>)<span class="question-mark">?</span>;
-        }
-    }
 
     <span class="prelude-val">Ok</span>(f)
 }
@@ -1165,13 +1184,44 @@
 }
 
 <span class="kw">impl </span>MmapWriter {
+    <span class="comment">// OS-dependent length reading.
+    //
+    // Windows cannot handle an mmap of length zero, if the file is empty we
+    // cannot read mmap's len.
+    </span><span class="kw">fn </span>get_reserved_len(
+        mmap: <span class="kw-2">&amp;</span>memmap2::MmapMut,
+        <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)] </span>file: <span class="kw-2">&amp;</span>File,
+    ) -&gt; std::io::Result&lt;usize&gt; {
+        <span class="kw">let </span>len;
+
+        <span class="attr">#[cfg(not(target_os = <span class="string">"windows"</span>))]
+        </span>{
+            len = mmap.len();
+        }
+
+        <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+        </span>{
+            len = <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.size() == <span class="number">0 </span>{
+                <span class="number">0
+            </span>} <span class="kw">else </span>{
+                mmap.len()
+            };
+        }
+
+        <span class="prelude-val">Ok</span>(len)
+    }
+
     <span class="kw">fn </span>from_args&lt;P: AsRef&lt;Path&gt;&gt;(path: P, mmap: memmap2::MmapMut) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
         </span><span class="kw">let _ </span>= mmap.advise(Advice::Sequential);
         <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
         </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateWrite);
 
-        <span class="kw">let </span>reserved_len = mmap.len();
+        <span class="kw">let </span>reserved_len = <span class="self">Self</span>::get_reserved_len(
+            <span class="kw-2">&amp;</span>mmap,
+            <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+            </span>open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>,
+        )<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(MmapWriter {
             path: path.as_ref().to_path_buf(),
@@ -1188,7 +1238,11 @@
 
         <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map_mut(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>reserved_len = mmap.len();
+        <span class="kw">let </span>reserved_len = <span class="self">Self</span>::get_reserved_len(
+            <span class="kw-2">&amp;</span>mmap,
+            <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+            </span><span class="kw-2">&amp;</span>file,
+        )<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(MmapWriter {
             path: path.as_ref().to_path_buf(),
