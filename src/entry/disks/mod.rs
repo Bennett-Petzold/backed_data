@@ -57,3 +57,8 @@ pub use encrypted::{Encrypted, SecretVecWrapper};
 mod network;
 #[cfg(feature = "network")]
 pub use network::{default_client, Network};
+
+#[cfg(runtime)]
+mod async_file;
+#[cfg(runtime)]
+pub use async_file::AsyncFile;

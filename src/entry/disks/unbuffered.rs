@@ -62,26 +62,20 @@ impl WriteDisk for Unbuffered {
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(runtime)]
 impl AsyncReadDisk for Unbuffered {
-    type ReadDisk = Compat<tokio::fs::File>;
+    type ReadDisk = super::async_file::AsyncFile;
 
     async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(tokio::fs::File::open(self.path.clone()).await?.compat())
+        super::async_file::read_file(self.path.clone()).await
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(runtime)]
 impl AsyncWriteDisk for Unbuffered {
-    type WriteDisk = Compat<tokio::fs::File>;
+    type WriteDisk = super::async_file::AsyncFile;
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        Ok(tokio::fs::File::options()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.path.clone())
-            .await?
-            .compat_write())
+        super::async_file::write_file(self.path.clone()).await
     }
 }
