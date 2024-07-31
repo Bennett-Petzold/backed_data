@@ -9,13 +9,13 @@ use std::{
 };
 use tokio::{
     fs::File,
-    io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
 };
 
 use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload, DiskOverwritable};
 
 pub trait AsyncReadDisk: Unpin + Serialize + for<'de> Deserialize<'de> {
-    type ReadDisk: AsyncRead + AsyncSeek;
+    type ReadDisk: AsyncRead;
     fn read_disk(&mut self) -> impl Future<Output = std::io::Result<Self::ReadDisk>> + Send + Sync;
 }
 
@@ -283,8 +283,6 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryArrAsync<T, Disk> {
     pub async fn load(&mut self) -> Result<&[T], Box<bincode::ErrorKind>> {
         if self.inner.value.is_empty() {
             let mut read_disk = pin!(self.inner.disk.read_disk().await?);
-            read_disk.rewind().await?;
-
             match self.mode {
                 BackedEntryWriteMode::Sync => {
                     return Err(Box::new(bincode::ErrorKind::Custom(
@@ -320,7 +318,6 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryOptionAsync<T, Disk> {
     pub async fn load(&mut self) -> Result<&T, Box<bincode::ErrorKind>> {
         if self.inner.value.is_none() {
             let mut read_disk = pin!(self.inner.disk.read_disk().await?);
-            read_disk.rewind().await?;
             match self.mode {
                 BackedEntryWriteMode::Sync => {
                     return Err(Box::new(bincode::ErrorKind::Custom(
