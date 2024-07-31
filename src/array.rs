@@ -8,6 +8,14 @@ use derive_getters::Getters;
 use itertools::Itertools;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(feature = "async")]
+use {
+    async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter},
+    futures::{SinkExt, StreamExt},
+    tokio::io::{AsyncRead, AsyncSeek, AsyncWrite},
+    tokio::task::JoinSet,
+};
+
 use crate::entry::BackedEntryArr;
 
 #[derive(Debug)]
@@ -187,6 +195,83 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
     }
 }
 
+/// Async Read implementations
+#[cfg(feature = "async")]
+impl<
+        T: DeserializeOwned + Send + Sync + 'static,
+        Disk: AsyncRead + AsyncSeek + Unpin + Send + Sync,
+    > BackedArray<T, Disk>
+{
+    /// Async version of [`Self::get`].
+    pub async fn get_async(&mut self, idx: usize) -> Result<&T, BackedArrayError> {
+        let loc = self
+            .internal_idx(idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        println!("Loc: {:?}", loc);
+        Ok(&self.entries[loc.entry_idx]
+            .load_async()
+            .await
+            .map_err(BackedArrayError::Bincode)?[loc.inside_entry_idx])
+    }
+
+    /// Async version of [`Self::get_multiple`].
+    ///
+    /// Preserves ordering and fails on any error within processing.
+    pub async fn get_multiple_async<'a, I>(&'a mut self, idxs: I) -> bincode::Result<Vec<&'a T>>
+    where
+        I: IntoIterator<Item = usize> + 'a,
+    {
+        let mut load_futures: JoinSet<Result<Vec<(usize, &'static T)>, bincode::Error>> =
+            JoinSet::new();
+        let mut total_size = 0;
+        let translated_idxes = self
+            .multiple_internal_idx(idxs)
+            .map(|x| {
+                total_size += 1;
+                x
+            })
+            .enumerate()
+            .sorted_by(|(_, a_loc), (_, b_loc)| Ord::cmp(&a_loc.entry_idx, &b_loc.entry_idx))
+            .group_by(|(_, loc)| loc.entry_idx);
+
+        // TODO: add explanation
+        // I'm not crazy, this pointer witchcraft is safe
+        unsafe {
+            // Evade sync checks by casting to a safe type for pointers
+            let entries_ptr = self.entries.as_mut_ptr() as usize;
+
+            for (key, group) in translated_idxes.into_iter() {
+                let group = group.into_iter().collect_vec();
+                load_futures.spawn(async move {
+                    let entry = &mut *(entries_ptr as *mut BackedEntryArr<T, Disk>).add(key);
+                    let arr = entry.load_async().await?;
+                    let arr_ptr = arr.as_ptr();
+                    Ok(group
+                        .into_iter()
+                        .map(|(ordering, loc)| {
+                            Some((ordering, arr_ptr.add(loc.inside_entry_idx).as_ref()?))
+                        })
+                        .collect::<Option<Vec<_>>>()
+                        .ok_or(bincode::ErrorKind::Custom("Missing an entry".to_string()))?)
+                });
+            }
+        }
+
+        let mut results = Vec::with_capacity(total_size);
+
+        while let Some(loaded) = load_futures.join_next().await {
+            results
+                .append(&mut loaded.map_err(|e| bincode::ErrorKind::Custom(format!("{:?}", e)))??)
+        }
+
+        Ok(results
+            .into_iter()
+            .sorted_by(|(a_idx, _), (b_idx, _)| Ord::cmp(a_idx, b_idx))
+            .map(|(_, val)| val)
+            .collect())
+    }
+}
+
 /// Write implementations
 impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     /// Adds new values by writing them to the backing store.
@@ -259,6 +344,40 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     }
 }
 
+/// Async Write implementations
+#[cfg(feature = "async")]
+impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedArray<T, Disk> {
+    /// Async version of [`Self::append`]
+    pub async fn append_async(
+        &mut self,
+        values: &[T],
+        backing_store: Disk,
+    ) -> bincode::Result<&Self> {
+        // End of a range is exclusive
+        let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
+        self.keys.push(start_idx..(start_idx + values.len()));
+        let mut entry = BackedEntryArr::new(backing_store);
+        entry.write_unload_async(values).await?;
+        self.entries.push(entry);
+        Ok(self)
+    }
+
+    /// Async version of [`Self::append_memory`]
+    pub async fn append_memory_async(
+        &mut self,
+        values: Box<[T]>,
+        backing_store: Disk,
+    ) -> bincode::Result<&Self> {
+        // End of a range is exclusive
+        let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
+        self.keys.push(start_idx..(start_idx + values.len()));
+        let mut entry = BackedEntryArr::new(backing_store);
+        entry.write_async(values).await?;
+        self.entries.push(entry);
+        Ok(self)
+    }
+}
+
 impl<T, Disk> BackedArray<T, Disk> {
     /// Removes an entry with the internal index, shifting ranges.
     ///
@@ -303,11 +422,40 @@ impl<T: Serialize, Disk: Serialize> BackedArray<T, Disk> {
     }
 }
 
+#[cfg(feature = "async")]
+impl<T: Serialize, Disk: Serialize> BackedArray<T, Disk> {
+    /// Async version of [`Self::save_to_disk`]
+    pub async fn save_to_disk_async<W: AsyncWrite + Unpin>(
+        &mut self,
+        writer: &mut W,
+    ) -> bincode::Result<()> {
+        self.clear_memory();
+        AsyncBincodeWriter::from(writer).send(&self).await
+    }
+}
+
 impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
     /// Loads the backed array. Does not load backing arrays, unless this
     /// was saved with data (was not saved with [`Self::save_to_disk`]).
     pub fn load<R: Read>(&mut self, writer: &mut R) -> bincode::Result<Self> {
         self.clear_memory();
         deserialize_from(writer)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
+    /// Async version of [`Self::load`]
+    pub async fn load_async<R: AsyncRead + Unpin>(
+        &mut self,
+        writer: &mut R,
+    ) -> bincode::Result<Self> {
+        self.clear_memory();
+        AsyncBincodeReader::from(writer)
+            .next()
+            .await
+            .ok_or(bincode::ErrorKind::Custom(
+                "AsyncBincodeReader stream empty".to_string(),
+            ))?
     }
 }
