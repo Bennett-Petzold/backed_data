@@ -1,13 +1,25 @@
-#[cfg(feature = "async")]
-pub mod async_impl;
+//#[cfg(feature = "async")]
+//pub mod async_impl;
 pub mod sync_impl;
 
 use std::{
-    ops::{Index, IndexMut, Range},
+    borrow::{Borrow, BorrowMut},
+    cell::{Ref, RefMut},
+    ops::{Deref, Index, IndexMut, Range},
     slice::{Iter, IterMut, SliceIndex},
+    sync::{Mutex, MutexGuard},
 };
 
 use derive_getters::Getters;
+
+#[cfg(feature = "encrypted")]
+use secrets::traits::Bytes;
+use serde::Deserialize;
+
+use crate::{
+    entry::BackedEntry,
+    utils::{ToMut, ToRef},
+};
 
 #[derive(Debug)]
 pub enum BackedArrayError {
@@ -70,29 +82,130 @@ where
     idxs.into_iter().map(|idx| internal_idx(keys, idx))
 }
 
-pub trait Container:
-    Default
-    + IndexMut<usize, Output: Sized>
-    + AsRef<[Self::Output]>
-    + AsMut<[Self::Output]>
-    + FromIterator<Self::Output>
-    + IntoIterator<Item = Self::Output>
-    + Extend<Self::Output>
+pub trait RefIter<T> {
+    fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>>;
+}
+
+pub trait Container: AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::Data> {
+    type Data;
+
+    fn c_get(&self, index: usize) -> Option<impl AsRef<Self::Data>>;
+    fn c_get_mut(&mut self, index: usize) -> Option<impl AsMut<Self::Data>>;
+}
+
+pub trait ResizingContainer:
+    Container
+    + Default
+    + FromIterator<Self::Data>
+    + IntoIterator<Item = Self::Data>
+    + Extend<Self::Data>
 {
-    /// [`Vec::last`].
-    fn c_push(&mut self, value: Self::Output);
-    fn c_remove(&mut self, index: usize) -> Self::Output;
+    fn c_push(&mut self, value: Self::Data);
+    fn c_remove(&mut self, index: usize);
     fn c_append(&mut self, other: &mut Self);
 }
 
+pub trait BackedEntryContainer {
+    type Container;
+    type Disk: for<'de> Deserialize<'de>;
+    fn get_ref(&self) -> &BackedEntry<Self::Container, Self::Disk>;
+    fn get_mut(&mut self) -> &mut BackedEntry<Self::Container, Self::Disk>;
+    fn get(self) -> BackedEntry<Self::Container, Self::Disk>;
+}
+
+#[derive(Debug)]
+pub struct ContDiskPair<C, D> {
+    container: C,
+    disk: D,
+}
+
+impl<C: Container, D: for<'de> Deserialize<'de>> BackedEntryContainer for BackedEntry<C, D> {
+    type Container = C;
+    type Disk = D;
+    fn get(self) -> BackedEntry<Self::Container, Self::Disk> {
+        self
+    }
+    fn get_ref(&self) -> &BackedEntry<Self::Container, Self::Disk> {
+        self
+    }
+    fn get_mut(&mut self) -> &mut BackedEntry<Self::Container, Self::Disk> {
+        self
+    }
+}
+
+pub trait BackedEntryContainerStub {}
+
+impl<T> RefIter<T> for Box<[T]> {
+    fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>> {
+        self.iter().map(|v| ToRef(v))
+    }
+}
+
+impl<T> Container for Box<[T]> {
+    type Data = T;
+
+    fn c_get(&self, index: usize) -> Option<impl AsRef<Self::Data>> {
+        self.get(index).map(|v| ToRef(v))
+    }
+    fn c_get_mut(&mut self, index: usize) -> Option<impl AsMut<Self::Data>> {
+        self.get_mut(index).map(|v| ToMut(v))
+    }
+}
+
+impl<T> RefIter<T> for Vec<T> {
+    fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>> {
+        self.iter().map(|v| ToRef(v))
+    }
+}
+
 impl<T> Container for Vec<T> {
-    fn c_push(&mut self, value: Self::Output) {
+    type Data = T;
+
+    fn c_get(&self, index: usize) -> Option<impl AsRef<Self::Data>> {
+        self.get(index).map(|v| ToRef(v))
+    }
+    fn c_get_mut(&mut self, index: usize) -> Option<impl AsMut<Self::Data>> {
+        self.get_mut(index).map(|v| ToMut(v))
+    }
+}
+
+impl<T> ResizingContainer for Vec<T> {
+    fn c_push(&mut self, value: Self::Data) {
         self.push(value)
     }
-    fn c_remove(&mut self, index: usize) -> Self::Output {
-        self.remove(index)
+    fn c_remove(&mut self, index: usize) {
+        self.remove(index);
     }
     fn c_append(&mut self, other: &mut Self) {
         self.append(other)
     }
 }
+
+/*
+#[cfg(feature = "encrypted")]
+#[derive(Debug)]
+pub struct SecretVec<T: Bytes> {
+    inner: secrets::SecretVec<T>,
+}
+
+#[cfg(feature = "encrypted")]
+impl<T: Bytes> Default for SecretVec<T> {
+    fn default() -> Self {
+        Self {
+            inner: secrets::SecretVec::<T>::zero(0),
+        }
+    }
+}
+
+impl<T: Bytes> Container for SecretVec<T> {
+    fn c_push(&mut self, value: Self::Data) {
+        todo!()
+    }
+    fn c_remove(&mut self, index: usize) -> Self::Data {
+        todo!()
+    }
+    fn c_append(&mut self, other: &mut Self) {
+        todo!()
+    }
+}
+*/

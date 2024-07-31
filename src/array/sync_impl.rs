@@ -1,23 +1,114 @@
 use std::{
+    cell::{OnceCell, UnsafeCell},
     fmt::Debug,
     io::{Read, Write},
     marker::PhantomData,
     ops::Range,
+    rc::Rc,
+    sync::{Mutex, MutexGuard},
 };
 
 use bincode::{deserialize_from, serialize_into};
 use derive_getters::Getters;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 
-use crate::entry::{
-    sync_impl::{BackedEntryMut, ReadDisk, WriteDisk},
-    BackedEntry, BackedEntryArr, BackedEntryUnload,
+use crate::{
+    entry::{
+        sync_impl::{BackedEntryMut, ReadDisk, WriteDisk},
+        BackedEntry, BackedEntryArr, BackedEntryUnload,
+    },
+    utils::{AsRefMut, ToMut, ToRef},
 };
 
 use super::{
     internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayEntry,
-    BackedArrayError, Container,
+    BackedArrayError, BackedEntryContainer, Container, ResizingContainer,
 };
+
+#[derive(Debug)]
+struct GuardToRef<'a, T>(MutexGuard<'a, T>);
+
+impl<T> AsRef<T> for GuardToRef<'_, T> {
+    fn as_ref(&self) -> &T {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+struct GuardToMut<'a, T>(MutexGuard<'a, T>);
+
+impl<T> AsMut<T> for GuardToMut<'_, T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut self.0
+    }
+}
+
+/// Trait to combine Mutex (allowing panics) and UnsafeCell in one generic.
+///
+/// Mutex provides the thread-safe access pattern, UnsafeCell optimizes for
+/// single-threaded performance.
+pub trait ProtectedAccess {
+    type Val;
+    /// Mutable reference return from an immutable context.
+    ///
+    /// Intended for structs where mutation is used to set a single value and
+    /// hold that value across multiple mutable calls.
+    ///
+    /// # Safety
+    /// This should only be used to update values in a way that does not
+    /// invalidate any other live references. Borrow self mutably before any
+    /// invalidations, to make sure no references exist.
+    unsafe fn get_mut_unsafe(&self) -> impl AsMut<Self::Val>;
+    /// Immutable reference return.
+    ///
+    /// # Safety
+    /// Requires [`Self::get_mut_unsafe`] is used properly to be valid.
+    unsafe fn get_unsafe(&self) -> impl AsRef<Self::Val>;
+    /// Regular mutable reference return.
+    /// # Safety
+    /// Requires [`Self::get_mut_unsafe`] is used properly to be valid.
+    fn get_mut(&mut self) -> impl AsMut<Self::Val>;
+    fn inner(self) -> Self::Val;
+    fn wrap(val: Self::Val) -> Self;
+}
+
+impl<T> ProtectedAccess for Mutex<T> {
+    type Val = T;
+    unsafe fn get_mut_unsafe(&self) -> impl AsMut<Self::Val> {
+        GuardToMut(self.lock().unwrap())
+    }
+    unsafe fn get_unsafe(&self) -> impl AsRef<Self::Val> {
+        GuardToRef(self.lock().unwrap())
+    }
+    fn get_mut(&mut self) -> impl AsMut<Self::Val> {
+        ToMut(self.get_mut().unwrap())
+    }
+    fn inner(self) -> Self::Val {
+        self.into_inner().unwrap()
+    }
+    fn wrap(val: Self::Val) -> Self {
+        Self::new(val)
+    }
+}
+
+impl<T> ProtectedAccess for UnsafeCell<T> {
+    type Val = T;
+    unsafe fn get_mut_unsafe(&self) -> impl AsMut<Self::Val> {
+        ToMut(&mut *self.get())
+    }
+    unsafe fn get_unsafe(&self) -> impl AsRef<Self::Val> {
+        ToRef(&*self.get())
+    }
+    fn get_mut(&mut self) -> impl AsMut<Self::Val> {
+        ToMut(self.get_mut())
+    }
+    fn inner(self) -> Self::Val {
+        self.into_inner()
+    }
+    fn wrap(val: Self::Val) -> Self {
+        Self::new(val)
+    }
+}
 
 /// Array stored as multiple arrays on disk.
 ///
@@ -38,7 +129,6 @@ pub struct BackedArray<T, Disk, K, E> {
     // keys and entries must always have the same length
     // keys must always be sorted min-max
     keys: K,
-    //#[serde(deserialize_with = "entries_deserialize")]
     entries: E,
     _phantom: (PhantomData<T>, PhantomData<Disk>),
 }
@@ -54,7 +144,7 @@ impl<T, Disk, K: Clone, E: Clone> Clone for BackedArray<T, Disk, K, E> {
 }
 
 pub type VecBackedArray<T, Disk> =
-    BackedArray<T, Disk, Vec<Range<usize>>, Vec<BackedEntryArr<T, Disk>>>;
+    BackedArray<T, Disk, Vec<Range<usize>>, Vec<Mutex<BackedEntryArr<T, Disk>>>>;
 
 impl<T, Disk, K: Default, E: Default> Default for BackedArray<T, Disk, K, E> {
     fn default() -> Self {
@@ -72,16 +162,14 @@ impl<T, Disk, K: Default, E: Default> BackedArray<T, Disk, K, E> {
     }
 }
 
-impl<T, Disk, K: Container<Output = Range<usize>>, E> BackedArray<T, Disk, K, E> {
+impl<T, Disk, K: Container<Data = Range<usize>>, E> BackedArray<T, Disk, K, E> {
     /// Total size of stored data.
     pub fn len(&self) -> usize {
         self.keys.as_ref().last().unwrap_or(&(0..0)).end
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr<T, Disk>>>
-    BackedArray<T, Disk, K, E>
-{
+impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container> BackedArray<T, Disk, K, E> {
     /// Number of underlying chunks.
     pub fn chunks_len(&self) -> usize {
         self.entries.as_ref().len()
@@ -92,59 +180,48 @@ impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr<T, Disk>>>
-    BackedArray<T, Disk, K, E>
-where
-    E::Output: BackedEntryUnload,
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K,
+        E: Container<Data: ProtectedAccess<Val: BackedEntryContainer>>,
+    > BackedArray<T, Disk, K, E>
 {
     /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
-        self.entries
-            .as_mut()
-            .iter_mut()
-            .for_each(|entry| entry.unload());
+        self.entries.as_mut().iter_mut().for_each(|entry| {
+            let mut entry = entry.get_mut();
+            entry.as_mut().get_mut().unload()
+        });
     }
 
     /// Move the chunk at `idx` out of memory.
     pub fn clear_chunk(&mut self, idx: usize) {
-        self.entries[idx].unload();
+        if let Some(mut val) = self.entries.c_get_mut(idx) {
+            let mut entry = val.as_mut().get_mut();
+            entry.as_mut().get_mut().unload()
+        }
     }
 }
 
 impl<
         T,
         Disk: for<'de> Deserialize<'de>,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<Data: ProtectedAccess<Val: BackedEntryContainer>>,
     > BackedArray<T, Disk, K, E>
 {
-    /// Returns all backing entries and the range they cover.
-    pub fn backed_array_entries(
-        &self,
-    ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>> {
-        self.keys
-            .as_ref()
-            .iter()
-            .zip(self.entries.as_ref().iter())
-            .map(BackedArrayEntry::from)
-    }
-
-    /// Returns all currently loaded backing entries and the range they cover.
-    pub fn loaded_array_entries(
-        &self,
-    ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>> {
-        self.backed_array_entries().filter(
-            |backed: &BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>| backed.entry.is_loaded(),
-        )
-    }
-
     /// Returns the number of items currently loaded into memory.
     ///
     /// To get memory usage on constant-sized items, multiply this value by
     /// the per-item size.
     pub fn loaded_len(&self) -> usize {
-        self.loaded_array_entries()
-            .map(|backed| backed.range.len())
+        self.entries
+            .as_ref()
+            .iter()
+            .zip(self.keys.as_ref())
+            .filter(|(ent, _)| unsafe { ent.get_unsafe().as_ref() }.get_ref().is_loaded())
+            .map(|(_, key)| key.len())
             .sum()
     }
 }
@@ -152,11 +229,9 @@ impl<
 impl<
         T,
         Disk: for<'de> Deserialize<'de>,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<Data: ProtectedAccess<Val: BackedEntryContainer>>,
     > BackedArray<T, Disk, K, E>
-where
-    E::Output: BackedEntryUnload,
 {
     /// Removes all backing stores not needed to hold `idxs` in memory.
     pub fn shrink_to_query(&mut self, idxs: &[usize]) {
@@ -165,27 +240,12 @@ where
             .iter()
             .enumerate()
             .filter(|(_, key)| !idxs.iter().any(|idx| key.contains(idx)))
-            .for_each(|(idx, _)| self.entries[idx].unload());
-    }
-}
-
-impl<
-        T: DeserializeOwned + Clone,
-        Disk: ReadDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
-    > From<BackedArray<T, Disk, K, E>> for bincode::Result<Box<[T]>>
-{
-    fn from(mut val: BackedArray<T, Disk, K, E>) -> Self {
-        Ok(val
-            .entries
-            .as_mut()
-            .iter_mut()
-            .map(|entry| entry.load())
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flat_map(|entry| entry.iter().cloned())
-            .collect())
+            .for_each(|(idx, _)| {
+                self.entries.c_get_mut(idx).map(|mut v| {
+                    let mut v = v.as_mut().get_mut();
+                    v.as_mut().get_mut().unload()
+                });
+            });
     }
 }
 
@@ -193,19 +253,37 @@ impl<
 impl<
         T: DeserializeOwned,
         Disk: ReadDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<
+            Data: ProtectedAccess<
+                Val: BackedEntryContainer<
+                    Container: Container<Data: DeserializeOwned>,
+                    Disk: ReadDisk,
+                >,
+            >,
+        >,
     > BackedArray<T, Disk, K, E>
 {
     /// Return a value (potentially loading its backing array).
     ///
     /// Backing arrays stay in memory until freed.
-    pub fn get(&mut self, idx: usize) -> Result<&T, BackedArrayError> {
+    pub fn get(&self, idx: usize) -> Result<impl AsRef<T>, BackedArrayError> {
         let loc = internal_idx(self.keys.as_ref(), idx)
             .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-        Ok(&self.entries[loc.entry_idx]
+
+        // TODO: figure out how to satisify the compiler on lifetimes without
+        // using unsafe pointers to trick it.
+        let entry = self
+            .entries
+            .c_get(loc.entry_idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        let entry: *mut _ = unsafe { entry.as_ref().get_mut_unsafe() }.as_mut();
+        unsafe { &mut *entry }
+            .get_mut()
             .load()
-            .map_err(BackedArrayError::Bincode)?[loc.inside_entry_idx])
+            .map_err(BackedArrayError::Bincode)?
+            .c_get(loc.inside_entry_idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))
     }
 
     /// Produces a vector for all requested indicies.
@@ -213,35 +291,32 @@ impl<
     /// Loads all necessary backing arrays into memory until freed.
     /// Invalid indicies will be silently dropped. Use the strict version
     /// ([`Self::get_multiple_strict`]) to get errors on invalid indicies.
-    pub fn get_multiple<'a, I>(&'a mut self, idxs: I) -> Vec<bincode::Result<&'a T>>
+    pub fn get_multiple<'a, I>(&'a self, idxs: I) -> Vec<bincode::Result<&'a T>>
     where
         I: IntoIterator<Item = usize> + 'a,
     {
-        // Unsafe needed to mutate array entries with load inside the iterator.
-        // The code is safe: iterators execute sequentially, so loads to the
-        // same entry will not interleave, and the resultant borrowing follows
-        // the usual rules.
-        let entries_ptr = self.entries.as_mut().as_mut_ptr();
         multiple_internal_idx(self.keys.as_ref(), idxs)
-            .map(|loc| unsafe {
-                Ok(&(*entries_ptr.add(loc.entry_idx)).load()?[loc.inside_entry_idx])
+            .map(|loc| {
+                let entry = self.entries.c_get(loc.entry_idx).unwrap();
+                let entry: *mut _ = unsafe { entry.as_ref().get_mut_unsafe().as_mut() };
+                Ok(&(unsafe { &mut *entry }).load()?[loc.inside_entry_idx])
             })
             .collect()
     }
 
     /// [`Self::get_multiple`], but returns Errors for invalid idx.
-    pub fn get_multiple_strict<'a, I>(&'a mut self, idxs: I) -> Vec<Result<&'a T, BackedArrayError>>
+    pub fn get_multiple_strict<'a, I>(&'a self, idxs: I) -> Vec<Result<&'a T, BackedArrayError>>
     where
         I: IntoIterator<Item = usize> + 'a,
     {
-        // See [`Self::get_multiple_entries`] note.
-        let entries_ptr = self.entries.as_mut().as_mut_ptr();
         multiple_internal_idx_strict(self.keys.as_ref(), idxs)
             .enumerate()
             .map(|(idx, loc)| {
                 let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-                unsafe {
-                    Ok(&(*entries_ptr.add(loc.entry_idx))
+                {
+                    let entry = self.entries.c_get(loc.entry_idx).unwrap();
+                    let entry: *mut _ = unsafe { entry.as_ref().get_mut_unsafe().as_mut() };
+                    Ok(&(unsafe { &mut *entry })
                         .load()
                         .map_err(BackedArrayError::Bincode)?[loc.inside_entry_idx])
                 }
@@ -253,10 +328,10 @@ impl<
     ///
     /// See [`Self::get_chunk_mut`] for a modifiable handle.
     pub fn get_chunk(&mut self, idx: usize) -> Option<bincode::Result<&[T]>> {
-        self.entries
-            .as_mut()
-            .get_mut(idx)
-            .map(|arr| arr.load().map(|entry| entry.as_ref()))
+        self.entries.as_ref().get(idx).map(|arr| {
+            let arr: *mut _ = unsafe { arr.get_mut_unsafe().as_mut() };
+            unsafe { &mut *arr }.load().map(|entry| entry.as_ref())
+        })
     }
 }
 
@@ -264,8 +339,8 @@ impl<
 impl<
         T: Serialize,
         Disk: WriteDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: ResizingContainer<Data = Range<usize>>,
+        E: ResizingContainer<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Adds new values by writing them to the backing store.
@@ -308,7 +383,7 @@ impl<
         self.keys.c_push(start_idx..(start_idx + values.len()));
         let mut entry = BackedEntryArr::new(backing_store);
         entry.write_unload(values)?;
-        self.entries.c_push(entry);
+        self.entries.c_push(E::Data::wrap(entry));
         Ok(self)
     }
 
@@ -349,7 +424,7 @@ impl<
         self.keys.c_push(start_idx..(start_idx + values.len()));
         let mut entry = BackedEntryArr::new(backing_store);
         entry.write(values)?;
-        self.entries.c_push(entry);
+        self.entries.c_push(E::Data::wrap(entry));
         Ok(self)
     }
 }
@@ -357,59 +432,75 @@ impl<
 impl<
         T: Serialize + DeserializeOwned,
         Disk: WriteDisk + ReadDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Returns a mutable handle to a given chunk.
     pub fn get_chunk_mut(
         &mut self,
         idx: usize,
-    ) -> Option<bincode::Result<BackedEntryMut<Box<[T]>, Disk>>> {
-        self.entries
-            .as_mut()
-            .get_mut(idx)
-            .map(|arr| arr.mut_handle())
+    ) -> Option<
+        bincode::Result<
+            BackedEntryMut<Box<[T]>, Disk, impl AsMut<BackedEntry<Box<[T]>, Disk>> + '_>,
+        >,
+    > {
+        self.entries.as_mut().get_mut(idx).map(|arr| {
+            // Too many layers of wrapping for compiler to solve lifetimes
+            let arr = arr.get_mut();
+            BackedEntryMut::mut_handle(arr)
+        })
     }
 }
 
 impl<
         T,
         Disk: for<'de> Deserialize<'de>,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: ResizingContainer<Data = Range<usize>>,
+        E: ResizingContainer<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to indentify the target index.
     pub fn remove(&mut self, entry_idx: usize) -> &mut Self {
-        let width = self.keys[entry_idx].len();
-        self.keys.c_remove(entry_idx);
-        self.entries.c_remove(entry_idx);
+        // This split is necessary to solve lifetimes
+        let width = self.keys.c_get(entry_idx).map(|entry| entry.as_ref().len());
 
-        // Shift all later ranges downwards
-        self.keys
-            .as_mut()
-            .iter_mut()
-            .skip(entry_idx)
-            .for_each(|key_range| {
-                key_range.start -= width;
-                key_range.end -= width
-            });
+        if let Some(width) = width {
+            self.keys.c_remove(entry_idx);
+            self.entries.c_remove(entry_idx);
+
+            // Shift all later ranges downwards
+            self.keys
+                .as_mut()
+                .iter_mut()
+                .skip(entry_idx)
+                .for_each(|key_range| {
+                    key_range.start -= width;
+                    key_range.end -= width
+                });
+        }
 
         self
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr<T, Disk>>>
-    BackedArray<T, Disk, K, E>
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
+    > BackedArray<T, Disk, K, E>
 {
     pub fn get_disks(&self) -> Vec<&Disk> {
         self.entries
             .as_ref()
             .iter()
-            .map(|entry| entry.get_disk())
+            .map(|entry| {
+                let entry: *mut _ = unsafe { entry.get_mut_unsafe().as_mut() };
+                unsafe { &mut *entry }.get_disk()
+            })
             .collect()
     }
 
@@ -420,7 +511,11 @@ impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr
         self.entries
             .as_mut()
             .iter_mut()
-            .map(|entry| entry.get_disk_mut())
+            .map(|entry| {
+                let mut entry = entry.get_mut();
+                let entry: *mut _ = entry.as_mut();
+                unsafe { &mut *entry }.get_disk_mut()
+            })
             .collect()
     }
 }
@@ -429,7 +524,7 @@ impl<
         T,
         Disk: WriteDisk,
         K: Serialize,
-        E: Container<Output = BackedEntryArr<T, Disk>> + Serialize,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>> + Serialize,
     > BackedArray<T, Disk, K, E>
 {
     /// Serializes this to disk after clearing all entries from memory to disk.
@@ -446,7 +541,7 @@ impl<
         T,
         Disk: WriteDisk,
         K: for<'de> Deserialize<'de>,
-        E: Container<Output = BackedEntryArr<T, Disk>> + for<'df> Deserialize<'df>,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>> + for<'df> Deserialize<'df>,
     > BackedArray<T, Disk, K, E>
 {
     /// Loads the backed array. Does not load backing arrays, unless this
@@ -459,8 +554,8 @@ impl<
 impl<
         T: Clone,
         Disk: for<'de> Deserialize<'de> + Clone,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: ResizingContainer<Data = Range<usize>>,
+        E: ResizingContainer<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Combine `self` and `rhs` into a new [`Self`].
@@ -486,7 +581,7 @@ impl<
                 .as_ref()
                 .iter()
                 .chain(rhs.entries.as_ref().iter())
-                .cloned()
+                .map(|ent| E::Data::wrap(unsafe { ent.get_unsafe().as_ref() }.clone()))
                 .collect(),
             _phantom: (PhantomData, PhantomData),
         }
@@ -500,7 +595,12 @@ impl<
                 .iter()
                 .map(|range| (range.start + offset)..(range.end + offset)),
         );
-        self.entries.extend(rhs.entries.as_ref().iter().cloned());
+        self.entries.extend(
+            rhs.entries
+                .as_ref()
+                .iter()
+                .map(|ent| E::Data::wrap(unsafe { ent.get_unsafe().as_ref() }.clone())),
+        );
         self
     }
 }
@@ -508,8 +608,8 @@ impl<
 impl<
         T,
         Disk: for<'de> Deserialize<'de>,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: ResizingContainer<Data = Range<usize>>,
+        E: ResizingContainer<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Moves all entries of `rhs` into `self`.
@@ -529,11 +629,11 @@ impl<
 impl<
         T: for<'df> Deserialize<'df>,
         Disk: ReadDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
-    /// Outputs items in order.
+    /// Datas items in order.
     ///
     /// Excluding chunks before the initial offset, all chunks will load in
     /// and remain loaded during iteration.
@@ -550,7 +650,14 @@ impl<
             inner_pos = loc.inside_entry_idx;
         };
 
-        self.chunk_iter(outer_pos)
+        self.entries
+            .as_mut()
+            .iter_mut()
+            .skip(outer_pos)
+            .map(|entry| {
+                let entry: *mut _ = entry.get_mut().as_mut();
+                unsafe { &mut *entry }.load()
+            })
             .flat_map(|chunk| {
                 let chunk: Box<dyn Iterator<Item = bincode::Result<&T>>> = match chunk {
                     Ok(chunk_ok) => Box::new(chunk_ok.iter().map(Ok)),
@@ -567,20 +674,22 @@ impl<
     ///
     /// # Arguments
     /// * `offset`: Starting chunk (skips loading offset - 1 chunks)
-    pub fn chunk_iter(&mut self, offset: usize) -> impl Iterator<Item = bincode::Result<&[T]>> {
-        self.entries
-            .as_mut()
-            .iter_mut()
-            .skip(offset)
-            .map(|entry| entry.load().map(|entry| entry.as_ref()))
+    pub fn chunk_iter(
+        &mut self,
+        offset: usize,
+    ) -> impl Iterator<Item = bincode::Result<impl AsRef<[T]> + '_>> {
+        self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
+            let entry: *mut _ = entry.get_mut().as_mut();
+            unsafe { &mut *entry }.load().map(|entry| entry)
+        })
     }
 }
 
 impl<
         T: Serialize + DeserializeOwned,
         Disk: ReadDisk + WriteDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
@@ -589,20 +698,23 @@ impl<
     pub fn chunk_mod_iter(
         &mut self,
         offset: usize,
-    ) -> impl Iterator<Item = bincode::Result<BackedEntryMut<Box<[T]>, Disk>>> {
-        self.entries
-            .as_mut()
-            .iter_mut()
-            .skip(offset)
-            .map(|entry| entry.mut_handle())
+    ) -> impl Iterator<
+        Item = bincode::Result<
+            BackedEntryMut<Box<[T]>, Disk, impl AsRefMut<BackedEntry<Box<[T]>, Disk>> + '_>,
+        >,
+    > {
+        self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
+            let entry: *mut _ = entry.get_mut().as_mut();
+            unsafe { &mut *entry }.mut_handle()
+        })
     }
 }
 
 impl<
         T: DeserializeOwned + Clone,
         Disk: ReadDisk,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: Container<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Returns an iterator that outputs clones of chunk data.
@@ -613,6 +725,8 @@ impl<
         offset: usize,
     ) -> impl Iterator<Item = bincode::Result<Vec<T>>> + '_ {
         self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
+            let mut entry = entry.get_mut();
+            let entry = entry.as_mut();
             let val = entry.load()?.to_vec();
             entry.unload();
             Ok(val)
@@ -623,8 +737,8 @@ impl<
 impl<
         T,
         Disk: for<'de> Deserialize<'de>,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: ResizingContainer<Data = Range<usize>>,
+        E: ResizingContainer<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Construct a backed array from entry range, backing storage pairs.
@@ -636,7 +750,8 @@ impl<
     where
         I: IntoIterator<Item = (Range<usize>, BackedEntry<Box<[T]>, Disk>)>,
     {
-        let (keys, entries) = pairs.into_iter().unzip();
+        let (keys, entries): (_, Vec<_>) = pairs.into_iter().unzip();
+        let entries = entries.into_iter().map(|ent| E::Data::wrap(ent)).collect();
         Self {
             keys,
             entries,
@@ -648,8 +763,8 @@ impl<
 impl<
         T,
         Disk: for<'de> Deserialize<'de>,
-        K: Container<Output = Range<usize>>,
-        E: Container<Output = BackedEntryArr<T, Disk>>,
+        K: Container<Data = Range<usize>>,
+        E: ResizingContainer<Data: ProtectedAccess<Val = BackedEntryArr<T, Disk>>>,
     > BackedArray<T, Disk, K, E>
 {
     /// Replaces the underlying entry disk.
@@ -668,7 +783,7 @@ impl<
             entries: self
                 .entries
                 .into_iter()
-                .map(|x| x.replace_disk().into())
+                .map(|x| E::Data::wrap(x.inner().replace_disk().into()))
                 .collect(),
             _phantom: (PhantomData, PhantomData),
         }
@@ -701,6 +816,7 @@ mod tests {
 
         assert_eq!(backed.get(0).unwrap(), &0);
         assert_eq!(backed.get(4).unwrap(), &3);
+        assert_eq!((backed.get(0).unwrap(), backed.get(4).unwrap()), (&0, &3));
         assert_eq!(
             backed
                 .get_multiple([0, 2, 4, 5])
@@ -779,8 +895,8 @@ mod tests {
         backed.append(INPUT_1, back_vector_1).unwrap();
 
         let collected = backed.chunk_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(collected[0], INPUT_0);
-        assert_eq!(collected[1], INPUT_1);
+        assert_eq!(collected[0].as_ref(), INPUT_0);
+        assert_eq!(collected[1].as_ref(), INPUT_1);
         assert_eq!(collected.len(), 2);
     }
 
