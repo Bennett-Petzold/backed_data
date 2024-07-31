@@ -1,0 +1,111 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `shakespeare_secret` mod in crate `backed_data`."><title>backed_data::examples::shakespeare_secret - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-970bf1bf55bd1c15.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="backed_data" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (f8060d282 2024-07-30)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-f9142fe437216fc3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../backed_data/index.html">backed_<wbr>data</a><span class="version">0.2.0</span></h2></div><h2 class="location"><a href="#">Module shakespeare_<wbr>secret</a></h2><div class="sidebar-elems"><h2><a href="../index.html">In backed_<wbr>data::<wbr>examples</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../../index.html">backed_data</a>::<wbr><a href="../index.html">examples</a>::<wbr><a class="mod" href="#">shakespeare_secret</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../../src/backed_data/examples/shakespeare_secret.rs.html#1-10">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock">
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#![cfg(all(feature = <span class="string">"bincode"</span>, feature = <span class="string">"encrypted"</span>))]
+
+</span><span class="kw">use </span>std::{
+    cell::OnceCell,
+    env::temp_dir,
+    fs::{remove_dir_all, File},
+    io::{BufRead, BufReader},
+    str::{from_utf8, from_utf8_mut},
+};
+
+<span class="kw">use </span>backed_data::{
+    directory::DirectoryBackedArray,
+    entry::{
+        disks::{Encrypted, Plainfile, SecretVecWrapper},
+        formats::BincodeCoder,
+        BackedEntry,
+    },
+};
+
+<span class="kw">fn </span>main() {
+    <span class="kw">let </span>dataset_dir = temp_dir().join(<span class="string">"shakespeare_secret"</span>);
+
+    <span class="comment">// Pull the complete works of Shakespeare from a disk.
+    </span><span class="kw">let </span>shakespeare = BufReader::new(
+        File::open(<span class="string">"shakespeare-dataset/text/king-john_TXT_FolgerShakespeare.txt"</span>).unwrap(),
+    )
+    .lines()
+    .map(|line| line.unwrap());
+
+    <span class="comment">// Initialize a directory backed array that
+    // * Keeps the data in each entry guarded
+    // * Keeps the length of each entry guarded
+    // * Uses OnceCell for lower performance cost, but !Send
+    // * Saves/loads from disk with Aes256Gcm encryption
+    </span><span class="attr">#[allow(clippy::type_complexity)]
+    </span><span class="kw">let </span><span class="kw-2">mut </span>shakespeare_encoded: DirectoryBackedArray&lt;
+        SecretVecWrapper&lt;usize&gt;,
+        Vec&lt;BackedEntry&lt;OnceCell&lt;SecretVecWrapper&lt;u8&gt;&gt;, Encrypted&lt;Plainfile&gt;, BincodeCoder&lt;<span class="kw">_</span>&gt;&gt;&gt;,
+    &gt; = DirectoryBackedArray::new(dataset_dir.clone()).unwrap();
+
+    <span class="comment">// Add all the lines from the work to the directory as encrypted data.
+    // Use `append_memory` instead of `append` to keep it memory.
+    // Note that Encrypted's default implementation over paths will generate
+    // random encryption keys/nonces that are not accessible.
+    </span><span class="kw">for </span>work <span class="kw">in </span>shakespeare {
+        shakespeare_encoded.append_memory(work).unwrap();
+    }
+
+    <span class="kw">let </span>num_you: usize = shakespeare_encoded
+        .chunk_iter()
+        .map(|chunk| {
+            <span class="kw">let </span>chunk = chunk.unwrap();
+            <span class="kw">let </span>chunk_ref = chunk.borrow();
+            from_utf8(<span class="kw-2">&amp;</span>chunk_ref).unwrap().matches(<span class="string">"you"</span>).count()
+        })
+        .sum();
+    <span class="macro">println!</span>(<span class="string">"# \"you\" prior to modification: {}"</span>, num_you);
+
+    shakespeare_encoded.chunk_mut_iter().for_each(|x| {
+        <span class="kw">let </span><span class="kw-2">mut </span>x = x.unwrap();
+
+        {
+            <span class="comment">// Open the inner value, holding the guards in the local stack.
+            </span><span class="kw">let </span><span class="kw-2">mut </span>opened_x = x.borrow_mut();
+
+            <span class="comment">// View the data as &amp;mut str, but keep it in guarded memory.
+            </span><span class="kw">let </span>var = from_utf8_mut(<span class="kw-2">&amp;mut </span>opened_x).unwrap();
+
+            <span class="comment">// Replace all instances of "thou" with "you", keeping all data (minus
+            // some stack variables) within the protected memory.
+            </span><span class="kw">while let </span><span class="prelude-val">Some</span>(idx) = var.rfind(<span class="string">"thou"</span>) {
+                <span class="kw">let </span>thou = <span class="string">"thou"</span>.as_bytes();
+                <span class="kw">let </span>you = <span class="string">"you"</span>.as_bytes();
+
+                <span class="kw">let </span>var = <span class="kw">unsafe </span>{ var.as_bytes_mut() };
+
+                var[idx..(idx + you.len())].copy_from_slice(you);
+                <span class="kw">for </span>trailing_idx <span class="kw">in </span>(idx + you.len())..(var.len() - (thou.len() - you.len())) {
+                    var[trailing_idx] = var[trailing_idx + <span class="number">1</span>];
+                }
+
+                <span class="kw">for </span>dangling_idx <span class="kw">in </span>var.len() - (thou.len() - you.len())..var.len() {
+                    var[dangling_idx] = <span class="string">b'0'</span>;
+                }
+            }
+        }
+        <span class="comment">// Now that the borrow of `x` is dropped, memory accesses will SIGSEGV.
+
+        // Open access to x temporarily to update encrypted disk.
+        </span>x.flush().unwrap();
+    });
+
+    <span class="kw">let </span>num_you: usize = shakespeare_encoded
+        .chunk_iter()
+        .map(|chunk| {
+            <span class="kw">let </span>chunk = chunk.unwrap();
+            <span class="kw">let </span>chunk_ref = chunk.borrow();
+            from_utf8(<span class="kw-2">&amp;</span>chunk_ref).unwrap().matches(<span class="string">"you"</span>).count()
+        })
+        .sum();
+    <span class="macro">println!</span>(<span class="string">"# \"you\" after modification: {}"</span>, num_you);
+
+    <span class="comment">// Drop the secret "thou" -&gt; "you" translation, clearing out memory and
+    // making it impossible to decode the directory.
+    </span>drop(shakespeare_encoded);
+
+    <span class="comment">// Example cleanup.
+    </span><span class="kw">let _ </span>= remove_dir_all(dataset_dir);
+}</code></pre></div>
+</div></details></section></div></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["cursor_vec"],"mod":["csv_data"],"struct":["CursorVec","OwnedCursorVec"]};

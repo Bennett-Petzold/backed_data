@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["default_client"],"mod":["custom","encrypted","zstd"],"struct":["Mmap","Network","Plainfile","Unbuffered","WriteUnbuffered"],"trait":["AsyncReadDisk","AsyncWriteDisk","ReadDisk","WriteDisk"],"type":["AsyncFile"]};

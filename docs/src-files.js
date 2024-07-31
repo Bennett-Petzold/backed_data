@@ -1,0 +1,4 @@
+var srcIndex = new Map(JSON.parse('[\
+["backed_data",["",[["array",[["async_impl",[],["generic.rs","mod.rs","slice.rs"]],["container",[],["encrypted.rs","mod.rs","standard_types.rs"]],["sync_impl",[],["generic.rs","mod.rs","slice.rs"]]],["mod.rs"]],["directory",[],["async_impl.rs","mod.rs","sync_impl.rs"]],["entry",[["disks",[],["async_file.rs","custom.rs","encrypted.rs","mmap.rs","mod.rs","network.rs","plainfile.rs","unbuffered.rs","write_unbuffered.rs","zstd.rs"]],["formats",[],["async_bincode.rs","async_csv.rs","bincode.rs","csv.rs","mod.rs","serde_json.rs","simd_json.rs"]]],["async_impl.rs","mod.rs","sync_impl.rs"]],["examples",[],["large_reencode.rs","mod.rs","remote_loading.rs","shakespeare_secret.rs"]],["utils",[],["async_compat_cursor.rs","blocking.rs","extender.rs","mod.rs","once.rs","protected.rs","refs.rs"]]],["lib.rs","test_utils.rs"]]]\
+]'));
+createSrcSidebar();

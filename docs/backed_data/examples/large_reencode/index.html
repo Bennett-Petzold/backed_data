@@ -1,0 +1,443 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `large_reencode` mod in crate `backed_data`."><title>backed_data::examples::large_reencode - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-970bf1bf55bd1c15.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="backed_data" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (f8060d282 2024-07-30)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-f9142fe437216fc3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../backed_data/index.html">backed_<wbr>data</a><span class="version">0.2.0</span></h2></div><h2 class="location"><a href="#">Module large_<wbr>reencode</a></h2><div class="sidebar-elems"><h2><a href="../index.html">In backed_<wbr>data::<wbr>examples</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../../index.html">backed_data</a>::<wbr><a href="../index.html">examples</a>::<wbr><a class="mod" href="#">large_reencode</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../../src/backed_data/examples/large_reencode.rs.html#1-3">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock">
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#![cfg(all(feature = <span class="string">"async_zstd"</span>, feature = <span class="string">"async_bincode"</span>, feature = <span class="string">"csv"</span>))]
+
+</span><span class="kw">use </span>std::{
+    env::temp_dir,
+    fs::read_dir,
+    future::ready,
+    io::{Cursor, ErrorKind},
+    path::PathBuf,
+    pin::pin,
+    str::FromStr,
+    time::SystemTime,
+};
+
+<span class="kw">use </span>async_zip::base::read::stream::ZipFileReader;
+<span class="kw">use </span>backed_data::{
+    directory::AsyncZstdDirBackedArray,
+    entry::formats::{AsyncBincodeCoder, AsyncDecoder},
+};
+<span class="kw">use </span>csv::Reader;
+<span class="kw">use </span>fs_extra::dir::get_size;
+<span class="kw">use </span>futures::{stream, Stream, StreamExt, TryStreamExt};
+<span class="kw">use </span>get_size::GetSize;
+<span class="kw">use </span>humansize::{format_size, BINARY};
+<span class="kw">use </span>indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressFinish, ProgressStyle};
+<span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>tokio::{fs::remove_dir_all, join, sync::mpsc, task::spawn_blocking};
+<span class="kw">use </span>tokio_stream::wrappers::UnboundedReceiverStream;
+
+<span class="kw">const </span>BLS_DATA: <span class="kw-2">&amp;</span>str = <span class="string">"https://data.bls.gov/cew/data/files/2023/csv/2023_qtrly_by_industry.zip"</span>;
+<span class="kw">const </span>NUM_ITEMS: usize = <span class="number">2159</span>; <span class="comment">// Manually counted
+</span><span class="kw">const </span>COMPRESSION_LEVEL: u8 = <span class="number">11</span>; <span class="comment">// Middle of range
+
+</span><span class="kw">const </span>ITEMS_PER_ZSTD_FILE: usize = NUM_ITEMS.div_ceil(<span class="number">100</span>);
+<span class="kw">const </span>NUM_ZSTD_FILES: usize = NUM_ITEMS.div_ceil(ITEMS_PER_ZSTD_FILE);
+
+<span class="attr">#[tokio::main]
+</span><span class="kw">async fn </span>main() {
+    <span class="comment">// Manually counted stats
+    </span><span class="macro">println!</span>(<span class="string">"ZIP archive size: ~ 481 MiB"</span>);
+    <span class="macro">println!</span>(<span class="string">"Uncompressed size: ~ 4.4 GiB"</span>);
+
+    <span class="macro">println!</span>(<span class="string">"Concurrent re-encoding buffer: {NUM_ZSTD_FILES} items at once."</span>);
+
+    <span class="kw">let </span>target_dir = temp_dir().join(<span class="string">"backed_data_large_reencode"</span>);
+    <span class="kw">let _ </span>= remove_dir_all(<span class="kw-2">&amp;</span>target_dir).<span class="kw">await</span>;
+    <span class="macro">println!</span>(<span class="string">"Placing files in: {:#?}, deleting at end."</span>, target_dir);
+
+    <span class="comment">// Live terminal progress bars
+    </span><span class="kw">let </span>all_progress = MultiProgress::new();
+    <span class="kw">let </span>(download_pb, unzip_pb, schedule_pb, decode_csv_pb, encrypt_pb, unify_pb) =
+        create_progress_bars(all_progress.clone());
+
+    <span class="comment">// Generate a stream from the remote CSV file.
+    </span><span class="kw">let </span>bls_stream = bls_setup(download_pb, unzip_pb);
+
+    <span class="comment">// Create a stream of backed arrays
+    </span><span class="kw">let </span><span class="kw-2">mut </span>bls_backings = <span class="macro">pin!</span>(bls_stream
+        .map(|raw_data| {
+            <span class="kw">let </span>decode_csv_pb = decode_csv_pb.clone();
+            <span class="kw">async move </span>{
+                <span class="comment">// Use a blocking thread to run csv conversion
+                </span><span class="kw">let </span>data: Vec&lt;QecwData&gt; = spawn_blocking(|| {
+                    Reader::from_reader(Cursor::new(raw_data))
+                        .deserialize()
+                        .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()
+                        .unwrap()
+                })
+                .<span class="kw">await
+                </span>.unwrap();
+                decode_csv_pb.inc(<span class="number">1</span>);
+
+                data
+            }
+        })
+        <span class="comment">// Collect many CSV files for one ZSTD backing
+        </span>.chunks(ITEMS_PER_ZSTD_FILE)
+        .map(|data| {
+            schedule_pb.inc(<span class="number">1</span>);
+
+            <span class="kw">let </span>target_dir = target_dir.clone();
+            <span class="kw">let </span>encrypt_pb = encrypt_pb.clone();
+            <span class="kw">async move </span>{
+                <span class="comment">// Spawn each encoding to execute concurrently
+                </span>tokio::spawn(<span class="kw">async move </span>{
+                    <span class="comment">// Collect the CSV conversion futures, once the blocking
+                    // thread is done.
+                    </span><span class="kw">let </span>data: Vec&lt;<span class="kw">_</span>&gt; = stream::iter(data)
+                        .then(|data| data)
+                        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+                        .<span class="kw">await
+                        </span>.into_iter()
+                        .flatten()
+                        .collect();
+
+                    <span class="comment">// Create a random UUID file in `target_dir`
+                    </span><span class="kw">let </span><span class="kw-2">mut </span>backing = AsyncZstdDirBackedArray::&lt;
+                        COMPRESSION_LEVEL,
+                        QecwData,
+                        AsyncBincodeCoder&lt;<span class="kw">_</span>&gt;,
+                    &gt;::a_new(target_dir)
+                    .<span class="kw">await
+                    </span>.unwrap();
+
+                    <span class="comment">// Re-encode the data as zstd-compressed bincode, removing
+                    // it from memory and flushing to disk.
+                    </span>backing.a_append(data).<span class="kw">await</span>.unwrap();
+
+                    encrypt_pb.inc(<span class="number">1</span>);
+
+                    backing
+                })
+                .<span class="kw">await
+                </span>.unwrap()
+            }
+        })
+        <span class="comment">// Wait for the spawned futures in no particular order.
+        </span>.buffer_unordered(NUM_ZSTD_FILES));
+
+    <span class="comment">// Combine all the files in this directory into one representation, as soon
+    // as they are complete.
+    </span><span class="kw">let </span><span class="kw-2">mut </span>backing_array = bls_backings.next().<span class="kw">await</span>.unwrap();
+    unify_pb.inc(<span class="number">1</span>);
+    <span class="kw">while let </span><span class="prelude-val">Some</span>(backing) = bls_backings.next().<span class="kw">await </span>{
+        backing_array.a_append_dir(backing).<span class="kw">await</span>.unwrap();
+        unify_pb.inc(<span class="number">1</span>);
+    }
+
+    all_progress.set_draw_target(ProgressDrawTarget::hidden());
+
+    <span class="comment">// Collect and print some stats about backed array
+    </span>show_load_data(backing_array, <span class="kw-2">&amp;</span>target_dir).<span class="kw">await</span>;
+
+    remove_dir_all(<span class="kw-2">&amp;</span>target_dir).<span class="kw">await</span>.unwrap();
+}
+
+<span class="comment">// ---------- Code beyond this point is not key to the example ---------- //
+
+</span><span class="doccomment">/// Set up a stream that downloads and unzips bls data.
+</span><span class="kw">fn </span>bls_setup(download_pb: ProgressBar, unzip_pb: ProgressBar) -&gt; <span class="kw">impl </span>Stream&lt;Item = Vec&lt;u8&gt;&gt; {
+    <span class="kw">let </span>(tx, bls_data_rx) = mpsc::unbounded_channel();
+
+    <span class="comment">// Pull BLS data from remote.
+    </span>tokio::spawn(<span class="kw">async move </span>{
+        <span class="kw">let </span><span class="kw-2">mut </span>bls_response = reqwest::get(reqwest::Url::from_str(BLS_DATA).unwrap())
+            .<span class="kw">await
+            </span>.unwrap();
+        download_pb.set_length(bls_response.content_length().unwrap());
+        <span class="kw">loop </span>{
+            <span class="kw">match </span>bls_response.chunk().<span class="kw">await </span>{
+                <span class="prelude-val">Err</span>(x) =&gt; tx
+                    .send(<span class="prelude-val">Err</span>(std::io::Error::new(ErrorKind::Other, x)))
+                    .unwrap(),
+                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; <span class="kw">break</span>,
+                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(x)) =&gt; {
+                    download_pb.inc(x.len() <span class="kw">as </span>u64);
+                    tx.send(<span class="prelude-val">Ok</span>(x)).unwrap()
+                }
+            }
+        }
+    });
+
+    <span class="comment">// Mutate the BLS rx into a zip file reader
+    </span><span class="kw">let </span>bls_data_stream = UnboundedReceiverStream::new(bls_data_rx).into_async_read();
+    <span class="kw">let </span>bls_unzip = ZipFileReader::new(bls_data_stream);
+
+    <span class="comment">// Future stream that produces each bls entry
+    </span>stream::unfold(bls_unzip, <span class="kw">move </span>|bls_unzip| {
+        <span class="kw">let </span>unzip_pb = unzip_pb.clone();
+        <span class="kw">async move </span>{
+            <span class="kw">let </span><span class="kw-2">mut </span>bls_unzip = bls_unzip.next_with_entry().<span class="kw">await</span>.unwrap()<span class="question-mark">?</span>;
+            <span class="kw">let </span><span class="kw-2">mut </span>sink = Vec::new();
+            bls_unzip
+                .reader_mut()
+                .read_to_end_checked(<span class="kw-2">&amp;mut </span>sink)
+                .<span class="kw">await
+                </span>.unwrap();
+            unzip_pb.inc(<span class="number">1</span>);
+            <span class="prelude-val">Some</span>((sink, bls_unzip.done().<span class="kw">await</span>.unwrap()))
+        }
+    })
+}
+
+<span class="comment">// ---------- Code beyond this point is unrelated to the processing pipeline ---------- //
+
+</span><span class="doccomment">/// Collect and print some stats about backed array.
+</span><span class="kw">async fn </span>show_load_data&lt;<span class="kw">const </span>ZSTD_LEVEL: u8, T, Coder&gt;(
+    <span class="kw-2">mut </span>backing_array: AsyncZstdDirBackedArray&lt;<span class="lifetime">'_</span>, ZSTD_LEVEL, T, Coder&gt;,
+    target_dir: <span class="kw-2">&amp;</span>PathBuf,
+) <span class="kw">where
+    </span>T: Send + Sync + <span class="kw">for</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; + GetSize,
+    Coder: AsyncDecoder&lt;
+        async_compression::futures::bufread::ZstdDecoder&lt;
+            futures::io::BufReader&lt;backed_data::entry::disks::AsyncFile&gt;,
+        &gt;,
+        T = Box&lt;[T]&gt;,
+    &gt;,
+{
+    <span class="macro">println!</span>(<span class="string">"# Loaded entries: {}"</span>, backing_array.loaded_len(),);
+    <span class="macro">println!</span>(
+        <span class="string">"Memory size: ~ {}"</span>,
+        format_size(mem_size(<span class="kw-2">&amp;mut </span>backing_array).<span class="kw">await</span>, BINARY)
+    );
+    <span class="macro">println!</span>(
+        <span class="string">"Directory size: ~ {}"</span>,
+        format_size(get_size(target_dir).unwrap(), BINARY)
+    );
+
+    <span class="kw">let </span><span class="kw-2">mut </span>files: Vec&lt;<span class="kw">_</span>&gt; = read_dir(target_dir)
+        .unwrap()
+        .map(|e| get_size(e.unwrap().path()).unwrap())
+        .collect();
+    files.sort_unstable();
+    <span class="macro">println!</span>(<span class="string">"Smallest file size: ~ {}"</span>, format_size(files[<span class="number">0</span>], BINARY));
+    <span class="macro">println!</span>(
+        <span class="string">"Largest file size: ~ {}"</span>,
+        format_size(files[files.len() - <span class="number">1</span>], BINARY)
+    );
+    <span class="macro">println!</span>(
+        <span class="string">"Mean file size: ~ {}"</span>,
+        format_size((files.iter().sum::&lt;u64&gt;() <span class="kw">as </span>usize) / files.len(), BINARY)
+    );
+
+    <span class="kw">let </span>prior_to_first_load = SystemTime::now();
+    <span class="kw">let _ </span>= backing_array.a_get(<span class="number">1_500_000</span>).<span class="kw">await</span>;
+
+    <span class="macro">println!</span>(
+        <span class="string">"\nTime to load get(1_500_000): {:#?}"</span>,
+        SystemTime::now()
+            .duration_since(prior_to_first_load)
+            .unwrap()
+    );
+    <span class="macro">println!</span>(
+        <span class="string">"# Loaded entries after get(0): ~ {}"</span>,
+        backing_array.loaded_len()
+    );
+    <span class="macro">println!</span>(
+        <span class="string">"Memory size after get(1_500_000): ~ {}"</span>,
+        format_size(mem_size(<span class="kw-2">&amp;mut </span>backing_array).<span class="kw">await</span>, BINARY)
+    );
+
+    <span class="kw">let </span>prior_to_second_load = SystemTime::now();
+    <span class="kw">let _ </span>= <span class="macro">join!</span>(
+        backing_array.a_get(<span class="number">1_500_000 </span>* <span class="number">2</span>),
+        backing_array.a_get(<span class="number">1_500_000 </span>* <span class="number">3</span>)
+    );
+
+    <span class="macro">println!</span>(
+        <span class="string">"\nTime to load (1_500_000 * [2, 3]) concurrently: {:#?}"</span>,
+        SystemTime::now()
+            .duration_since(prior_to_second_load)
+            .unwrap()
+    );
+    <span class="macro">println!</span>(
+        <span class="string">"# Loaded entries after (1_500_000 * [2, 3]) concurrently: ~ {}"</span>,
+        backing_array.loaded_len()
+    );
+    <span class="macro">println!</span>(
+        <span class="string">"Memory size after after (1_500_000 * [2, 3]) concurrently: ~ {}"</span>,
+        format_size(mem_size(<span class="kw-2">&amp;mut </span>backing_array).<span class="kw">await</span>, BINARY)
+    );
+
+    <span class="kw">let </span>prior_to_third_load = SystemTime::now();
+    <span class="kw">for </span>x <span class="kw">in </span>[<span class="number">1_500_000</span>; <span class="number">3</span>]
+        .into_iter()
+        .enumerate()
+        .map(|(idx, x)| (x * (idx + <span class="number">1</span>)) + <span class="number">1</span>)
+    {
+        <span class="kw">let _ </span>= backing_array.a_get(x).<span class="kw">await</span>;
+    }
+    <span class="macro">println!</span>(
+        <span class="string">"\nTime to load 3 gets from cached memory: {:#?}"</span>,
+        SystemTime::now()
+            .duration_since(prior_to_third_load)
+            .unwrap()
+    );
+}
+
+<span class="attr">#[derive(Debug, Default, PartialEq, PartialOrd, Clone, Serialize, Deserialize, GetSize)]
+</span><span class="kw">pub struct </span>QecwData {
+    area_fips: String,
+    own_code: u8,
+    industry_code: String,
+    agglvl_code: String,
+    size_code: u8,
+    year: String,
+    qtr: u8,
+    disclosure_code: <span class="prelude-ty">Option</span>&lt;char&gt;,
+    area_title: String,
+    own_title: String,
+    industry_title: String,
+    agglvl_title: String,
+    size_title: String,
+    qtrly_estabs_count: f32,
+    month1_emplvl: f32,
+    month2_emplvl: f32,
+    month3_emplvl: f32,
+    total_qtrly_wages: f32,
+    taxable_qtrly_wages: f32,
+    qtrly_contributions: f32,
+    avg_wkly_wage: f32,
+    lq_disclosure_code: <span class="prelude-ty">Option</span>&lt;char&gt;,
+    lq_qtrly_estabs_count: f32,
+    lq_month1_emplvl: f32,
+    lq_month2_emplvl: f32,
+    lq_month3_emplvl: f32,
+    lq_total_qtrly_wages: f32,
+    lq_qtrly_contributions: f32,
+    lq_avg_wkly_wage: f32,
+    oty_disclosure_code: <span class="prelude-ty">Option</span>&lt;char&gt;,
+    oty_qtrly_estabs_count_chg: f32,
+    oty_qtrly_estabs_count_pct_chg: f32,
+    oty_month1_emplvl_chg: f32,
+    oty_month1_emplvl_pct_chg: f32,
+    oty_month2_emplvl_chg: f32,
+    oty_month2_emplvl_pct_chg: f32,
+    oty_month3_emplvl_chg: f32,
+    oty_month3_emplvl_pct_chg: f32,
+    oty_total_qtrly_wages_chg: f32,
+    oty_total_qtrly_wages_pct_chg: f32,
+    oty_taxable_qtrly_wages_chg: f32,
+    oty_taxable_qtrly_wages_pct_chg: f32,
+    oty_qtrly_contributions_chg: f32,
+    oty_qtrly_contributions_pct_chg: f32,
+    oty_avg_wkly_wage_chg: f32,
+    oty_avg_wkly_wage_pct_chg: f32,
+}
+
+<span class="doccomment">/// Get memory footprint of the backed array.
+</span><span class="kw">async fn </span>mem_size&lt;<span class="kw">const </span>ZSTD_LEVEL: u8, T, Coder&gt;(
+    backing_array: <span class="kw-2">&amp;mut </span>AsyncZstdDirBackedArray&lt;<span class="lifetime">'_</span>, ZSTD_LEVEL, T, Coder&gt;,
+) -&gt; usize
+<span class="kw">where
+    </span>T: Send + Sync + <span class="kw">for</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; + GetSize,
+    Coder: AsyncDecoder&lt;
+        async_compression::futures::bufread::ZstdDecoder&lt;
+            futures::io::BufReader&lt;backed_data::entry::disks::AsyncFile&gt;,
+        &gt;,
+        T = Box&lt;[T]&gt;,
+    &gt;,
+{
+    stream::iter(backing_array.raw_chunks())
+        .then(|<span class="kw-2">mut </span>chunk| <span class="kw">async move </span>{
+            <span class="kw">let </span>chunk = chunk.as_mut();
+            <span class="kw">if </span>chunk.is_loaded() {
+                <span class="kw">if let </span><span class="prelude-val">Ok</span>(chunk) = chunk.a_load().<span class="kw">await </span>{
+                    chunk.iter().map(|item| item.get_size()).sum()
+                } <span class="kw">else </span>{
+                    <span class="macro">panic!</span>(<span class="string">"Error calculating mem_size"</span>)
+                }
+            } <span class="kw">else </span>{
+                <span class="number">0
+            </span>}
+        })
+        .fold(<span class="number">0</span>, |acc, x| ready(acc + x))
+        .<span class="kw">await
+        </span>+ backing_array.key_starts().get_size()
+        + backing_array.key_ends().get_size()
+}
+
+<span class="doccomment">/// 100% aesthetics.
+</span><span class="kw">fn </span>create_progress_bars(
+    all_progress: MultiProgress,
+) -&gt; (
+    ProgressBar,
+    ProgressBar,
+    ProgressBar,
+    ProgressBar,
+    ProgressBar,
+    ProgressBar,
+) {
+    <span class="kw">let </span>download_pb = all_progress.add(ProgressBar::new(<span class="number">0</span>));
+    download_pb.set_style(
+        ProgressStyle::with_template(
+            <span class="string">"Download:    [{elapsed_precise}] [{bar:&lt;80.cyan/blue}] {percent}% ({eta_precise})"</span>,
+        )
+        .unwrap()
+        .progress_chars(<span class="string">"#&gt;-"</span>),
+    );
+    download_pb.clone().with_finish(ProgressFinish::Abandon);
+
+    <span class="kw">let </span>unzip_pb = all_progress.add(ProgressBar::new(NUM_ITEMS <span class="kw">as </span>u64));
+    unzip_pb.set_style(
+        ProgressStyle::with_template(
+            <span class="string">"Unzip:       [{elapsed_precise}] [{bar:&lt;80.green/22}] {pos}/{len} ({eta_precise})"</span>,
+        )
+        .unwrap()
+        .progress_chars(<span class="string">"#&gt;-"</span>),
+    );
+    unzip_pb.clone().with_finish(ProgressFinish::Abandon);
+
+    <span class="kw">let </span>decode_csv_pb = all_progress.add(ProgressBar::new(NUM_ITEMS <span class="kw">as </span>u64));
+    decode_csv_pb.set_style(
+        ProgressStyle::with_template(
+            <span class="string">"Decoding:    [{elapsed_precise}] [{bar:&lt;80.cyan/blue}] {pos}/{len} ({eta_precise})"</span>,
+        )
+        .unwrap()
+        .progress_chars(<span class="string">"#&gt;-"</span>),
+    );
+    decode_csv_pb.clone().with_finish(ProgressFinish::Abandon);
+
+    <span class="kw">let </span>schedule_pb = all_progress.add(ProgressBar::new(NUM_ZSTD_FILES <span class="kw">as </span>u64));
+    schedule_pb.set_style(
+        ProgressStyle::with_template(
+            <span class="string">"Scheduling:  [{elapsed_precise}] [{bar:&lt;80.green/22}] {pos}/{len} ({eta_precise})"</span>,
+        )
+        .unwrap()
+        .progress_chars(<span class="string">"#&gt;-"</span>),
+    );
+    schedule_pb.clone().with_finish(ProgressFinish::Abandon);
+
+    <span class="kw">let </span>encrypt_pb = all_progress.add(ProgressBar::new(NUM_ZSTD_FILES <span class="kw">as </span>u64));
+    encrypt_pb.set_style(
+        ProgressStyle::with_template(
+            <span class="string">"Encryption:  [{elapsed_precise}] [{bar:&lt;80.cyan/blue}] {pos}/{len} ({eta_precise})"</span>,
+        )
+        .unwrap()
+        .progress_chars(<span class="string">"#&gt;-"</span>),
+    );
+    encrypt_pb.clone().with_finish(ProgressFinish::Abandon);
+
+    <span class="kw">let </span>unify_pb = all_progress.add(ProgressBar::new(NUM_ZSTD_FILES <span class="kw">as </span>u64));
+    unify_pb.set_style(
+        ProgressStyle::with_template(
+            <span class="string">"Unification: [{elapsed_precise}] [{bar:&lt;80.green/22}] {pos}/{len} ({eta_precise})"</span>,
+        )
+        .unwrap()
+        .progress_chars(<span class="string">"#&gt;-"</span>),
+    );
+    unify_pb.clone().with_finish(ProgressFinish::Abandon);
+
+    all_progress.set_move_cursor(<span class="bool-val">true</span>);
+
+    (
+        download_pb,
+        unzip_pb,
+        schedule_pb,
+        decode_csv_pb,
+        encrypt_pb,
+        unify_pb,
+    )
+}</code></pre></div>
+</div></details></section></div></main></body></html>

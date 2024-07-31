@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"backed_data":[["impl&lt;D: Bytes&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.FromIterator.html\" title=\"trait core::iter::traits::collect::FromIterator\">FromIterator</a>&lt;D&gt; for <a class=\"struct\" href=\"backed_data/entry/disks/encrypted/struct.SecretVecWrapper.html\" title=\"struct backed_data::entry::disks::encrypted::SecretVecWrapper\">SecretVecWrapper</a>&lt;D&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["async_impl","disks","formats","sync_impl"],"struct":["BackedEntry"],"trait":["BackedEntryTrait"],"type":["BackedEntryArr","BackedEntryArrLock","BackedEntryAsync","BackedEntryBox","BackedEntryBoxLock","BackedEntryCell","BackedEntryLock"]};

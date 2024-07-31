@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BackedArrayError"],"mod":["async_impl","container","sync_impl"],"struct":["BackedArray","BackedArrayEntry"],"type":["VecBackedArray"]};

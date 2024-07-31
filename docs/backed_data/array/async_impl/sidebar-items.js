@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["generic","slice"],"trait":["BackedEntryContainerNestedAsync","BackedEntryContainerNestedAsyncAll","BackedEntryContainerNestedAsyncRead","BackedEntryContainerNestedAsyncWrite"],"type":["AsyncVecBackedArray"]};

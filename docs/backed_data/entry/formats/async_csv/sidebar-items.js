@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["QuoteStyleSerial","TerminatorSerial","TrimSerial"],"struct":["AsyncCsvCoder","QuoteStyleWrapper","TerminatorWrapper","TrimWrapper"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SerdeJsonErr"],"mod":["async_csv","csv"],"struct":["AsyncBincodeCoder","BincodeCoder","SerdeJsonCoder","SimdJsonCoder"],"trait":["AsyncDecoder","AsyncEncoder","Decoder","Encoder"]};

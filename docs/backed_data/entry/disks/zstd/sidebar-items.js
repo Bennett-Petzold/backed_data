@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ZstdLevelError"],"static":["ZSTD_MULTITHREAD"],"struct":["OutOfBounds","ZstdDisk","ZstdEncoderWrapper","ZstdLevel"]};
