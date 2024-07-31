@@ -1,6 +1,7 @@
 use std::{
     ops::Range,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use futures::{stream, StreamExt, TryStreamExt};
@@ -212,8 +213,34 @@ where
     }
 }
 
+impl<K, E> DirectoryBackedArray<K, E>
+where
+    K: Default,
+    E: Default,
+{
+    /// Splits this into parts, for functions that need `Arc<BackedArray>`.
+    ///
+    /// # Return Tuple
+    /// * 0: This backing array, wrapped in an Arc.
+    /// * 1: A function that rebuilds [`self`] from the Arc (fails if reference
+    /// is not unique).
+    pub fn deconstruct(
+        self,
+    ) -> (
+        Arc<BackedArray<K, E>>,
+        impl Fn(Arc<BackedArray<K, E>>) -> Option<Self>,
+    ) {
+        let reconstruct = move |array: Arc<BackedArray<K, E>>| {
+            Some(Self::from_existing_array(
+                Arc::into_inner(array)?,
+                self.directory_root.clone(),
+            ))
+        };
+        (Arc::new(self.array), reconstruct)
+    }
+}
+
 // Miri: "returning ready events from epoll_wait is not yet implemented"
-#[cfg(not(miri))]
 #[cfg(test)]
 #[cfg(feature = "async_bincode")]
 mod tests {
@@ -233,50 +260,64 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn write() {
-        let directory = temp_dir().join("async_directory_write");
-        let _ = remove_dir_all(directory.clone());
-        let mut arr =
-            AsyncStdDirBackedArray::<String, AsyncBincodeCoder>::new(directory.clone()).unwrap();
-        let (values, second_values) = values();
+    #[test]
+    fn write() {
+        // Need to avoid use a runtime without I/O for Miri compatibility
+        tokio::runtime::Builder::new_multi_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let directory = temp_dir().join("async_directory_write");
+                let _ = remove_dir_all(directory.clone());
+                let mut arr =
+                    AsyncStdDirBackedArray::<String, AsyncBincodeCoder>::new(directory.clone())
+                        .unwrap();
+                let (values, second_values) = values();
 
-        arr.a_append_memory(values).await.unwrap();
-        arr.a_append(second_values).await.unwrap();
-        assert_eq!(arr.a_get(10).await.unwrap().as_ref(), &"TEST STRING");
-        assert_eq!(arr.a_get(150).await.unwrap().as_ref(), &"OTHER VALUE");
+                arr.a_append_memory(values).await.unwrap();
+                arr.a_append(second_values).await.unwrap();
+                assert_eq!(arr.a_get(10).await.unwrap().as_ref(), &"TEST STRING");
+                assert_eq!(arr.a_get(150).await.unwrap().as_ref(), &"OTHER VALUE");
 
-        let _ = remove_dir_all(directory);
+                let _ = remove_dir_all(directory);
+            });
     }
 
-    #[tokio::test]
-    async fn write_and_read() {
-        let directory = temp_dir().join("async_directory_write_and_read");
-        let _ = remove_dir_all(directory.clone());
-        let mut arr =
-            AsyncStdDirBackedArray::<_, AsyncBincodeCoder>::new(directory.clone()).unwrap();
-        let (values, second_values) = values();
+    #[test]
+    fn write_and_read() {
+        // Need to avoid use a runtime without I/O for Miri compatibility
+        tokio::runtime::Builder::new_multi_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let directory = temp_dir().join("async_directory_write_and_read");
+                let _ = remove_dir_all(directory.clone());
+                let mut arr =
+                    AsyncStdDirBackedArray::<_, AsyncBincodeCoder>::new(directory.clone()).unwrap();
+                let (values, second_values) = values();
 
-        arr.a_append(values).await.unwrap();
-        arr.a_append_memory(second_values).await.unwrap();
-        AsyncBincodeCoder::default()
-            .encode(
-                &arr,
-                &mut File::create(directory.join("meta.data")).await.unwrap(),
-            )
-            .await
-            .unwrap();
-        drop(arr);
+                arr.a_append(values).await.unwrap();
+                arr.a_append_memory(second_values).await.unwrap();
+                AsyncBincodeCoder::default()
+                    .encode(
+                        &arr,
+                        &mut File::create(directory.join("meta.data")).await.unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                drop(arr);
 
-        let arr: AsyncStdDirBackedArray<String, AsyncBincodeCoder> = AsyncBincodeCoder::default()
-            .decode(&mut File::open(directory.join("meta.data")).await.unwrap())
-            .await
-            .unwrap();
-        assert_eq!(arr.a_get(10).await.unwrap().as_ref(), &"TEST STRING");
-        assert_eq!(arr.a_get(150).await.unwrap().as_ref(), &"OTHER VALUE");
-        assert_eq!(arr.a_get(20).await.unwrap().as_ref(), &"TEST STRING");
-        assert_eq!(arr.a_get(1).await.unwrap().as_ref(), &"TEST STRING");
+                let arr: AsyncStdDirBackedArray<String, AsyncBincodeCoder> =
+                    AsyncBincodeCoder::default()
+                        .decode(&mut File::open(directory.join("meta.data")).await.unwrap())
+                        .await
+                        .unwrap();
+                assert_eq!(arr.a_get(10).await.unwrap().as_ref(), &"TEST STRING");
+                assert_eq!(arr.a_get(150).await.unwrap().as_ref(), &"OTHER VALUE");
+                assert_eq!(arr.a_get(20).await.unwrap().as_ref(), &"TEST STRING");
+                assert_eq!(arr.a_get(1).await.unwrap().as_ref(), &"TEST STRING");
 
-        let _ = remove_dir_all(directory);
+                let _ = remove_dir_all(directory);
+            })
     }
 }
