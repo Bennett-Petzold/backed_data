@@ -47,21 +47,7 @@ fn internal_idx<'a, K: IntoIterator<Item = &'a Range<usize>>>(
         })
 }
 
-/// Returns the entry location for multiple accesses.
-///
-/// Silently ignores invalid idx values, shortening the return iterator.
-fn multiple_internal_idx<'a, I, K: AsRef<[Range<usize>]> + 'a>(
-    keys: K,
-    idxs: I,
-) -> impl Iterator<Item = ArrayLoc> + 'a
-where
-    I: IntoIterator<Item = usize> + 'a,
-{
-    idxs.into_iter()
-        .flat_map(move |idx| internal_idx(keys.as_ref(), idx))
-}
-
-/// [`Self::multiple_internal_idx`], but returns None for invalid idx
+/// Returns the entry location for multiple accesses, or None if idx invalid.
 fn multiple_internal_idx_strict<'a, I, K: AsRef<[Range<usize>]> + 'a>(
     keys: K,
     idxs: I,

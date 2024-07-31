@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     container::{BackedEntryContainer, Container, ResizingContainer},
-    internal_idx, multiple_internal_idx, multiple_internal_idx_strict,
+    internal_idx, multiple_internal_idx_strict,
     sync_impl::BackedArray,
     BackedArrayError,
 };
@@ -180,31 +180,6 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
 
     /// Async version of [`Self::get_multiple`].
     pub fn a_get_multiple<'a, I>(
-        &'a self,
-        idxs: I,
-    ) -> impl Stream<Item = <E::Unwrapped as Container>::Ref<'_>>
-    where
-        I: IntoIterator<Item = usize> + 'a,
-    {
-        stream::iter(multiple_internal_idx(self.keys.c_ref(), idxs)).filter_map(
-            move |loc| async move {
-                let entry_container = BorrowExtender::maybe_new(&self.entries, |entries| {
-                    entries.c_get(loc.entry_idx)
-                })?;
-                let entry = BorrowExtender::a_try_new(entry_container, |entry_container| async {
-                    BackedEntryContainer::get_ref(a_open_ref!(entry_container))
-                        .a_load()
-                        .await
-                })
-                .await
-                .ok()?;
-                entry.c_get(loc.inside_entry_idx)
-            },
-        )
-    }
-
-    /// Async version of [`Self::get_multiple_strict`].
-    pub fn a_get_multiple_strict<'a, I>(
         &'a self,
         idxs: I,
     ) -> impl Stream<
@@ -409,7 +384,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
 #[cfg(test)]
 #[cfg(feature = "async_bincode")]
 mod tests {
-    use std::{io::Cursor, sync::Mutex};
+    use std::{future, io::Cursor, sync::Mutex};
 
     use stream::TryStreamExt;
     use tokio::join;
@@ -453,20 +428,14 @@ mod tests {
         assert_eq!(
             backed
                 .a_get_multiple([0, 2, 4, 5])
-                .collect::<Vec<_>>()
-                .await,
+                .try_collect::<Vec<_>>()
+                .await
+                .unwrap(),
             [&0, &1, &3, &5]
         );
         assert_eq!(
             backed
                 .a_get_multiple([5, 2, 0, 5])
-                .collect::<Vec<_>>()
-                .await,
-            [&5, &1, &0, &5]
-        );
-        assert_eq!(
-            backed
-                .a_get_multiple_strict([5, 2, 0, 5])
                 .try_collect::<Vec<_>>()
                 .await
                 .unwrap(),
@@ -492,15 +461,26 @@ mod tests {
         assert!(backed.a_get(0).await.is_ok());
         assert!(backed.a_get(10).await.is_err());
         assert!(backed
-            .a_get_multiple_strict([0, 10])
+            .a_get_multiple([0, 10])
             .try_collect::<Vec<_>>()
             .await
             .is_err());
-        assert_eq!(backed.a_get_multiple([0, 10]).count().await, 1);
-        assert!(Box::pin(backed.a_get_multiple([20, 10]))
-            .next()
-            .await
-            .is_none());
+        assert_eq!(
+            backed
+                .a_get_multiple([0, 10])
+                .filter(|x| future::ready(x.is_ok()))
+                .count()
+                .await,
+            1
+        );
+        assert_eq!(
+            backed
+                .a_get_multiple([20, 10])
+                .filter(|x| future::ready(x.is_ok()))
+                .count()
+                .await,
+            0
+        );
     }
 
     #[tokio::test]

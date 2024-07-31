@@ -22,7 +22,7 @@ use super::{
         BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
         BackedEntryContainerNestedWrite, Container, ResizingContainer,
     },
-    internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayError,
+    internal_idx, multiple_internal_idx_strict, BackedArrayError,
 };
 
 /// Array stored as multiple arrays on disk.
@@ -176,28 +176,8 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     /// Produces a vector for all requested indicies.
     ///
     /// Loads all necessary backing arrays into memory until freed.
-    /// Invalid indicies will be silently dropped. Use the strict version
-    /// ([`Self::get_multiple_strict`]) to get errors on invalid indicies.
+    /// Returns Errors for invalid idx and load issues.
     pub fn get_multiple<'a, I>(
-        &'a self,
-        idxs: I,
-    ) -> impl Iterator<Item = <E::Unwrapped as Container>::Ref<'_>>
-    where
-        I: IntoIterator<Item = usize> + 'a,
-    {
-        multiple_internal_idx(self.keys.c_ref(), idxs).flat_map(|loc| {
-            let entry_container =
-                BorrowExtender::maybe_new(&self.entries, |entries| entries.c_get(loc.entry_idx))?;
-            let entry = BorrowExtender::try_new(entry_container, |entry_container| {
-                BackedEntryContainer::get_ref(open_ref!(entry_container)).load()
-            })
-            .ok()?;
-            entry.c_get(loc.inside_entry_idx)
-        })
-    }
-
-    /// [`Self::get_multiple`], but returns Errors for invalid idx.
-    pub fn get_multiple_strict<'a, I>(
         &'a self,
         idxs: I,
     ) -> impl Iterator<Item = Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::ReadError>>>
@@ -767,16 +747,15 @@ mod tests {
         );
 
         assert_eq!(
-            backed.get_multiple([0, 2, 4, 5]).collect_vec(),
+            backed
+                .get_multiple([0, 2, 4, 5])
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
             [&0, &1, &3, &5]
         );
         assert_eq!(
-            backed.get_multiple([5, 2, 0, 5]).collect_vec(),
-            [&5, &1, &0, &5]
-        );
-        assert_eq!(
             backed
-                .get_multiple_strict([5, 2, 0, 5])
+                .get_multiple([5, 2, 0, 5])
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap(),
             [&5, &1, &0, &5]
@@ -798,11 +777,17 @@ mod tests {
         assert!(backed.get(0).is_ok());
         assert!(backed.get(10).is_err());
         assert!(backed
-            .get_multiple_strict([0, 10])
+            .get_multiple([0, 10])
             .collect::<Result<Vec<_>, _>>()
             .is_err());
-        assert_eq!(backed.get_multiple([0, 10]).count(), 1);
-        assert!(backed.get_multiple([20, 10]).next().is_none());
+        assert_eq!(
+            backed.get_multiple([0, 10]).filter(|x| x.is_ok()).count(),
+            1
+        );
+        assert_eq!(
+            backed.get_multiple([20, 10]).filter(|x| x.is_ok()).count(),
+            0
+        );
     }
 
     #[test]
