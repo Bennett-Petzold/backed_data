@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use futures::Future;
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, sync::OnceCell};
@@ -15,7 +16,7 @@ use super::{
     BackedEntry, BackedEntryAsync, BackedEntryTrait,
 };
 
-impl<T: Serialize, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
+impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
     BackedEntryAsync<T, Disk, Coder>
 {
     /// See [`Self::update`].
@@ -48,8 +49,11 @@ impl<T: Serialize, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
     }
 }
 
-impl<T: for<'de> Deserialize<'de>, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk>>
-    BackedEntryAsync<T, Disk, Coder>
+impl<
+        T: for<'de> Deserialize<'de> + Send + Sync,
+        Disk: AsyncReadDisk,
+        Coder: AsyncDecoder<Disk::ReadDisk>,
+    > BackedEntryAsync<T, Disk, Coder>
 {
     /// See [`Self::load`].
     pub async fn a_load(&self) -> Result<&T, Coder::Error> {
@@ -65,7 +69,7 @@ impl<T: for<'de> Deserialize<'de>, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk
     }
 }
 
-impl<T: Serialize, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
+impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
     BackedEntryAsync<T, Disk, Coder>
 {
     /// [`Self::write_unload`].
@@ -105,7 +109,7 @@ impl<T> OnceCellWrap for OnceCell<T> {
 /// [`BackedEntryTrait`] that can be asynchronously written to.
 pub trait BackedEntryAsyncWrite:
     BackedEntryTrait<
-    T: OnceCellWrap<T: Serialize>,
+    T: OnceCellWrap<T: Serialize + Send + Sync>,
     Disk: AsyncWriteDisk,
     Coder: AsyncEncoder<
         <<Self as BackedEntryTrait>::Disk as AsyncWriteDisk>::WriteDisk,
@@ -120,7 +124,7 @@ pub trait BackedEntryAsyncWrite:
 }
 
 impl<
-        U: Serialize,
+        U: Serialize + Send + Sync,
         E: BackedEntryTrait<
             T = OnceCell<U>,
             Disk: AsyncWriteDisk,
@@ -137,7 +141,7 @@ impl<
 /// [`BackedEntryTrait`] that can be read asynchronously.
 pub trait BackedEntryAsyncRead:
     BackedEntryTrait<
-    T: OnceCellWrap<T: for<'de> Deserialize<'de>>,
+    T: OnceCellWrap<T: for<'de> Deserialize<'de> + Send + Sync>,
     Disk: AsyncReadDisk,
     Coder: AsyncDecoder<
         <<Self as BackedEntryTrait>::Disk as AsyncReadDisk>::ReadDisk,
@@ -152,7 +156,7 @@ pub trait BackedEntryAsyncRead:
 }
 
 impl<
-        U: for<'de> Deserialize<'de>,
+        U: for<'de> Deserialize<'de> + Send + Sync,
         E: BackedEntryTrait<
             T = OnceCell<U>,
             Disk: AsyncReadDisk,
@@ -238,7 +242,7 @@ impl<'a, E: BackedEntryAsyncRead> BackedEntryAsyncMut<'a, E> {
 }
 
 impl<
-        T: Serialize + for<'de> Deserialize<'de>,
+        T: Serialize + for<'de> Deserialize<'de> + Send + Sync,
         Disk: AsyncWriteDisk + AsyncReadDisk,
         Coder: AsyncEncoder<Disk::WriteDisk> + AsyncDecoder<Disk::ReadDisk>,
     > BackedEntryAsync<T, Disk, Coder>
@@ -252,7 +256,7 @@ impl<
 }
 
 impl<
-        T: for<'de> Deserialize<'de> + Serialize,
+        T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
         Disk: AsyncReadDisk,
         Coder: AsyncDecoder<Disk::ReadDisk>,
     > BackedEntryAsync<T, Disk, Coder>
@@ -279,62 +283,152 @@ impl<
 
     /// Converts [`self`] into a synchronous backing.
     ///
-    /// Makes a blocking runtime call to update disk after conversion,
-    /// so will crash if not run within a Tokio runtime.
-    pub async fn to_sync<OtherDisk, OtherCoder, U>(
+    /// # Arguments
+    /// * `disk`: Target synchronous disk
+    /// * `coder`: Target synchronous disk
+    /// * `blocking_fn`: A function to execute synchronous update inside.
+    ///
+    /// # `blocking_fn`
+    /// Can be used to move execution to a blocking thread. See
+    /// [`self::blocking`] for convenience wrappers. Otherwise create a
+    /// function that takes [`BlockingFn`] and uses [`BlockingFn::call`] to
+    /// produce a result.
+    ///
+    /// ```
+    /// #[cfg(all(feature = "bincode", feature = "async_bincode", feature = "test"))] {
+    ///     use backed_data::{
+    ///         test_utils::cursor_vec,
+    ///         entry::{
+    ///             async_impl::BlockingFn,
+    ///             BackedEntryAsync,
+    ///             BackedEntryCell,
+    ///             formats::{
+    ///                 AsyncBincodeCoder,
+    ///                 BincodeCoder,
+    ///             },
+    ///         },
+    ///     };
+    ///     use tokio::runtime::Builder;
+    ///     
+    ///     const VALUES: &[u8] = &[1, 2, 5, 7];
+    ///
+    ///     let rt = Builder::new_current_thread().build().unwrap();
+    ///     rt.block_on(async {
+    ///     cursor_vec!(backing);
+    ///     let mut disk: BackedEntryAsync<Box<[u8]>, _, AsyncBincodeCoder> = BackedEntryAsync::with_disk(backing);
+    ///     disk.a_write_unload(VALUES).await;
+    ///
+    ///     cursor_vec!(sync_backing);
+    ///     let sync_disk: BackedEntryCell<_, _, _> = disk.to_sync(
+    ///         sync_backing,
+    ///         BincodeCoder {},
+    ///         |f| async { f.call() }
+    ///     ).await.unwrap();
+    ///     });
+    /// }
+    /// ```
+    pub async fn to_sync<OtherDisk, OtherCoder, U, F, R>(
         self,
         disk: OtherDisk,
         coder: OtherCoder,
+        blocking_fn: F,
     ) -> Result<BackedEntry<U, OtherDisk, OtherCoder>, Either<Coder::Error, OtherCoder::Error>>
     where
         <Coder as AsyncDecoder<<Disk as AsyncReadDisk>::ReadDisk>>::Error: Send + Sync,
-        U: Once<Inner = T> + Send + Sync + 'static,
-        OtherDisk: WriteDisk + Send + Sync + 'static,
-        OtherCoder: Encoder<OtherDisk::WriteDisk, Error: Send + Sync> + Send + Sync + 'static,
+        U: Once<Inner = T>,
+        OtherDisk: WriteDisk,
+        OtherCoder: Encoder<OtherDisk::WriteDisk>,
+        F: FnOnce(UpdateBlocking<U, OtherDisk, OtherCoder>) -> R,
+        R: Future<Output = Result<BackedEntry<U, OtherDisk, OtherCoder>, OtherCoder::Error>>,
     {
         self.a_load().await.map_err(Either::Left)?;
 
         let value = U::new();
         let _ = value.set(self.value.into_inner().unwrap());
 
-        let mut other = BackedEntry::<U, OtherDisk, OtherCoder> { value, disk, coder };
-        let other = tokio::task::spawn_blocking(move || {
-            other.update()?;
-            Ok::<_, OtherCoder::Error>(other)
-        })
-        .await
-        .unwrap()
-        .map_err(Either::Right)?;
+        let other = BackedEntry::<U, OtherDisk, OtherCoder> { value, disk, coder };
+
+        let other = (blocking_fn)(UpdateBlocking { entry: other })
+            .await
+            .map_err(Either::Right)?;
         Ok(other)
     }
 }
 
 impl<
-        T: Serialize + for<'de> Deserialize<'de> + Sync + Send + 'static,
+        T: Serialize + for<'de> Deserialize<'de> + Sync + Send,
         Disk: AsyncWriteDisk,
         Coder: AsyncEncoder<Disk::WriteDisk>,
     > BackedEntryAsync<T, Disk, Coder>
 {
     /// Converts from a synchronous backing into [`self`].
     ///
-    /// Makes a blocking runtime call to load from disk before conversion,
-    /// so will crash if not run within a Tokio runtime.
-    pub async fn from_sync<OtherDisk, OtherCoder, U>(
+    /// # Arguments
+    /// * `disk`: Target synchronous disk
+    /// * `coder`: Target synchronous disk
+    /// * `blocking_fn`: A function to execute synchronous load inside.
+    ///
+    /// # `blocking_fn`
+    /// Can be used to move execution to a blocking thread. See
+    /// [`self::blocking`] for convenience wrappers. Otherwise create a
+    /// function that takes [`BlockingFn`] and uses [`BlockingFn::call`] to
+    /// produce a result.
+    ///
+    /// ```
+    /// #[cfg(all(feature = "bincode", feature = "async_bincode", feature = "test"))] {
+    ///     use backed_data::{
+    ///         test_utils::cursor_vec,
+    ///         entry::{
+    ///             async_impl::{
+    ///                 blocking::tokio_blocking,
+    ///                 BlockingFn,
+    ///             },
+    ///             BackedEntryAsync,
+    ///             BackedEntryLock,
+    ///             formats::{
+    ///                 AsyncBincodeCoder,
+    ///                 BincodeCoder,
+    ///             },
+    ///         },
+    ///     };
+    ///     use tokio::runtime::Builder;
+    ///     
+    ///     const VALUES: &[u8] = &[1, 2, 5, 7];
+    ///
+    ///     let rt = Builder::new_multi_thread().build().unwrap();
+    ///     rt.block_on(async {
+    ///     cursor_vec!(backing);
+    ///     let mut disk: BackedEntryAsync<Box<[u8]>, _, AsyncBincodeCoder> = BackedEntryAsync::with_disk(backing);
+    ///     disk.a_write_unload(VALUES).await;
+    ///
+    ///     cursor_vec!(sync_backing);
+    ///     let sync_disk: BackedEntryLock<_, _, _> = disk.to_sync(
+    ///         sync_backing,
+    ///         BincodeCoder {},
+    ///         |x| unsafe { tokio_blocking(x) }
+    ///     ).await.unwrap();
+    ///     });
+    /// }
+    /// ```
+    pub async fn from_sync<OtherDisk, OtherCoder, U, F, R>(
         other: BackedEntry<U, OtherDisk, OtherCoder>,
         disk: Disk,
         coder: Coder,
+        blocking_fn: F,
     ) -> Result<Self, Either<OtherCoder::Error, Coder::Error>>
     where
-        U: Once<Inner = T> + Send + Sync + 'static,
-        OtherDisk: ReadDisk + Send + Sync + 'static,
-        OtherCoder: Decoder<OtherDisk::ReadDisk, Error: Send + Sync> + Send + Sync + 'static,
+        U: Once<Inner = T>,
+        OtherDisk: ReadDisk,
+        OtherCoder: Decoder<OtherDisk::ReadDisk>,
+        F: FnOnce(LoadBlocking<U, OtherDisk, OtherCoder>) -> R,
+        R: Future<Output = Result<BackedEntry<U, OtherDisk, OtherCoder>, OtherCoder::Error>>,
     {
         let other = Arc::new(other);
-        let other_clone = other.clone();
-        tokio::task::spawn_blocking(move || other_clone.load().map(|_| ()))
-            .await
-            .unwrap()
-            .map_err(Either::Left)?;
+        (blocking_fn)(LoadBlocking {
+            entry: other.clone(),
+        })
+        .await
+        .map_err(Either::Left)?;
         let other = Arc::into_inner(other).unwrap();
 
         let mut this = Self {
@@ -345,5 +439,105 @@ impl<
 
         this.a_update().await.map_err(Either::Right)?;
         Ok(this)
+    }
+}
+
+/// Workaround for lack of stable [`FnOnce`] implementation.
+///
+/// Produces a value once on `call`, consuming self.
+pub trait BlockingFn {
+    type Output;
+    fn call(self) -> Self::Output;
+}
+
+/// [`BlockingFn`] that calls update on [`Self::entry`].
+#[derive(Debug)]
+pub struct UpdateBlocking<U, Disk, Coder> {
+    entry: BackedEntry<U, Disk, Coder>,
+}
+
+impl<U, Disk, Coder> BlockingFn for UpdateBlocking<U, Disk, Coder>
+where
+    U: Once<Inner: Serialize>,
+    Disk: WriteDisk,
+    Coder: Encoder<<Disk as WriteDisk>::WriteDisk>,
+{
+    type Output = Result<BackedEntry<U, Disk, Coder>, Coder::Error>;
+    fn call(mut self) -> Self::Output {
+        self.entry.update()?;
+        Ok(self.entry)
+    }
+}
+
+/// [`BlockingFn`] that calls load on [`Self::entry`].
+#[derive(Debug)]
+pub struct LoadBlocking<U, Disk, Coder> {
+    entry: Arc<BackedEntry<U, Disk, Coder>>,
+}
+
+impl<U, Disk, Coder> BlockingFn for LoadBlocking<U, Disk, Coder>
+where
+    U: Once<Inner: for<'de> Deserialize<'de>>,
+    Disk: ReadDisk,
+    Coder: Decoder<<Disk as ReadDisk>::ReadDisk>,
+{
+    type Output = Result<(), Coder::Error>;
+    fn call(self) -> Self::Output {
+        self.entry.load().map(|_| ())
+    }
+}
+
+pub mod blocking {
+    use std::{
+        future::{ready, Ready},
+        mem::MaybeUninit,
+    };
+
+    use futures::StreamExt;
+
+    use super::BlockingFn;
+
+    /// Executes in the current thread.
+    pub fn cur_thread<T, F>(arg: F) -> Ready<T>
+    where
+        F: BlockingFn<Output = T>,
+    {
+        ready(arg.call())
+    }
+
+    /// Executes on a spawned tokio thread.
+    ///
+    /// If the safety rules will be met, this can be converted to a safe future
+    /// via a closure (`unsafe {|x| tokio_blocking(x)}`).
+    ///
+    /// # Safety
+    /// This uses a non-blocking [`async_scoped`] spawn. If arg has a
+    /// non-static lifetime, this future CANNOT be forgotten
+    /// ([`std::mem::forget`]) mid-execution, as that will invalidate `arg`
+    /// for the spawned thread and possibly cause a panic.
+    pub async unsafe fn tokio_blocking<'a, T, F>(arg: F) -> T
+    where
+        T: Send + Sync,
+        F: BlockingFn<Output = T> + Send,
+    {
+        // Val is held here uninitialized, and written into by the thread.
+        let mut val = MaybeUninit::uninit();
+        let arg = || {
+            val = MaybeUninit::new(arg.call());
+        };
+
+        // Spawn the thread and wait for completion.
+        let (mut scope, _) = unsafe {
+            async_scoped::TokioScope::scope(|s| {
+                s.spawn_blocking(arg);
+            })
+        };
+        // Only need to pull () result from one blocking future.
+        scope.next().await.unwrap().unwrap();
+
+        drop(scope);
+
+        // Val was initialized by the thread, or the program panicked.
+        unsafe { val.assume_init() }
     }
 }
