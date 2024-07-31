@@ -43,6 +43,49 @@ create_fn!(parallel create_zstdfiles_par, ZstdDirBackedArray<'a, LEVEL, u8, Binc
 
 #[cfg(feature = "csv")]
 create_fn!(create_csv, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
+
+#[cfg(feature = "csv")]
+/// CSV reader expects a header row, but CSV writer only provides one if we're
+/// using a struct instead of raw data.
+fn create_csv_with_header<P: AsRef<Path>>(
+    path: P,
+    data: &[String],
+) -> StdDirBackedArray<U8Wrapper, CsvCoder<Box<[U8Wrapper]>, U8Wrapper>> {
+    let mut arr = StdDirBackedArray::new(path.as_ref().to_path_buf()).unwrap();
+    for inner_data in data {
+        let data: Vec<U8Wrapper> = <String as AsRef<[u8]>>::as_ref(inner_data)
+            .iter()
+            .map(|x| (*x).into())
+            .collect();
+        arr.append(data).unwrap();
+    }
+    if arr.save(&BincodeCoder::default()).is_err() {
+        panic!()
+    };
+    arr
+}
+
+#[cfg(feature = "async_csv")]
+/// CSV reader expects a header row, but CSV writer only provides one if we're
+/// using a struct instead of raw data.
+async fn a_create_csv_with_header<P: AsRef<Path>>(
+    path: P,
+    data: &[String],
+) -> AsyncStdDirBackedArray<U8Wrapper, AsyncCsvCoder<Box<[U8Wrapper]>, U8Wrapper>> {
+    let mut arr = AsyncStdDirBackedArray::new(path.as_ref().to_path_buf()).unwrap();
+    for inner_data in data {
+        let data: Vec<U8Wrapper> = <String as AsRef<[u8]>>::as_ref(inner_data)
+            .iter()
+            .map(|x| (*x).into())
+            .collect();
+        arr.a_append(data).await.unwrap();
+    }
+    if arr.a_save(&AsyncBincodeCoder::default()).await.is_err() {
+        panic!()
+    };
+    arr
+}
+
 #[cfg(feature = "csv")]
 create_fn!(parallel create_csv_par, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
 
@@ -69,7 +112,7 @@ read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder<_>
 #[cfg(feature = "zstd")]
 read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder<_>>);
 #[cfg(feature = "csv")]
-read_dir!(read_csv, StdDirBackedArray<u8, CsvCoder<_, _>>);
+read_dir!(read_csv, StdDirBackedArray<U8Wrapper, CsvCoder<_, _>>);
 
 #[cfg(feature = "async_bincode")]
 read_dir!(async read_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<_>>);
@@ -217,6 +260,15 @@ fn file_creation_benches(c: &mut Criterion) {
                 )
             });
             log_created_size(&mut path_cell, "Async zstdfiles parallel");
+
+            group.bench_function("async_create_csv", |b| {
+                b.to_async(&rt).iter_batched(
+                    || create_path(&mut path_cell).clone(),
+                    |path| create_csv_async(black_box(path.clone()), black_box(data)),
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+            log_created_size(&mut path_cell, "Async csv");
         }
 
         rt.shutdown_background();
@@ -253,7 +305,7 @@ fn file_load_benches(c: &mut Criterion) {
     #[cfg(feature = "csv")]
     {
         {
-            let path = create_files(create_csv);
+            let path = create_files(create_csv_with_header);
             group.bench_function("load_csv", |b| b.iter(|| black_box(read_csv(&path))));
         }
     }
@@ -322,9 +374,9 @@ fn file_load_benches(c: &mut Criterion) {
             }
         }
 
-        #[cfg(feature = "async_zstd")]
+        #[cfg(feature = "async_csv")]
         {
-            let path = create_files(|path, data| rt.block_on(create_csv_async(path, data)));
+            let path = create_files(|path, data| rt.block_on(a_create_csv_with_header(path, data)));
             group.bench_function("async_load_csv", |b| {
                 b.to_async(&rt).iter(|| black_box(read_csv_async(&path)))
             });

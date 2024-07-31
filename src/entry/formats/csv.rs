@@ -165,7 +165,7 @@ where
         for line in data.as_ref() {
             writer.serialize(line)?
         }
-        Ok(())
+        Ok(writer.flush()?)
     }
 }
 
@@ -265,5 +265,38 @@ mod tests {
         assert_eq!(second_vals[0], *FIRST_ENTRY);
 
         assert_eq!(second_vals[second_vals.len() - 1], *LAST_ENTRY);
+    }
+
+    #[cfg(all(feature = "bincode", feature = "array"))]
+    #[test]
+    fn dir_load() {
+        use crate::{array::VecBackedArray, test_utils::OwnedCursorVec};
+
+        let mut buf = Cursor::new(include_bytes!(
+            "../../../test_data/iou_zipcodes_2020_stub.csv"
+        ));
+
+        let coder = CsvCoder::<Vec<_>, _>::default();
+
+        let vals: Vec<IouZipcodes> = coder.decode(&mut buf).unwrap();
+
+        let mut backing = VecBackedArray::<_, OwnedCursorVec, CsvCoder<_, _>>::from_containers(
+            [vals.as_slice()],
+            &OwnedCursorVec::default(),
+            &CsvCoder::default(),
+        )
+        .unwrap();
+        backing
+            .append(
+                vals.as_slice(),
+                OwnedCursorVec::default(),
+                CsvCoder::default(),
+            )
+            .unwrap();
+
+        assert_eq!(*backing.get(0).unwrap(), *FIRST_ENTRY);
+        assert_eq!(*backing.get(vals.len() - 1).unwrap(), *LAST_ENTRY);
+        assert_eq!(*backing.get((vals.len() * 2) - 1).unwrap(), *LAST_ENTRY);
+        assert!(backing.get(vals.len() * 2).is_err());
     }
 }

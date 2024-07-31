@@ -179,6 +179,15 @@ pub struct OwnedCursorVec<'a> {
     _phantom: PhantomData<&'a ()>,
 }
 
+impl Clone for OwnedCursorVec<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.lock().unwrap().clone().into(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl OwnedCursorVec<'_> {
     pub fn new(inner: Cursor<Vec<u8>>) -> Self {
         Self {
@@ -246,7 +255,7 @@ pub mod csv_data {
 
     use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
+    #[derive(Debug, Default, PartialEq, PartialOrd, Clone, Serialize, Deserialize)]
     pub struct IouZipcodes {
         zip: u32,
         eiaid: u32,
