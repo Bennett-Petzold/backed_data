@@ -1,6 +1,6 @@
 use std::{
     fs::{copy, create_dir_all, remove_file, rename, File},
-    io::{Read, Seek, Write},
+    io::{BufReader, BufWriter, Read, Seek, Write},
     ops::{Deref, DerefMut},
     path::PathBuf,
 };
@@ -18,61 +18,54 @@ use super::PathBufVisitor;
 /// File, but serializes based on path string
 #[derive(Debug)]
 pub struct SerialFile {
-    pub file: File,
-    pub path: PathBuf,
+    read_file: BufReader<File>,
+    write_file: BufWriter<File>,
+    path: PathBuf,
 }
 
 impl SerialFile {
     pub fn new(path: PathBuf) -> Result<Self, std::io::Error> {
+        let file = File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path.clone())?;
         Ok(Self {
-            file: File::options()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(path.clone())?,
+            read_file: BufReader::new(file.try_clone()?),
+            write_file: BufWriter::new(file),
             path,
         })
     }
 }
 
-impl Deref for SerialFile {
-    type Target = File;
-    fn deref(&self) -> &Self::Target {
-        &self.file
-    }
-}
-
-impl DerefMut for SerialFile {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.file
-    }
-}
-
 impl Write for SerialFile {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.file.write(buf)
+        self.write_file.write(buf)
     }
     fn flush(&mut self) -> std::io::Result<()> {
-        self.file.flush()
+        self.write_file.flush()
     }
     fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
-        self.file.write_vectored(bufs)
+        self.write_file.write_vectored(bufs)
+    }
+    fn write_all(&mut self, mut buf: &[u8]) -> std::io::Result<()> {
+        self.write_file.write_all(buf)
     }
 }
 
 impl Read for SerialFile {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.file.read(buf)
+        self.read_file.read(buf)
     }
     fn read_vectored(&mut self, bufs: &mut [std::io::IoSliceMut<'_>]) -> std::io::Result<usize> {
-        self.file.read_vectored(bufs)
+        self.read_file.read_vectored(bufs)
     }
 }
 
 impl Seek for SerialFile {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        self.file.seek(pos)
+        self.read_file.seek(pos)
     }
 }
 
@@ -96,7 +89,14 @@ impl<'de> Deserialize<'de> for SerialFile {
             .write(true)
             .open(path.clone())
             .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
-        Ok(Self { file, path })
+        Ok(Self {
+            read_file: BufReader::new(
+                file.try_clone()
+                    .map_err(|err| D::Error::custom(format!("{:#?}", err)))?,
+            ),
+            write_file: BufWriter::new(file),
+            path,
+        })
     }
 }
 
