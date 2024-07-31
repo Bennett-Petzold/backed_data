@@ -13,21 +13,27 @@ use std::{ops::Range, pin::pin};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::{
-    internal_idx, multiple_internal_idx, sync_impl::BackedArray as SyncBackedArray,
+    internal_idx, multiple_internal_idx, sync_impl::VecBackedArray as SyncVecBackedArray,
     BackedArrayEntry, BackedArrayError,
 };
 
 /// Asynchronous version of [`BackedArray`].
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
-pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
+pub struct BackedArray<K, E> {
     // keys and entries must always have the same length
     // keys must always be sorted min-max
-    keys: Vec<Range<usize>>,
-    #[serde(bound = "BackedEntryArrAsync<T, Disk>: Serialize + for<'df> Deserialize<'df>")]
-    entries: Vec<BackedEntryArrAsync<T, Disk>>,
+    keys: K,
+    //#[serde(bound = "BackedEntryArrAsync<T, Disk>: Serialize + for<'df> Deserialize<'df>")]
+    entries: E,
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> Default for BackedArray<T, Disk> {
+pub type VecBackedArray<T, Disk> =
+    BackedArray<Vec<Range<usize>>, Vec<BackedEntryArrAsync<T, Disk>>>;
+
+//keys: Vec<Range<usize>>,
+//entries: Vec<BackedEntryArrAsync<T, Disk>>,
+
+impl<T, Disk: for<'de> Deserialize<'de>> Default for VecBackedArray<T, Disk> {
     fn default() -> Self {
         Self {
             keys: vec![],
@@ -36,7 +42,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> Default for BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -119,11 +125,11 @@ impl<T> From<T> for PointerWrapper<T> {
 }
 
 /// Async Read implementations
-impl<T: DeserializeOwned + Send + Sync, Disk: AsyncReadDisk + Send + Sync> BackedArray<T, Disk>
+impl<T: DeserializeOwned + Send + Sync, Disk: AsyncReadDisk + Send + Sync> VecBackedArray<T, Disk>
 where
     Disk::ReadDisk: Send + Sync,
 {
-    /// Async version of [`BackedArray::get`].
+    /// Async version of [`VecBackedArray::get`].
     pub async fn get(&mut self, idx: usize) -> Result<&T, BackedArrayError> {
         let loc = internal_idx(&self.keys, idx).ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
         Ok(&self.entries[loc.entry_idx]
@@ -132,7 +138,7 @@ where
             .map_err(BackedArrayError::Bincode)?[loc.inside_entry_idx])
     }
 
-    /// Async version of [`BackedArray::get_multiple`].
+    /// Async version of [`VecBackedArray::get_multiple`].
     ///
     /// Preserves ordering and fails on any error within processing.
     pub async fn get_multiple<'a, I>(&'a mut self, idxs: I) -> bincode::Result<Vec<&'a T>>
@@ -187,8 +193,8 @@ where
 }
 
 #[cfg(feature = "async")]
-impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
-    /// Async version of [`super::sync_impl::BackedArray::append`].
+impl<T: Serialize, Disk: AsyncWriteDisk> VecBackedArray<T, Disk> {
+    /// Async version of [`super::sync_impl::VecBackedArray::append`].
     pub async fn append<U: Into<Box<[T]>>>(
         &mut self,
         values: U,
@@ -223,7 +229,7 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to indentify the target index.
@@ -256,7 +262,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: for<'de> Deserialize<'de> + Serialize> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: for<'de> Deserialize<'de> + Serialize> VecBackedArray<T, Disk> {
     /// Async version of [`super::sync_impl::save_to_disk`]
     pub async fn save_to_disk<W: AsyncWrite + Unpin>(
         &mut self,
@@ -270,7 +276,7 @@ impl<T: Serialize, Disk: for<'de> Deserialize<'de> + Serialize> BackedArray<T, D
     }
 }
 
-impl<T: DeserializeOwned, Disk: for<'de> Deserialize<'de> + Serialize> BackedArray<T, Disk> {
+impl<T: DeserializeOwned, Disk: for<'de> Deserialize<'de> + Serialize> VecBackedArray<T, Disk> {
     /// Async version of [`super::sync_impl::load`]
     pub async fn load<R: AsyncRead + Unpin>(writer: &mut R) -> bincode::Result<Self> {
         AsyncBincodeReader::from(writer)
@@ -282,7 +288,7 @@ impl<T: DeserializeOwned, Disk: for<'de> Deserialize<'de> + Serialize> BackedArr
     }
 }
 
-impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
+impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> VecBackedArray<T, Disk> {
     /// Combine `self` and `rhs` into a new [`super::sync_impl`]
     ///
     /// Appends entries of `self` and `rhs`
@@ -316,7 +322,7 @@ impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Moves all entries of `rhs` into `self`
     pub fn append_array(&mut self, mut rhs: Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
@@ -330,11 +336,11 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize + Clone, Disk: AsyncWriteDisk + Clone> BackedArray<T, Disk> {
+impl<T: Serialize + Clone, Disk: AsyncWriteDisk + Clone> VecBackedArray<T, Disk> {
     /// Moves all entries of `rhs` into `self`
     pub async fn append_sync_array(
         &mut self,
-        rhs: SyncBackedArray<T, Disk>,
+        rhs: SyncVecBackedArray<T, Disk>,
     ) -> bincode::Result<&mut Self> {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
         let mut rhs_keys = rhs.keys().clone();
@@ -358,22 +364,22 @@ impl<T: Serialize + Clone, Disk: AsyncWriteDisk + Clone> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: AsyncWriteDisk> VecBackedArray<T, Disk> {
     /// Converts into a sync array
-    pub async fn to_sync_array(self) -> bincode::Result<SyncBackedArray<T, Disk>> {
+    pub async fn to_sync_array(self) -> bincode::Result<SyncVecBackedArray<T, Disk>> {
         let mut entry_vec = Vec::with_capacity(self.entries.len());
         for entry in self.entries {
             entry_vec.push(entry.into_sync_entry().await?);
         }
 
-        Ok(SyncBackedArray::from_pairs(
+        Ok(SyncVecBackedArray::from_pairs(
             self.keys.iter().cloned().zip(entry_vec),
         ))
     }
 }
 
 // Iterator returns
-impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedArray<T, Disk> {
+impl<T: DeserializeOwned, Disk: AsyncReadDisk> VecBackedArray<T, Disk> {
     /// Outputs items in order.
     ///
     /// Excluding chunks before the initial offset, all chunks will load in
@@ -415,7 +421,7 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedArray<T, Disk> {
 }
 
 impl<T: Serialize + DeserializeOwned, Disk: AsyncReadDisk + AsyncWriteDisk + DiskOverwritable>
-    BackedArray<T, Disk>
+    VecBackedArray<T, Disk>
 {
     /// Provides mutable handles to underlying chunks, using [`BackedEntryMutAsync`].
     ///
@@ -429,7 +435,7 @@ impl<T: Serialize + DeserializeOwned, Disk: AsyncReadDisk + AsyncWriteDisk + Dis
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: AsyncReadDisk> BackedArray<T, Disk> {
+impl<T: DeserializeOwned + Clone, Disk: AsyncReadDisk> VecBackedArray<T, Disk> {
     /// Returns clones of chunk data.
     ///
     /// See [`super::sync_impl::chunk_stream`] for a version that produces references.
@@ -464,7 +470,7 @@ mod tests {
 
         const INPUT: [u8; 3] = [2, 3, 5];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT, &mut back_vector_wrap).await.unwrap();
         assert_eq!(
             back_vector.get_ref()[back_vector.get_ref().len() - 3..],
@@ -488,7 +494,7 @@ mod tests {
         const INPUT_0: [u8; 3] = [0, 1, 1];
         const INPUT_1: [u8; 3] = [2, 3, 5];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT_0, back_vector_wrap_0).await.unwrap();
         backed
             .append_memory(INPUT_1, back_vector_wrap_1)
@@ -522,7 +528,7 @@ mod tests {
 
         const INPUT: [u8; 3] = [2, 3, 5];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT, &mut back_vector_wrap).await.unwrap();
 
         let back_vec_prev = back_vector.get_ref().clone();
@@ -571,7 +577,7 @@ mod tests {
 
         const INPUT: [u8; 3] = [2, 3, 5];
 
-        let mut backed = BackedArray::new();
+        let mut backed = VecBackedArray::new();
         backed.append(INPUT, &mut back_vector_wrap).await.unwrap();
 
         let back_vec_prev = back_vector.get_ref().clone();
