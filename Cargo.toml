@@ -1,7 +1,17 @@
 [package]
 name = "backed_data"
 version = "0.2.0"
+authors = ["Bennett Petzold <dansecob.dev@gmail.com>"]
 edition = "2021"
+rust-version = "1.79"
+description = "Wrappers for backing data on disk"
+repository = "https://github.com/Bennett-Petzold/backed_data"
+license = "MPL-2.0"
+keywords = ["disk", "backed", "array"]
+# Applicability to these tags is dubious
+#categories = ["caching", "memory-management"]
+exclude = ["benches", "zstd", "shakespeare-dataset", ".git*"]
+
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
