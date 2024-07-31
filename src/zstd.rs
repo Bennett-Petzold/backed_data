@@ -1,7 +1,5 @@
-use std::sync::Mutex;
-
 #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
-use lazy_static::lazy_static;
+use {lazy_static::lazy_static, std::sync::Mutex};
 
 #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
 lazy_static! {
@@ -75,6 +73,7 @@ pub mod sync_impl {
                 .create(true)
                 .open(path.clone())?;
 
+            #[allow(unused_mut)]
             let mut encoder = Encoder::new(file.try_clone()?, zstd_level)?;
             #[cfg(feature = "zstdmt")]
             encoder.multithread(*ZSTD_MULTITHREAD.lock().unwrap())?;
@@ -115,6 +114,7 @@ pub mod sync_impl {
                 .open(path.clone())
                 .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
 
+            #[allow(unused_mut)]
             let mut encoder = Encoder::new(file.try_clone().map_err(D::Error::custom)?, zstd_level)
                 .map_err(D::Error::custom)?;
             #[cfg(feature = "zstdmt")]
