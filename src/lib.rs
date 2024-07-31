@@ -1,28 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod entry;
+pub mod utils;
 
 #[cfg(feature = "array")]
 pub mod array;
 #[cfg(feature = "directory")]
 pub mod directory;
-/*
-#[cfg(feature = "array")]
-pub mod meta;
-*/
-
-/*
-#[cfg(any(feature = "zstd", feature = "async-zstd"))]
-pub mod zstd;
-
-#[cfg(feature = "encrypted")]
-pub mod encrypted;
-
-#[cfg(feature = "mmap")]
-pub mod mmap;
-*/
 
 #[cfg(any(test, feature = "test"))]
 pub mod test_utils;
-
-pub mod utils;
