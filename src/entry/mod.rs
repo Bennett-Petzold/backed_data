@@ -6,7 +6,11 @@ use crate::utils::Once;
 
 #[cfg(feature = "async")]
 pub mod async_impl;
+#[cfg(feature = "async")]
+pub use async_impl::*;
+
 pub mod sync_impl;
+pub use sync_impl::*;
 
 pub mod disks;
 pub mod formats;
@@ -19,12 +23,12 @@ pub mod formats;
 /// # Generics
 ///
 /// * `T`: a [`Once`] wrapper over the type to store.
-/// * `Disk`: an implementor of [`ReadDisk`] and/or [`WriteDisk`].
-/// * `Coder`: an implementor of [`Encoder`] and/or [`Decoder`].
+/// * `Disk`: an implementor of [`ReadDisk`](`disks::ReadDisk`) and/or [`WriteDisk`](`disks::WriteDisk`).
+/// * `Coder`: an implementor of [`Encoder`](`formats::Encoder`) and/or [`Decoder`](`formats::Decoder`).
 ///
 /// * See [`BackedEntryBox`] for a heap-storing version.
 /// * See [`BackedEntryArr`] for an array-specialized version.
-/// * See [`BackedEntryAsync`] with feature [`async`] enabled for async.
+/// * See [`BackedEntryAsync`] with feature `async` enabled for async.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackedEntry<T, Disk, Coder> {
     #[serde(skip)]
@@ -69,8 +73,8 @@ pub type BackedEntryLock<T, Disk, Coder> = BackedEntry<OnceLock<T>, Disk, Coder>
 /// # Generics
 ///
 /// * `T`: the type to store.
-/// * `Disk`: an implementor of [`AsyncReadDisk`] and/or [`AsyncWriteDisk`].
-/// * `Coder`: an implementor of [`AsyncEncoder`] and/or [`AsyncDecoder`].
+/// * `Disk`: an implementor of [`AsyncReadDisk`](`disks::AsyncReadDisk`) and/or [`AsyncWriteDisk`](`disks::AsyncWriteDisk`).
+/// * `Coder`: an implementor of [`AsyncEncoder`](`formats::AsyncEncoder`) and/or [`AsyncDecoder`](`formats::AsyncDecoder`).
 pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<tokio::sync::OnceCell<T>, Disk, Coder>;
 
 /// Specialized typedef of [`BackedEntry`] for non-pointer types.

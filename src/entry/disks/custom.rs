@@ -1,3 +1,5 @@
+//! Convenience `Disk` define structs
+
 use std::io::{Read, Write};
 
 use super::{ReadDisk, WriteDisk};
@@ -15,7 +17,7 @@ use {
 ///
 /// # Example
 /// ```
-/// use backed_data::entry::disks::{ReadDisk, CustomRead};
+/// use backed_data::entry::disks::{ReadDisk, custom::CustomRead};
 ///
 /// let disk = CustomRead(|| Ok(std::io::empty()));
 /// let reader: std::io::Empty = disk.read_disk().unwrap();
@@ -28,7 +30,7 @@ pub struct CustomRead<F>(pub F);
 ///
 /// # Example
 /// ```
-/// use backed_data::entry::disks::{WriteDisk, CustomWrite};
+/// use backed_data::entry::disks::{WriteDisk, custom::CustomWrite};
 ///
 /// let disk = CustomWrite(|| Ok(std::io::sink()));
 /// let writer: std::io::Sink = disk.write_disk().unwrap();
@@ -42,9 +44,11 @@ pub struct CustomWrite<F>(pub F);
 /// use backed_data::entry::disks::{
 ///     ReadDisk,
 ///     WriteDisk,
-///     CustomSync,
-///     CustomRead,
-///     CustomWrite,
+///     custom::{
+///         CustomSync,
+///         CustomRead,
+///         CustomWrite,
+///     },
 /// };
 ///
 /// let disk = CustomSync(
@@ -105,7 +109,7 @@ where
     }
 }
 
-/// -------------------- Async -------------------- ///
+// -------------------- Async -------------------- //
 
 /// Convenience struct to define a custom [`AsyncReadDisk`], from a function.
 ///
@@ -114,7 +118,7 @@ where
 /// # Example
 /// ```
 /// use std::future::{Future, ready};
-/// use backed_data::entry::disks::{AsyncReadDisk, CustomAsyncRead};
+/// use backed_data::entry::disks::{AsyncReadDisk, custom::CustomAsyncRead};
 ///
 /// let disk = CustomAsyncRead(|| ready(Ok(smol::io::empty())));
 /// let reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
@@ -130,7 +134,7 @@ pub struct CustomAsyncRead<F>(pub F);
 /// # Example
 /// ```
 /// use std::future::{Future, ready};
-/// use backed_data::entry::disks::{AsyncWriteDisk, CustomAsyncWrite};
+/// use backed_data::entry::disks::{AsyncWriteDisk, custom::CustomAsyncWrite};
 ///
 /// let disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
 /// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
@@ -147,9 +151,11 @@ pub struct CustomAsyncWrite<F>(pub F);
 /// use backed_data::entry::disks::{
 ///     AsyncReadDisk,
 ///     AsyncWriteDisk,
-///     CustomAsyncRead,
-///     CustomAsyncWrite,
-///     CustomAsync,
+///     custom::{
+///         CustomAsyncRead,
+///         CustomAsyncWrite,
+///         CustomAsync,
+///     },
 /// };
 ///
 /// let disk = CustomAsync(
@@ -223,7 +229,7 @@ where
     }
 }
 
-/// -------------------- Combined -------------------- ///
+// -------------------- Combined -------------------- //
 
 /// Combines [`CustomSync`] and [`CustomAsync`] to capture all possible I/O.
 ///
@@ -233,15 +239,17 @@ where
 /// use backed_data::entry::disks::{
 ///     ReadDisk,
 ///     WriteDisk,
-///     CustomSync,
-///     CustomRead,
-///     CustomWrite,
 ///     AsyncReadDisk,
 ///     AsyncWriteDisk,
-///     CustomAsyncRead,
-///     CustomAsyncWrite,
-///     CustomAsync,
-///     CustomFull,
+///     custom::{
+///         CustomSync,
+///         CustomRead,
+///         CustomWrite,
+///         CustomAsyncRead,
+///         CustomAsyncWrite,
+///         CustomAsync,
+///         CustomFull,
+///     },
 /// };
 ///
 /// let disk = CustomFull(

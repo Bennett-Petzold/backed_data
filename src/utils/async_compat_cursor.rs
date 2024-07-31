@@ -14,7 +14,7 @@ use futures::{io::IoSlice, AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite};
 /// [`std::io::Cursor`] directly, [`futures`] wraps [`std::io::Cursor`] and
 /// does not implement regular read/write on it.
 ///
-/// This is almost a complete direct copy of [`futures::Cursor`]
+/// This is almost a complete direct copy of [`futures::io::Cursor`]
 /// for the async methods, with `inner` swapped for `0`.
 #[derive(Debug)]
 pub struct AsyncCompatCursor<T>(pub Cursor<T>);

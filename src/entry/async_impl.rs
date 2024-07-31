@@ -291,7 +291,7 @@ impl<
     ///
     /// # `blocking_fn`
     /// Can be used to move execution to a blocking thread. See
-    /// [`crate::blocking`] for convenience wrappers. Otherwise create a
+    /// [`crate::utils::blocking`] for convenience wrappers. Otherwise create a
     /// function that takes [`BlockingFn`] and uses [`BlockingFn::call`] to
     /// produce a result.
     ///
@@ -371,7 +371,7 @@ impl<
     ///
     /// # `blocking_fn`
     /// Can be used to move execution to a blocking thread. See
-    /// [`self::blocking`] for convenience wrappers. Otherwise create a
+    /// [`crate::utils::blocking`] for convenience wrappers. Otherwise create a
     /// function that takes [`BlockingFn`] and uses [`BlockingFn::call`] to
     /// produce a result.
     ///
@@ -455,7 +455,7 @@ where
     }
 }
 
-/// [`BlockingFn`] that calls update on [`Self::entry`].
+/// [`BlockingFn`] that calls update on a [`BackedEntry`].
 #[derive(Debug)]
 pub struct UpdateBlocking<U, Disk, Coder> {
     entry: BackedEntry<U, Disk, Coder>,
@@ -474,7 +474,7 @@ where
     }
 }
 
-/// [`BlockingFn`] that calls load on [`Self::entry`].
+/// [`BlockingFn`] that calls load on a [`BackedEntry`].
 #[derive(Debug)]
 pub struct LoadBlocking<U, Disk, Coder> {
     entry: Arc<BackedEntry<U, Disk, Coder>>,

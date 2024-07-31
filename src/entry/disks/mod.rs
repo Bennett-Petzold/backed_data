@@ -41,20 +41,19 @@ pub use write_unbuffered::*;
 mod unbuffered;
 pub use unbuffered::*;
 
-mod custom;
-pub use custom::*;
+pub mod custom;
 
 #[cfg(any(feature = "zstd", feature = "async_zstd"))]
-mod zstd;
+pub mod zstd;
 #[cfg(any(feature = "zstd", feature = "async_zstd"))]
-pub use zstd::*;
+pub use zstd::ZstdDisk;
 
 #[cfg(feature = "encrypted")]
-mod encrypted;
+pub mod encrypted;
 #[cfg(feature = "encrypted")]
-pub use encrypted::*;
+pub use encrypted::{Encrypted, SecretVecWrapper};
 
 #[cfg(feature = "network")]
 mod network;
 #[cfg(feature = "network")]
-pub use network::*;
+pub use network::{default_client, Network};

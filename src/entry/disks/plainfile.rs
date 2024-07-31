@@ -17,7 +17,7 @@ use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatE
 /// A regular file entry.
 ///
 /// This is used to open a [`File`] on demand, but drop the handle when unused.
-/// Large collections of [`BackedEntry`]s would otherwise risk overwhelming
+/// Large collections of [`BackedEntry`](`super::super::BackedEntry`)s would otherwise risk overwhelming
 /// OS limts on the number of open file descriptors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plainfile {

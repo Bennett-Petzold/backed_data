@@ -76,7 +76,7 @@ impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedA
 
 /// Iterates over a backed array, returning each item future in order.
 ///
-/// See [`BackedArrayFutIterGenericSend`] for the Send + Sync version.
+/// See [`BackedArrayFutIterGenericSend`] for the [`Send`] version.
 ///
 /// To keep an accurate size count, failed reads will not be retried.
 /// This will keep each disk loaded after pulling data from it.
@@ -87,12 +87,12 @@ pub struct BackedArrayFutIterGeneric<'a, K, E> {
     pos: usize,
 }
 
-/// [`BackedArrayFutIterGeneric`], but returns are `+ Send`.
+/// [`BackedArrayFutIterGeneric`], but returns are [`Send`].
 ///
 /// Since closure returns are anonymous, and Iterator requires a concrete type,
-/// the future is returned as a Box<dyn Future>. This strips type information,
-/// so having a `+ Send` version requires a different return type than a
-/// `Send?` version.
+/// the future is returned as a [`Box<dyn Future>`]. This strips type
+/// information, so having a `+ Send` version requires a different return type
+/// than a `Send?` version.
 #[derive(Debug)]
 pub struct BackedArrayFutIterGenericSend<K, E> {
     backed: Arc<BackedArray<K, E>>,
@@ -252,16 +252,17 @@ where
 impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
     /// Future iterator over each backed item.
     ///
-    /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
-    /// stream by default because [`Stream`] does not have the iterator methods
-    /// that allow efficient implementations.
+    /// Can be converted to a [`Stream`](`futures::Stream`) with
+    /// [`futures::stream::iter`]. This is not a stream by default because
+    /// [`Stream`](`futures::Stream`) does not have the iterator methods that
+    /// allow efficient implementations.
     ///
-    /// Use [`Self::stream_send`] for `+ Send` bounds.
+    /// Use [`Self::stream_send`] for [`Send`] bounds.
     pub fn generic_stream(&self) -> BackedArrayFutIterGeneric<K, E> {
         BackedArrayFutIterGeneric::new(self)
     }
 
-    /// Version of [`Self::stream`] with `+ Send` bounds.
+    /// Version of [`Self::stream`] with [`Send`] bounds.
     ///
     /// If this type owns the disk (all library disks are owned), wrapping
     /// in an Arc and calling with `BackedArray::stream_send(&this)` satisfies
@@ -283,9 +284,10 @@ impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedA
 
     /// Future iterator over each chunk.
     ///
-    /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
-    /// stream by default because [`Stream`] does not have the iterator methods
-    /// that allow efficient implementations.
+    /// Can be converted to a [`Stream`](`futures::Stream`) with
+    /// [`futures::stream::iter`]. This is not a stream by default because
+    /// [`Stream`](`futures::Stream`) does not have the iterator methods that
+    /// allow efficient implementations.
     pub fn generic_chunk_stream(
         &self,
     ) -> impl Iterator<
