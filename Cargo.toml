@@ -42,7 +42,7 @@ async_csv = ["async", "dep:csv-async"]
 all_disks = ["mmap", "zstd", "async_zstd", "encrypted"]
 
 encrypted = ["dep:secrets", "dep:aes-gcm", "dep:stable_deref_trait"]
-mmap = ["dep:memmap2"]
+mmap = ["dep:memmap2", "dep:stable_deref_trait"]
 network = ["async", "dep:reqwest", "dep:bytes", "dep:http-serde", "dep:url"]
 
 # zstd features
