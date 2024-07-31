@@ -4,7 +4,6 @@ use std::{
     io::{Cursor, ErrorKind, Write},
     mem::transmute,
     ops::Deref,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
@@ -17,6 +16,9 @@ use memmap2::Advice;
 
 #[cfg(target_os = "linux")]
 use memmap2::RemapOptions;
+
+#[cfg(target_os = "windows")]
+use std::os::unix::fs::MetadataExt;
 
 use crate::utils::BorrowExtender;
 
@@ -370,7 +372,7 @@ impl MmapWriter {
 
         #[cfg(target_os = "windows")]
         {
-            len = if file.metadata()?.size() == 0 {
+            len = if file.metadata()?.file_size() == 0 {
                 0
             } else {
                 mmap.len()
@@ -389,7 +391,7 @@ impl MmapWriter {
         let reserved_len = Self::get_reserved_len(
             &mmap,
             #[cfg(target_os = "windows")]
-            open_mmap(&path)?,
+            &open_mmap(&path)?,
         )?;
 
         Ok(MmapWriter {
