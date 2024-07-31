@@ -1,5 +1,4 @@
 use std::{
-    cell::OnceCell,
     env::temp_dir,
     fmt::Debug,
     fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
@@ -10,17 +9,18 @@ use std::{
 };
 
 use backed_data::{
-    array::{
-        async_impl::BackedEntryContainerNestedAsyncWrite,
-        container::{BackedEntryContainerNestedWrite, ResizingContainer},
-    },
+    array::container::{BackedEntryContainerNestedWrite, ResizingContainer},
     directory::DirectoryBackedArray,
-    entry::disks::AsyncWriteDisk,
 };
 use chrono::Local;
 use fs_extra::dir::get_size;
 use humansize::{format_size, BINARY};
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "async")]
+use backed_data::{
+    array::async_impl::BackedEntryContainerNestedAsyncWrite, entry::disks::AsyncWriteDisk,
+};
 
 pub fn logfile() -> &'static Mutex<File> {
     static LOGFILE: OnceLock<Mutex<File>> = OnceLock::new();
@@ -83,6 +83,7 @@ where
     arr
 }
 
+#[cfg(feature = "async")]
 pub async fn a_create<K, E, P: AsRef<Path>>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
 where
     K: Default + Serialize + Send + Sync,
@@ -104,9 +105,45 @@ where
     arr
 }
 
+#[cfg(feature = "async")]
+pub async fn a_create_concurrent<K, E, P>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
+where
+    P: AsRef<Path>,
+    K: Default + Serialize + Send + Sync,
+    E: Default + Serialize + Send + Sync,
+    K: ResizingContainer<Data = Range<usize>>,
+    E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
+    E::Coder: Default,
+    E::Disk: From<PathBuf> + AsRef<Path>,
+    E::AsyncWriteError: From<std::io::Error> + Debug,
+    E::Unwrapped: for<'a> From<&'a [u8]>,
+{
+    use futures::{stream, StreamExt};
+    use std::iter::repeat;
+
+    let mut handles = stream::iter(data.iter().zip(repeat(path.as_ref().to_path_buf())))
+        .map(|(point, path)| async move {
+            let mut arr: DirectoryBackedArray<K, E> = DirectoryBackedArray::new(path).unwrap();
+            arr.a_append(point.as_ref()).await.unwrap();
+            arr
+        })
+        .buffer_unordered(data.len());
+
+    let mut combined = handles.next().await.unwrap();
+    while let Some(next) = handles.next().await {
+        combined.a_append_dir(next).await.unwrap();
+    }
+
+    if combined.a_save().await.is_err() {
+        panic!()
+    };
+    combined
+}
+
+#[cfg(feature = "async")]
 pub async fn a_create_parallel<K, E, P>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
 where
-    P: AsRef<Path> + Clone + Send + Sync + 'static,
+    P: AsRef<Path> + Send + Sync + 'static,
     K: Default + Serialize + Send + Sync + 'static,
     E: Default + Serialize + Send + Sync + 'static,
     K: ResizingContainer<Data = Range<usize>>,
@@ -115,19 +152,18 @@ where
     E::Disk: From<PathBuf> + AsRef<Path> + Send + Sync,
     <E::Disk as AsyncWriteDisk>::WriteDisk: Send + Sync,
     E::AsyncWriteError: From<std::io::Error> + Debug,
-    E::Unwrapped: From<Vec<u8>>,
+    E::Unwrapped: for<'a> From<&'a [u8]>,
 {
     use std::iter::repeat;
 
     let mut handles = data
         .iter()
-        .map(|data| data.clone().into_bytes())
-        .zip(repeat(path))
+        .cloned()
+        .zip(repeat(path.as_ref().to_path_buf()))
         .map(|(point, path)| {
             tokio::spawn(async move {
-                let mut arr: DirectoryBackedArray<K, E> =
-                    DirectoryBackedArray::new(path.as_ref().to_path_buf()).unwrap();
-                arr.a_append(point).await.unwrap();
+                let mut arr: DirectoryBackedArray<K, E> = DirectoryBackedArray::new(path).unwrap();
+                arr.a_append(point.as_ref()).await.unwrap();
                 arr
             })
         })
@@ -153,6 +189,14 @@ macro_rules! create_fn {
             data: &[String]
         ) -> $output_type {
             a_create_parallel(path, data).await
+        }
+    };
+    (async concurrent $fn_name: ident, $output_type: ty, $($extra_generics: tt)*) => {
+        async fn $fn_name<$($extra_generics)* P: AsRef<Path> + Clone>(
+            path: P,
+            data: &[String]
+        ) -> $output_type {
+            a_create_concurrent(path, data).await
         }
     };
     (async $fn_name: ident, $output_type: ty, $($extra_generics: tt)*) => {
@@ -243,22 +287,18 @@ pub fn log_created_size<S: AsRef<str>>(path_cell: &mut Option<TempDir>, name: S)
             format_size(get_size(path.clone()).unwrap(), BINARY)
         )
         .unwrap();
-        let _ = remove_dir_all(path.clone());
     }
 }
 
-pub fn create_files<F, K, E>(path_cell: &mut OnceCell<TempDir>, init: F) -> &TempDir
+pub fn create_files<F, K, E>(init: F) -> TempDir
 where
     F: FnOnce(TempDir, &'static [String]) -> DirectoryBackedArray<K, E>,
     E: Serialize,
     K: Serialize,
 {
-    path_cell.get_or_init(|| {
-        let path = TempDir::default();
-        (init)(path.clone(), complete_works());
-        sync_all_dir(path.clone());
-        path
-    })
+    let path = TempDir::default();
+    (init)(path.clone(), complete_works());
+    path
 }
 
 // ---------- END TEMPDIR ---------- //
@@ -270,7 +310,7 @@ macro_rules! read_dir {
     (async parallel $fn_name: ident, $( $type: tt )+) => {
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::{
-                array::sync_impl::BackedArray,
+                array::BackedArray,
                 directory::DirectoryBackedArray
             };
             use futures::stream;
@@ -280,7 +320,8 @@ macro_rules! read_dir {
             let (arr, _) = arr.deconstruct();
             stream::iter(BackedArray::stream_send(&arr))
                 .map(|x| async { spawn(x).await.unwrap() })
-                .buffered(arr.len())
+                // Lesser buffer, in the interest of completing the bench
+                .buffered(arr.entries().len())
                 .try_collect::<Vec<_>>()
                 .await.unwrap().len()
         }
@@ -291,7 +332,9 @@ macro_rules! read_dir {
             use futures::stream;
 
             let arr: $($type)+ = DirectoryBackedArray::a_load(path).await.unwrap();
-            stream::iter(arr.stream()).buffered(arr.len()).try_collect::<Vec<_>>().await.unwrap().len()
+            //stream::iter(arr.stream()).buffered(arr.len()).try_collect::<Vec<_>>().await.unwrap().len()
+            // Lesser buffer, in the interest of completing the bench
+            stream::iter(arr.stream()).buffered(arr.entries().len()).try_collect::<Vec<_>>().await.unwrap().len()
         }
     };
     (async $fn_name: ident, $( $type: tt )+) => {

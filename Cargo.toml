@@ -41,8 +41,6 @@ mmap = ["dep:mmap"]
 
 # zstd features
 zstd = ["array", "dep:zstd", "dep:num-traits"]
-zstd_thin_lto = ["zstd", "zstd/thin-lto"]
-zstd_fat_lto = ["zstd", "zstd/fat-lto"]
 zstdmt = ["zstd", "zstd/zstdmt", "dep:lazy_static"]
 async_zstd = ["async", "dep:num-traits", "dep:async-compression", "async-compression/zstd"]
 async_zstdmt = ["async_zstd", "async-compression/zstdmt", "dep:lazy_static"]
@@ -99,11 +97,14 @@ seq-macro = "0.3.5"
 name = "io_bench"
 harness = false
 
+[profile.bench]
+debug = true
+
 # Profile to use for squeezing max performance
 [profile.full-perf]
 inherits = "release"
 strip = true # Remove symbol data from a release
-lto = true # Use full lto instead of thin. Combine with "zstd-fat-lto" feature
+lto = true # Use full lto instead of thin. Combine with "zstd/fat-lto"
 overflow-checks = false
 panic = "abort"
 codegen-units = 1 # Reduce processing speed, but squeeze optimization

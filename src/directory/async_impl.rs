@@ -22,7 +22,7 @@ use crate::{
             BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
             ResizingContainer,
         },
-        sync_impl::BackedArray,
+        BackedArray,
     },
     entry::{
         disks::{AsyncReadDisk, AsyncWriteDisk},

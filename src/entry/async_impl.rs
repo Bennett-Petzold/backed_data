@@ -57,15 +57,12 @@ impl<
 {
     /// See [`Self::load`].
     pub async fn a_load(&self) -> Result<&T, Coder::Error> {
-        let value = match self.value.get() {
-            Some(x) => x,
-            None => {
+        self.value
+            .get_or_try_init(|| async {
                 let mut disk = self.disk.async_read_disk().await?;
-                let val = self.coder.decode(&mut disk).await?;
-                self.value.get_or_init(|| async { val }).await
-            }
-        };
-        Ok(value)
+                self.coder.decode(&mut disk).await
+            })
+            .await
     }
 }
 

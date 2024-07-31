@@ -1,10 +1,12 @@
 #![cfg(all(feature = "bincode", feature = "directory"))]
 
-use std::{cell::OnceCell, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
 use backed_data::{directory::StdDirBackedArray, entry::formats::BincodeCoder};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
+
+#[cfg(feature = "async")]
 use tokio::runtime;
 
 #[cfg(feature = "zstd")]
@@ -29,11 +31,16 @@ create_fn!(create_zstdfiles, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder>, 'a
 #[cfg(feature = "async_bincode")]
 create_fn!(async create_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
 #[cfg(feature = "async_bincode")]
-create_fn!(async parallel create_plainfiles_async_parallel, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
+create_fn!(async concurrent create_plainfiles_async_con, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
+#[cfg(feature = "async_bincode")]
+create_fn!(async parallel create_plainfiles_async_par, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 create_fn!(async create_zstdfiles_async, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
-create_fn!(async parallel create_zstdfiles_async_parallel, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
+#[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
+create_fn!(async concurrent create_zstdfiles_async_con, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
+#[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
+create_fn!(async parallel create_zstdfiles_async_par, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
 
 read_dir!(read_plainfiles, StdDirBackedArray<u8, BincodeCoder>);
 #[cfg(feature = "zstd")]
@@ -53,21 +60,27 @@ read_dir!(async concurrent read_zstdfiles_async_con, AsyncZstdDirBackedArray<0, 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 read_dir!(async parallel read_zstdfiles_async_par, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
 
-fn file_creation_bench(c: &mut Criterion) {
+fn file_creation_benches(c: &mut Criterion) {
     let data = complete_works();
     let mut path_cell = None;
     let mut group = c.benchmark_group("file_creation_benches");
 
     group.bench_function("create_plainfiles", |b| {
-        let path = create_path(&mut path_cell);
-        b.iter(|| create_plainfiles(black_box(&path), black_box(data)))
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_plainfiles(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
     });
     log_created_size(&mut path_cell, "Plainfiles");
 
     #[cfg(feature = "zstd")]
     group.bench_function("create_zstdfiles", |b| {
-        let path = create_path(&mut path_cell);
-        b.iter(|| create_zstdfiles::<0, _>(black_box(path), black_box(data)))
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_zstdfiles::<0, _>(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
     });
     log_created_size(&mut path_cell, "Zstdfiles");
 
@@ -79,37 +92,62 @@ fn file_creation_bench(c: &mut Criterion) {
             .unwrap();
 
         group.bench_function("async_create_plainfiles", |b| {
-            let path = create_path(&mut path_cell);
-            b.to_async(&rt)
-                .iter(|| create_plainfiles_async(black_box(path), black_box(data)))
+            b.to_async(&rt).iter_batched(
+                || create_path(&mut path_cell).clone(),
+                |path| create_plainfiles_async(black_box(path.clone()), black_box(data)),
+                criterion::BatchSize::SmallInput,
+            )
         });
         log_created_size(&mut path_cell, "Async plainfiles");
 
+        group.bench_function("async_create_plainfiles_concurrent", |b| {
+            b.to_async(&rt).iter_batched(
+                || create_path(&mut path_cell).clone(),
+                |path| create_plainfiles_async_con(black_box(path.clone()), black_box(data)),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+        log_created_size(&mut path_cell, "Async concurrent plainfiles");
+
         group.bench_function("async_create_plainfiles_parallel", |b| {
-            let path = create_path(&mut path_cell);
-            b.to_async(&rt)
-                .iter(|| create_plainfiles_async_parallel(black_box(path.clone()), black_box(data)))
+            b.to_async(&rt).iter_batched(
+                || create_path(&mut path_cell).clone(),
+                |path| create_plainfiles_async_par(black_box(path.clone()), black_box(data)),
+                criterion::BatchSize::SmallInput,
+            )
         });
         log_created_size(&mut path_cell, "Async parallel plainfiles");
 
         #[cfg(feature = "async_zstd")]
         {
             group.bench_function("async_create_zstdfiles", |b| {
-                let path = create_path(&mut path_cell);
-                b.to_async(&rt)
-                    .iter(|| create_zstdfiles_async::<0, _>(black_box(path), black_box(data)))
+                b.to_async(&rt).iter_batched(
+                    || create_path(&mut path_cell).clone(),
+                    |path| create_zstdfiles_async::<0, _>(black_box(path.clone()), black_box(data)),
+                    criterion::BatchSize::SmallInput,
+                )
             });
             log_created_size(&mut path_cell, "Async zstdfiles");
 
+            group.bench_function("async_create_zstdfiles_concurrent", |b| {
+                b.to_async(&rt).iter_batched(
+                    || create_path(&mut path_cell).clone(),
+                    |path| {
+                        create_zstdfiles_async_con::<0, _>(black_box(path.clone()), black_box(data))
+                    },
+                    criterion::BatchSize::SmallInput,
+                )
+            });
+            log_created_size(&mut path_cell, "Async zstdfiles concurrent");
+
             group.bench_function("async_create_zstdfiles_parallel", |b| {
-                let path = create_path(&mut path_cell);
-                b.to_async(&rt).iter(|| async {
-                    create_zstdfiles_async_parallel::<0, _>(
-                        black_box(path.clone()),
-                        black_box(data),
-                    )
-                    .await
-                })
+                b.to_async(&rt).iter_batched(
+                    || create_path(&mut path_cell).clone(),
+                    |path| {
+                        create_zstdfiles_async_par::<0, _>(black_box(path.clone()), black_box(data))
+                    },
+                    criterion::BatchSize::SmallInput,
+                )
             });
             log_created_size(&mut path_cell, "Async zstdfiles parallel");
         }
@@ -118,21 +156,24 @@ fn file_creation_bench(c: &mut Criterion) {
     }
 }
 
-fn file_load_bench(c: &mut Criterion) {
-    let mut path_cell = OnceCell::new();
+fn file_load_benches(c: &mut Criterion) {
     let mut group = c.benchmark_group("file_load_benches");
 
-    group.bench_function("load_plainfiles", |b| {
-        let path = create_files(&mut path_cell, create_plainfiles);
-        b.iter(|| black_box(read_plainfiles(path)))
-    });
+    {
+        let path = create_files(create_plainfiles);
+        group.bench_function("load_plainfiles", |b| {
+            b.iter(|| black_box(read_plainfiles(&path)))
+        });
+    }
 
     #[cfg(feature = "zstd")]
     {
-        group.bench_function("load_zstdfiles", |b| {
-            let path = create_files(&mut path_cell, create_zstdfiles::<0, _>);
-            b.iter(|| black_box(read_zstdfiles(path)))
-        });
+        {
+            let path = create_files(create_zstdfiles::<0, _>);
+            group.bench_function("load_zstdfiles", |b| {
+                b.iter(|| black_box(read_zstdfiles(&path)))
+            });
+        }
     }
 
     #[cfg(feature = "async_bincode")]
@@ -142,23 +183,61 @@ fn file_load_bench(c: &mut Criterion) {
             .build()
             .unwrap();
 
-        group.bench_function("async_load_plainfiles", |b| {
-            let path = create_files(&mut path_cell, |path, data| {
-                rt.block_on(create_plainfiles_async(path, data))
+        {
+            let path = create_files(|path, data| rt.block_on(create_plainfiles_async(path, data)));
+            group.bench_function("async_load_plainfiles", |b| {
+                b.to_async(&rt)
+                    .iter(|| black_box(read_plainfiles_async(&path)))
             });
-            b.to_async(&rt)
-                .iter(|| black_box(read_plainfiles_async(path)))
-        });
+        }
+
+        {
+            let path = create_files(|path, data| rt.block_on(create_plainfiles_async(path, data)));
+            group.bench_function("async_load_plainfiles_concurrent", |b| {
+                b.to_async(&rt)
+                    .iter(|| black_box(read_plainfiles_async_con(&path)))
+            });
+        }
+
+        {
+            let path = create_files(|path, data| rt.block_on(create_plainfiles_async(path, data)));
+            group.bench_function("async_load_plainfiles_parallel", |b| {
+                b.to_async(&rt)
+                    .iter(|| black_box(read_plainfiles_async_par(&path)))
+            });
+        }
 
         #[cfg(feature = "async_zstd")]
         {
-            group.bench_function("async_load_zstdfiles", |b| {
-                let path = create_files(&mut path_cell, |path, data| {
+            {
+                let path = create_files(|path, data| {
                     rt.block_on(create_zstdfiles_async::<0, _>(path, data))
                 });
-                b.to_async(&rt)
-                    .iter(|| black_box(read_zstdfiles_async(path)))
-            });
+                group.bench_function("async_load_zstdfiles", |b| {
+                    b.to_async(&rt)
+                        .iter(|| black_box(read_zstdfiles_async(&path)))
+                });
+            }
+
+            {
+                let path = create_files(|path, data| {
+                    rt.block_on(create_zstdfiles_async::<0, _>(path, data))
+                });
+                group.bench_function("async_load_zstdfiles_concurrent", |b| {
+                    b.to_async(&rt)
+                        .iter(|| black_box(read_zstdfiles_async_con(&path)))
+                });
+            }
+
+            {
+                let path = create_files(|path, data| {
+                    rt.block_on(create_zstdfiles_async::<0, _>(path, data))
+                });
+                group.bench_function("async_load_zstdfiles_parallel", |b| {
+                    b.to_async(&rt)
+                        .iter(|| black_box(read_zstdfiles_async_par(&path)))
+                });
+            }
         }
 
         rt.shutdown_background()
@@ -174,7 +253,6 @@ fn zstd_setting_benches(c: &mut Criterion) {
 
     let data = complete_works();
     let mut path_opt = None;
-    let mut path_cell = OnceCell::new();
     let mut group = c.benchmark_group("zstd_setting_benches");
 
     #[cfg(feature = "async_zstd")]
@@ -193,18 +271,21 @@ fn zstd_setting_benches(c: &mut Criterion) {
             BenchmarkId::new("zstd_write", format!("Compression Level: {}", ZSTD_LEVEL)),
             &ZSTD_LEVEL,
             |b, _| {
-                let path = create_path(&mut path_opt);
-                b.iter(|| create_zstdfiles::<ZSTD_LEVEL, _>(black_box(path), black_box(data)))
+                b.iter_batched(
+                    || create_path(&mut path_opt).clone(),
+                    |path| create_zstdfiles::<ZSTD_LEVEL, _>(black_box(path.clone()), black_box(data)),
+                    criterion::BatchSize::SmallInput,
+                )
             },
         );
-            log_created_size(&mut path_opt, format!("Zstdfiles async (compression {})", ZSTD_LEVEL));
+            log_created_size(&mut path_opt, format!("Zstdfiles (compression {})", ZSTD_LEVEL));
 
+                let path = create_files(create_zstdfiles::<ZSTD_LEVEL, _>);
         group.bench_with_input(
             BenchmarkId::new("zstd_read", format!("Compression Level: {}", ZSTD_LEVEL)),
             &(),
             |b, _| {
-                let path = create_files(&mut path_cell, create_zstdfiles::<ZSTD_LEVEL, _>);
-                b.iter(|| black_box(read_zstdfiles(path)))
+                b.iter(|| black_box(read_zstdfiles(&path)))
             },
         );
 
@@ -217,17 +298,16 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 ),
                 &ZSTD_LEVEL,
                 |b, _| {
-                let path = create_path(&mut path_opt);
-                    b.to_async(&rt).iter(|| {
-                        create_zstdfiles_async::<ZSTD_LEVEL, _>(
-                            black_box(path),
-                            black_box(data),
-                        )
-                    })
-                },
+                    b.to_async(&rt).iter_batched(
+                        || create_path(&mut path_opt).clone(),
+                        |path| create_zstdfiles_async::<ZSTD_LEVEL, _>(black_box(path.clone()), black_box(data)),
+                        criterion::BatchSize::SmallInput,
+                    )
+                }
             );
             log_created_size(&mut path_opt, format!("Zstdfiles async (compression {})", ZSTD_LEVEL));
 
+                let path = create_files(|path, data| rt.block_on(create_zstdfiles_async::<ZSTD_LEVEL, _>(path, data)));
             group.bench_with_input(
                 BenchmarkId::new(
                     "zstd_read_async",
@@ -235,9 +315,8 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 ),
                 &(),
                 |b, _| {
-                let path = create_files(&mut path_cell, |path, data| rt.block_on(create_zstdfiles_async::<ZSTD_LEVEL, _>(path, data)));
                     b.to_async(&rt)
-                        .iter(|| black_box(read_zstdfiles_async(path)))
+                        .iter(|| black_box(read_zstdfiles_async(&path)))
                 },
             );
         }
@@ -253,18 +332,16 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 ),
                 &ZSTD_LEVEL,
                 |b, _| {
-                let path = create_path(&mut path_opt);
-                    b.iter(|| {
-                        create_zstdfiles::<ZSTD_LEVEL, _>(
-                            black_box(path),
-                            black_box(data),
-                        )
-                    })
+                    b.iter_batched(
+                        || create_path(&mut path_opt).clone(),
+                        |path| create_zstdfiles::<ZSTD_LEVEL, _>(black_box(path.clone()), black_box(data)),
+                        criterion::BatchSize::SmallInput,
+                    )
                 },
             );
             log_created_size(&mut path_opt, format!("Zstdfiles MT (compression: {}, threads: {t_count})", ZSTD_LEVEL));
 
-            #[cfg(feature = "async-zstdmt")]
+            #[cfg(feature = "async-zstdmt")] {
             group.bench_with_input(
                 BenchmarkId::new(
                     "zstd_write_async_mt",
@@ -272,16 +349,15 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 ),
                 &ZSTD_LEVEL,
                 |b, _| {
-                let path = create_files(&mut path_opt, |path, data| rt.block_on(create_zstdfiles_async::<ZSTD_LEVEL, _>(path, data)));
-                    b.to_async(&rt).iter(|| {
-                        create_zstdfiles_async::<ZSTD_LEVEL, _>(
-                            black_box(path),
-                            black_box(data),
-                        )
-                    })
-                },
+                    b.to_async(&rt).iter_batched(
+                        || create_path(&mut path_opt).clone(),
+                        |path| create_zstdfiles_async::<ZSTD_LEVEL, _>(black_box(path.clone()), black_box(data)),
+                        criterion::BatchSize::SmallInput,
+                    )
+                }
             );
             log_created_size(&mut path_opt, format!("Zstdfiles async MT (compression: {}, threads: {t_count})", ZSTD_LEVEL));
+                }
         }
     });
     group.finish();
@@ -302,8 +378,8 @@ criterion_group! {
                     Output::Flamegraph(None)
                 )
             );
-    targets = file_creation_bench,
-    file_load_bench,
+    targets = file_creation_benches,
+    file_load_benches,
     zstd_setting_benches
 }
 criterion_main!(io_benches);

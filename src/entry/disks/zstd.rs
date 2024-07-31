@@ -26,7 +26,7 @@ use {lazy_static::lazy_static, std::sync::Mutex};
 
 #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
 lazy_static! {
-    pub static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(1);
+    pub static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(0);
 }
 
 /// Zstd compression level (<https://facebook.github.io/zstd/zstd_manual.html>).
@@ -201,9 +201,12 @@ impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEV
         )?;
 
         #[cfg(feature = "zstdmt")]
-        encoder
-            .multithread(*ZSTD_MULTITHREAD.lock().unwrap())
-            .unwrap();
+        {
+            let level = *ZSTD_MULTITHREAD.lock().unwrap();
+            if level > 0 {
+                encoder.multithread(level).unwrap();
+            }
+        }
 
         Ok(ZstdEncoderWrapper { encoder })
     }
@@ -233,13 +236,20 @@ impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
 
         #[cfg(feature = "async_zstdmt")]
         {
+            let level = *ZSTD_MULTITHREAD.lock().unwrap();
+            let params: &[_] = if level > 0 {
+                &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())]
+            } else {
+                &[]
+            };
+
             Ok(
                 async_compression::tokio::write::ZstdEncoder::with_quality_and_params(
                     disk,
                     async_compression::Level::Precise(
                         *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
                     ),
-                    &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
+                    params,
                 ),
             )
         }
