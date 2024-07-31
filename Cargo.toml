@@ -39,8 +39,8 @@ async-trait = { version = "0.1.79", optional = true }
 
 [dev-dependencies]
 # Add macros for [tokio::test]
-tokio = { version = "1.37.0", features = ["rt", "io-util", "fs", "macros"] }
-criterion = { version = "0.4", features = ["html_reports"] }
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "io-util", "fs", "macros"] }
+criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
 fs_extra = "1.3.0"
 humansize = "2.1.3"
 chrono = "0.4.37"
