@@ -76,17 +76,24 @@ where
     where
         I: IntoIterator<Item = usize> + 'a,
     {
+        let mut num_items = 0;
+
         let translated_idxes = multiple_internal_idx(&self.keys, idxs)
+            .map(|x| {
+                num_items += 1;
+                x
+            })
             .enumerate()
             .sorted_by(|(_, a_loc), (_, b_loc)| Ord::cmp(&a_loc.entry_idx, &b_loc.entry_idx))
             .group_by(|(_, loc)| loc.entry_idx);
         let translated_idxes: Vec<_> = translated_idxes.into_iter().collect();
 
-        let mut results = Vec::with_capacity(translated_idxes.len());
+        let num_groups = translated_idxes.len();
+        let mut results = Vec::with_capacity(num_items);
 
         let arr_ptr: *mut _ = &mut self.entries;
 
-        let mut values = pin!(stream::iter(translated_idxes.into_iter()).then(
+        let values = pin!(stream::iter(translated_idxes.into_iter()).map(
             |(key, group)| async move {
                 let group = group.into_iter().collect_vec();
                 let arr = unsafe { (&mut *arr_ptr)[key].load().await? };
@@ -99,6 +106,7 @@ where
                 )
             }
         ));
+        let mut values = values.buffer_unordered(num_groups);
 
         while let Some(value) = values.next().await {
             results.append(&mut value?);
