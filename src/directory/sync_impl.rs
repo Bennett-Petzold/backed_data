@@ -49,7 +49,7 @@ impl Write for SerialFile {
     fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
         self.write_file.write_vectored(bufs)
     }
-    fn write_all(&mut self, mut buf: &[u8]) -> std::io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
         self.write_file.write_all(buf)
     }
 }
