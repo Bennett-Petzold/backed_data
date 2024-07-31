@@ -17,7 +17,10 @@ pub trait RefIter<T> {
 }
 
 pub trait MutIter<T> {
-    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>>;
+    type IterMut<'b>: AsMut<T>
+    where
+        Self: 'b;
+    fn mut_iter(&mut self) -> impl Iterator<Item = Self::IterMut<'_>>;
 }
 
 /// Generic wrapper for any container type.
