@@ -35,6 +35,7 @@ fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
 impl SwitchingMmap {
     fn init_read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let mmap = unsafe { MmapOptions::new().map(&open_mmap(path)?) }?;
+        #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateRead);
 
         Ok(Self::ReadMmap(mmap))
@@ -45,6 +46,7 @@ impl SwitchingMmap {
             Self::ReadMmap(x) => Ok(Self::ReadMmap(x)),
             Self::WriteMmap(mut x) => {
                 let mmap = x.get_map()?.make_read_only()?;
+                #[cfg(target_os = "linux")]
                 let _ = mmap.advise(Advice::PopulateRead);
 
                 Ok(Self::ReadMmap(mmap))
@@ -343,7 +345,9 @@ pub struct MmapWriter {
 
 impl MmapWriter {
     fn from_args<P: AsRef<Path>>(path: P, mmap: memmap2::MmapMut) -> std::io::Result<Self> {
+        #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::Sequential);
+        #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateWrite);
 
         let reserved_len = mmap.len();
