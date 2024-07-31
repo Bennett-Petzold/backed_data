@@ -349,8 +349,6 @@ where
 mod tests {
     use std::{io::Cursor, sync::Mutex};
 
-    use itertools::Itertools;
-
     use crate::{entry::formats::BincodeCoder, test_utils::cursor_vec, test_utils::CursorVec};
 
     use super::super::super::*;
@@ -532,9 +530,13 @@ mod tests {
             .iter()
             .chain(FIB.iter().skip(INPUT_1.len()))
             .cloned()
-            .collect_vec();
-        let after_second_mod = INPUT_1.iter().chain(INPUT_1).collect_vec();
-        let after_third_mod = INPUT_1.iter().chain(INPUT_1).chain(INPUT_1).collect_vec();
+            .collect::<Vec<_>>();
+        let after_second_mod = INPUT_1.iter().chain(INPUT_1).collect::<Vec<_>>();
+        let after_third_mod = INPUT_1
+            .iter()
+            .chain(INPUT_1)
+            .chain(INPUT_1)
+            .collect::<Vec<_>>();
 
         cursor_vec!(back_vec, back_peek);
         cursor_vec!(back_vec_2, _back_peek_3);
@@ -551,7 +553,10 @@ mod tests {
         // Read checks
         assert_eq!(backed.iter_mut().size_hint(), (FIB.len(), Some(FIB.len())));
         assert_eq!(backed.iter_mut().count(), FIB.len());
-        assert_eq!(backed.iter_mut().map(|x| **x.unwrap()).collect_vec(), FIB);
+        assert_eq!(
+            backed.iter_mut().map(|x| **x.unwrap()).collect::<Vec<_>>(),
+            FIB
+        );
 
         let mut backed_iter = backed.iter_mut();
         for val in INPUT_1 {
@@ -570,12 +575,15 @@ mod tests {
         assert_eq!(back_peek[back_peek.len() - after_mod.len()..], after_mod);
 
         assert_eq!(
-            backed_iter.map(|ent| **ent.unwrap()).collect_vec(),
-            FIB.iter().skip(INPUT_1.len()).cloned().collect_vec()
+            backed_iter.map(|ent| **ent.unwrap()).collect::<Vec<_>>(),
+            FIB.iter().skip(INPUT_1.len()).cloned().collect::<Vec<_>>()
         );
 
         assert_eq!(
-            backed.iter_mut().map(|ent| **ent.unwrap()).collect_vec(),
+            backed
+                .iter_mut()
+                .map(|ent| **ent.unwrap())
+                .collect::<Vec<_>>(),
             after_mod
         );
 
@@ -603,15 +611,15 @@ mod tests {
         drop(backed_iter);
 
         assert_eq!(
-            backed.iter_mut().map(|x| **x.unwrap()).collect_vec(),
-            after_second_mod.iter().map(|x| **x).collect_vec(),
+            backed.iter_mut().map(|x| **x.unwrap()).collect::<Vec<_>>(),
+            after_second_mod.iter().map(|x| **x).collect::<Vec<_>>(),
         );
 
         // Backed storage is updated after drop
         #[cfg(not(miri))]
         assert_eq!(
             back_peek[back_peek.len() - after_mod.len()..],
-            after_second_mod.iter().map(|x| **x).collect_vec(),
+            after_second_mod.iter().map(|x| **x).collect::<Vec<_>>(),
         );
 
         backed
@@ -624,8 +632,8 @@ mod tests {
 
         // Correctly crosses multiple storage disks
         assert_eq!(
-            backed.iter_mut().map(|x| **x.unwrap()).collect_vec(),
-            after_third_mod.iter().map(|x| **x).collect_vec(),
+            backed.iter_mut().map(|x| **x.unwrap()).collect::<Vec<_>>(),
+            after_third_mod.iter().map(|x| **x).collect::<Vec<_>>(),
         );
     }
 
@@ -661,7 +669,9 @@ mod tests {
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_chunk(0);
         assert_eq!(backed.loaded_len(), 0);
-        [0, 4].into_iter().map(|x| backed.get(x)).collect_vec();
+        [0, 4].into_iter().for_each(|x| {
+            let _ = backed.get(x);
+        });
         assert_eq!(backed.loaded_len(), 6);
         backed.shrink_to_query(&[4]);
         assert_eq!(backed.loaded_len(), 3);

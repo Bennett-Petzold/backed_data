@@ -1,5 +1,3 @@
-#![cfg(any(feature = "array", feature = "encrypted"))]
-
 use std::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
