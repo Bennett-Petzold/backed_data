@@ -22,12 +22,10 @@ use tokio::io::AsyncBufRead;
 use async_compression::zstd::CParameter;
 
 #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
-use {lazy_static::lazy_static, std::sync::Mutex};
+use std::sync::{LazyLock, Mutex};
 
 #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
-lazy_static! {
-    pub static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(0);
-}
+pub static ZSTD_MULTITHREAD: LazyLock<Mutex<u32>> = LazyLock::new(|| Mutex::new(0));
 
 /// Zstd compression level (<https://facebook.github.io/zstd/zstd_manual.html>).
 ///

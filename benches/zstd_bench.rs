@@ -109,7 +109,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
             );
         }
 
-        #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
+        #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
         for t_count in 0..5 {
             *ZSTD_MULTITHREAD.lock().unwrap() = t_count;
             #[cfg(feature = "zstdmt")]
@@ -129,7 +129,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
             );
             log_created_size(&mut path_opt, format!("Zstdfiles MT (compression: {}, threads: {t_count})", ZSTD_LEVEL));
 
-            #[cfg(feature = "async-zstdmt")] {
+            #[cfg(feature = "async_zstdmt")] {
             group.bench_with_input(
                 BenchmarkId::new(
                     "zstd_write_async_mt",
