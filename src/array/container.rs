@@ -13,7 +13,14 @@ pub trait RefIter<T> {
     fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>>;
 }
 
+/// Generic wrapper for any container type.
+///
+/// Methods are prepended with `c_*` to avoid namespace conflicts.
+///
+/// `&[T]` is insufficiently generic for types that return a ref handle to `T`,
+/// instead of `&T` directly, so this allows for more complex container types.
 pub trait Container: AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::Data> {
+    /// The data container entries give references to.
     type Data;
     type Ref<'b>: AsRef<Self::Data>
     where
@@ -27,6 +34,7 @@ pub trait Container: AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::D
     fn c_len(&self) -> usize;
 }
 
+/// A [`Container`] that supports resizing operations.
 pub trait ResizingContainer:
     Container
     + Default
@@ -39,6 +47,9 @@ pub trait ResizingContainer:
     fn c_append(&mut self, other: &mut Self);
 }
 
+/// A [`BackedEntry`] holding a valid [`Container`] type.
+///
+/// For internal use, reduces size of generics boilerplate.
 pub trait BackedEntryContainer {
     type Container: Once<Inner: Container>;
     type Disk;
@@ -150,7 +161,6 @@ impl<T> BackedEntryContainerNestedAll for T where
 {
 }
 
-/// [`BackedEntry`] that holds a [`Container`] type.
 impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc>
 where
     C: Once<Inner: Container>,
@@ -185,6 +195,8 @@ macro_rules! open_ref {
     };
 }
 pub(crate) use open_ref;
+
+// ---------- Standard Type Impls ---------- //
 
 impl<T> RefIter<T> for Box<[T]> {
     fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>> {
@@ -241,6 +253,8 @@ impl<T> ResizingContainer for Vec<T> {
         self.append(other)
     }
 }
+
+// ---------- Library Type Impls ---------- //
 
 /*
 #[cfg(feature = "encrypted")]
