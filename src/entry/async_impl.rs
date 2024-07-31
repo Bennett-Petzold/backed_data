@@ -8,7 +8,7 @@ use itertools::Either;
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, sync::OnceCell};
 
-use crate::utils::Once;
+use crate::utils::{blocking::BlockingFn, Once};
 
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
@@ -290,7 +290,7 @@ impl<
     ///
     /// # `blocking_fn`
     /// Can be used to move execution to a blocking thread. See
-    /// [`self::blocking`] for convenience wrappers. Otherwise create a
+    /// [`crate::blocking`] for convenience wrappers. Otherwise create a
     /// function that takes [`BlockingFn`] and uses [`BlockingFn::call`] to
     /// produce a result.
     ///
@@ -299,7 +299,6 @@ impl<
     ///     use backed_data::{
     ///         test_utils::cursor_vec,
     ///         entry::{
-    ///             async_impl::BlockingFn,
     ///             BackedEntryAsync,
     ///             BackedEntryCell,
     ///             formats::{
@@ -307,6 +306,7 @@ impl<
     ///                 BincodeCoder,
     ///             },
     ///         },
+    ///         utils::blocking::BlockingFn,
     ///     };
     ///     use tokio::runtime::Builder;
     ///     
@@ -379,16 +379,16 @@ impl<
     ///     use backed_data::{
     ///         test_utils::cursor_vec,
     ///         entry::{
-    ///             async_impl::{
-    ///                 blocking::tokio_blocking,
-    ///                 BlockingFn,
-    ///             },
     ///             BackedEntryAsync,
     ///             BackedEntryLock,
     ///             formats::{
     ///                 AsyncBincodeCoder,
     ///                 BincodeCoder,
     ///             },
+    ///         },
+    ///         utils::blocking::{
+    ///             tokio_blocking,
+    ///             BlockingFn,
     ///         },
     ///     };
     ///     use tokio::runtime::Builder;
@@ -442,12 +442,16 @@ impl<
     }
 }
 
-/// Workaround for lack of stable [`FnOnce`] implementation.
-///
-/// Produces a value once on `call`, consuming self.
-pub trait BlockingFn {
-    type Output;
-    fn call(self) -> Self::Output;
+impl<U, Disk, Coder> BlockingFn for LoadBlocking<U, Disk, Coder>
+where
+    U: Once<Inner: for<'de> Deserialize<'de>>,
+    Disk: ReadDisk,
+    Coder: Decoder<<Disk as ReadDisk>::ReadDisk>,
+{
+    type Output = Result<(), Coder::Error>;
+    fn call(self) -> Self::Output {
+        self.entry.load().map(|_| ())
+    }
 }
 
 /// [`BlockingFn`] that calls update on [`Self::entry`].
@@ -473,71 +477,4 @@ where
 #[derive(Debug)]
 pub struct LoadBlocking<U, Disk, Coder> {
     entry: Arc<BackedEntry<U, Disk, Coder>>,
-}
-
-impl<U, Disk, Coder> BlockingFn for LoadBlocking<U, Disk, Coder>
-where
-    U: Once<Inner: for<'de> Deserialize<'de>>,
-    Disk: ReadDisk,
-    Coder: Decoder<<Disk as ReadDisk>::ReadDisk>,
-{
-    type Output = Result<(), Coder::Error>;
-    fn call(self) -> Self::Output {
-        self.entry.load().map(|_| ())
-    }
-}
-
-pub mod blocking {
-    use std::{
-        future::{ready, Ready},
-        mem::MaybeUninit,
-    };
-
-    use futures::StreamExt;
-
-    use super::BlockingFn;
-
-    /// Executes in the current thread.
-    pub fn cur_thread<T, F>(arg: F) -> Ready<T>
-    where
-        F: BlockingFn<Output = T>,
-    {
-        ready(arg.call())
-    }
-
-    /// Executes on a spawned tokio thread.
-    ///
-    /// If the safety rules will be met, this can be converted to a safe future
-    /// via a closure (`unsafe {|x| tokio_blocking(x)}`).
-    ///
-    /// # Safety
-    /// This uses a non-blocking [`async_scoped`] spawn. If arg has a
-    /// non-static lifetime, this future CANNOT be forgotten
-    /// ([`std::mem::forget`]) mid-execution, as that will invalidate `arg`
-    /// for the spawned thread and possibly cause a panic.
-    pub async unsafe fn tokio_blocking<'a, T, F>(arg: F) -> T
-    where
-        T: Send + Sync,
-        F: BlockingFn<Output = T> + Send,
-    {
-        // Val is held here uninitialized, and written into by the thread.
-        let mut val = MaybeUninit::uninit();
-        let arg = || {
-            val = MaybeUninit::new(arg.call());
-        };
-
-        // Spawn the thread and wait for completion.
-        let (mut scope, _) = unsafe {
-            async_scoped::TokioScope::scope(|s| {
-                s.spawn_blocking(arg);
-            })
-        };
-        // Only need to pull () result from one blocking future.
-        scope.next().await.unwrap().unwrap();
-
-        drop(scope);
-
-        // Val was initialized by the thread, or the program panicked.
-        unsafe { val.assume_init() }
-    }
 }
