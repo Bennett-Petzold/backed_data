@@ -1,0 +1,49 @@
+# From https://doc.rust-lang.org/rustc/instrument-coverage.html
+name: code-coverage-check
+
+on: 
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions: write-all
+jobs:
+  gen-coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: llvm-tools-preview
+    - uses: Swatinem/rust-cache@v2
+    - uses: taiki-e/install-action@cargo-llvm-cov
+
+    - name: Regular Tests
+      run: cargo llvm-cov test --no-report --all-targets --features all_formats,all_disks,directory,async,test
+
+    - name: Doc Tests
+      run: cargo llvm-cov test --no-report --doc --features all_formats,all_disks,directory,async,test
+
+    - name: Coverage Report
+      run: cargo llvm-cov report --doctests --cobertura > coverage.xml
+
+    - name: Generate Coverage Report
+      uses: clearlyip/code-coverage-report-action@v5
+      id: code_coverage_report_action
+      #Dont run for dependabot unless you fix PR comment permissions
+      if: ${{ github.actor != 'dependabot[bot]'}}
+      with:
+        #Location of the generate coverage file
+        filename: 'coverage.xml'
+        only_list_changed_files: true
+        badge: true
+        fail_on_negative_difference: true
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      #Make sure the report was generated and that the event is actually a pull request, run if failed or success
+      if: steps.code_coverage_report_action.outputs.file != '' && github.event_name == 'pull_request' && (success() || failure())
+      with:
+        recreate: true
+        path: code-coverage-results.md
