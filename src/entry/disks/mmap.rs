@@ -409,7 +409,10 @@ impl MmapWriter {
         let _ = mmap.advise(Advice::PopulateWrite);
 
         let reserved_len = Self::get_reserved_len(
+            #[cfg(not(target_os = "windows"))]
             &mmap,
+            #[cfg(target_os = "windows")]
+            &Some(mmap),
             #[cfg(target_os = "windows")]
             &open_mmap(&path)?,
         )?;
@@ -439,7 +442,10 @@ impl MmapWriter {
         let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
 
         let reserved_len = Self::get_reserved_len(
+            #[cfg(not(target_os = "windows"))]
             &mmap,
+            #[cfg(target_os = "windows")]
+            &Some(mmap),
             #[cfg(target_os = "windows")]
             &file,
         )?;
@@ -660,7 +666,16 @@ impl MmapWriter {
             stub_mmap = Some(unsafe { MmapOptions::new().map_mut(&self.file()?) }?);
         }
 
-        Ok(std::mem::replace(&mut self.mmap, stub_mmap))
+        let map = std::mem::replace(&mut self.mmap, stub_mmap);
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Ok(map)
+        }
+        #[cfg(target_os = "windows")]
+        {
+            Ok(map.unwrap())
+        }
     }
 
     /// Remap to the current reserved len.
@@ -758,7 +773,7 @@ impl AsRef<[u8]> for MmapWriter {
         }
         #[cfg(target_os = "windows")]
         {
-            ret = self.mmap.as_ref()[0..self.written_len];
+            ret = self.mmap.as_ref().unwrap()[0..self.written_len];
         }
 
         ret
@@ -775,7 +790,7 @@ impl AsMut<[u8]> for MmapWriter {
         }
         #[cfg(target_os = "windows")]
         {
-            ret = self.mmap.as_mut()[0..self.written_len];
+            ret = self.mmap.as_mut().unwrap()[0..self.written_len];
         }
 
         ret
