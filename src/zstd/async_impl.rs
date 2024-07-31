@@ -34,7 +34,7 @@ use crate::{
 use super::ZSTD_MULTITHREAD;
 
 /// File encoded with zstd
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZstdFile {
     path: PathBuf,
     zstd_level: i32,
@@ -326,6 +326,16 @@ impl<T> ZstdDirBackedArray<T> {
             let _ = future?;
         }
         Ok(self)
+    }
+}
+
+impl<T: Clone> Clone for ZstdDirBackedArray<T> {
+    fn clone(&self) -> Self {
+        Self {
+            array: self.array.clone(),
+            directory_root: self.directory_root.clone(),
+            zstd_level: self.zstd_level,
+        }
     }
 }
 

@@ -309,6 +309,12 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryArrAsync<T, Disk> {
     }
 }
 
+impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryArrAsync<T, Disk> {
+    pub fn is_loaded(&self) -> bool {
+        !self.inner.value.is_empty()
+    }
+}
+
 impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryOptionAsync<T, Disk> {
     /// Async version of [`BackedEntryOption::load`].
     ///
@@ -336,6 +342,12 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryOptionAsync<T, Disk> {
             }
         }
         Ok(self.inner.value.as_ref().unwrap())
+    }
+}
+
+impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryOptionAsync<T, Disk> {
+    pub fn is_loaded(&self) -> bool {
+        self.inner.value.is_some()
     }
 }
 
