@@ -7,3 +7,5 @@ pub mod meta;
 
 #[cfg(feature = "zstd")]
 pub mod zstd;
+
+mod test_utils;
