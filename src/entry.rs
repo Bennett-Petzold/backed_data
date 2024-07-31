@@ -175,18 +175,18 @@ impl<T: Serialize, U: Write> BackedEntryArr<T, U> {
 
 // ----- Option Implementations ----- //
 
-impl<T: DeserializeOwned, Disk: Read> BackedEntryOption<T, Disk> {
+impl<T: DeserializeOwned, Disk: Read + Seek> BackedEntryOption<T, Disk> {
     /// Returns the entry, loading from disk if not in memory.
     ///
     /// Will remain in memory until an explicit call to unload.
     pub fn load(&mut self) -> bincode::Result<&T> {
         if self.value.is_none() {
+            self.disk_entry.rewind()?;
             self.value = Some(deserialize_from(&mut self.disk_entry)?);
         }
         Ok(self.value.as_ref().unwrap())
     }
 }
-
 impl<T, U> BackedEntryUnload for BackedEntryOption<T, U> {
     fn unload(&mut self) {
         self.value = None;
@@ -531,7 +531,7 @@ pub mod async_impl {
         }
     }
 
-    impl<T: DeserializeOwned, Disk: AsyncRead + Unpin> BackedEntryOptionAsync<T, Disk> {
+    impl<T: DeserializeOwned, Disk: AsyncRead + AsyncSeek + Unpin> BackedEntryOptionAsync<T, Disk> {
         /// Async version of [`BackedEntryOption::load`].
         ///
         /// Will use AsyncBincodeReader or BincodeReader depending on mode.
@@ -539,6 +539,7 @@ pub mod async_impl {
         /// The sync implementation will block the thread.
         pub async fn load(&mut self) -> Result<&T, Box<bincode::ErrorKind>> {
             if self.inner.value.is_none() {
+                self.inner.disk_entry.rewind().await?;
                 match self.mode {
                     BackedEntryWriteMode::Sync => {
                         self.inner.value =
