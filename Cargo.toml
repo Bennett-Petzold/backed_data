@@ -150,6 +150,11 @@ name = "large_reencode"
 path = "examples/large_reencode.rs"
 required-features = ["async_zstd", "async_bincode", "csv"]
 
+[[example]]
+name = "shakespeare_secret"
+path = "examples/shakespeare_secret.rs"
+required-features = ["bincode", "encrypted"]
+
 [profile.bench]
 debug = true
 

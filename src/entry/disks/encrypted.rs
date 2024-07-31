@@ -25,12 +25,14 @@ struct KeyNonce {
 
 unsafe impl Bytes for KeyNonce {}
 
-/// Wraps [`secrets::SecretVec`]. Implements Serialize and Deserialize, but
+/// Wraps [`secrets::SecretVec`].
+///
+/// Implements Serialize and Deserialize, but
 /// serialization and deserialization leak information, so be careful. Using
 /// [`Encrypted`] as the backing store can make sure protection is kept during
 /// serialization, and the disk only sees encrypted data.
 #[derive(Debug)]
-pub struct SecretVecWrapper<T: Bytes>(pub secrets::SecretVec<T>);
+pub struct SecretVecWrapper<T: Bytes + ?Sized>(pub secrets::SecretVec<T>);
 
 #[derive(Debug)]
 struct SecretVecVisitor<T: Bytes> {

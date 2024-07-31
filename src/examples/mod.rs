@@ -3,3 +3,4 @@
 
 pub mod large_reencode;
 pub mod remote_loading;
+pub mod shakespeare_secret;
