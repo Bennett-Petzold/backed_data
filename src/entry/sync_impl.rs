@@ -9,12 +9,12 @@ use std::{
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::{Once, ToMut};
+use crate::utils::{InternalUse, Once, ToMut};
 
 use super::{
     disks::{ReadDisk, WriteDisk},
     formats::{Decoder, Encoder},
-    BackedEntry,
+    BackedEntry, BackedEntryTrait,
 };
 
 impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>>
@@ -92,60 +92,94 @@ impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>
     }
 }
 
+/// [`BackedEntryTrait`] that can be written to.
+pub trait BackedEntryWrite:
+    BackedEntryTrait<
+    T: Once<Inner: Serialize>,
+    Disk: WriteDisk,
+    Coder: Encoder<
+        <<Self as BackedEntryTrait>::Disk as WriteDisk>::WriteDisk,
+        Error = Self::WriteError,
+    >,
+>
+{
+    type WriteError;
+    fn get_inner_mut(&mut self) -> &mut BackedEntry<Self::T, Self::Disk, Self::Coder>;
+}
+
+impl<
+        E: BackedEntryTrait<
+            T: Once<Inner: Serialize>,
+            Disk: WriteDisk,
+            Coder: Encoder<<E::Disk as WriteDisk>::WriteDisk>,
+        >,
+    > BackedEntryWrite for E
+{
+    type WriteError = <E::Coder as Encoder<<E::Disk as WriteDisk>::WriteDisk>>::Error;
+    fn get_inner_mut(&mut self) -> &mut BackedEntry<Self::T, Self::Disk, Self::Coder> {
+        BackedEntryTrait::get_mut(self)
+    }
+}
+
+/// [`BackedEntryTrait`] that can be read.
+pub trait BackedEntryRead:
+    BackedEntryTrait<
+    T: Once<Inner: for<'de> Deserialize<'de>>,
+    Disk: ReadDisk,
+    Coder: Decoder<
+        <<Self as BackedEntryTrait>::Disk as ReadDisk>::ReadDisk,
+        Error = Self::ReadError,
+    >,
+>
+{
+    type ReadError;
+    fn get_inner_ref(&self) -> &BackedEntry<Self::T, Self::Disk, Self::Coder>;
+}
+
+impl<
+        E: BackedEntryTrait<
+            T: Once<Inner: for<'de> Deserialize<'de>>,
+            Disk: ReadDisk,
+            Coder: Decoder<<E::Disk as ReadDisk>::ReadDisk>,
+        >,
+    > BackedEntryRead for E
+{
+    type ReadError = <E::Coder as Decoder<<E::Disk as ReadDisk>::ReadDisk>>::Error;
+    fn get_inner_ref(&self) -> &BackedEntry<Self::T, Self::Disk, Self::Coder> {
+        BackedEntryTrait::get_ref(self)
+    }
+}
+
 /// Gives mutable handle to a backed entry.
 ///
 /// Modifying by [`BackedEntry::write`] writes the entire value to the
 /// underlying storage on every modification. This allows for multiple values
 /// values to be written before syncing with disk.
 ///
-/// Call [`BackedEntryMut::flush`] to sync with underlying storage before
+/// Call [`Self::flush`] to sync changes with underlying storage before
 /// dropping. Otherwise, a panicking drop implementation runs.
-pub struct BackedEntryMut<
-    T: Once<Inner: Serialize>,
-    Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk>,
-    E: AsMut<BackedEntry<T, Disk, Coder>>,
-> {
-    entry: E,
+pub struct BackedEntryMut<'a, E: BackedEntryWrite> {
+    entry: &'a mut E,
     modified: bool,
-    _phantom: (PhantomData<T>, PhantomData<Disk>, PhantomData<Coder>),
 }
 
-impl<
-        T: Once<Inner: Serialize>,
-        Disk: WriteDisk,
-        Coder: Encoder<Disk::WriteDisk>,
-        E: AsRef<BackedEntry<T, Disk, Coder>> + AsMut<BackedEntry<T, Disk, Coder>>,
-    > Deref for BackedEntryMut<T, Disk, Coder, E>
-{
-    type Target = T::Inner;
+impl<E: BackedEntryWrite + BackedEntryRead> Deref for BackedEntryMut<'_, E> {
+    type Target = <E::T as Once>::Inner;
 
     fn deref(&self) -> &Self::Target {
-        self.entry.as_ref().value.get().unwrap()
+        self.entry.get_inner_ref().value.get().unwrap()
     }
 }
 
-impl<
-        T: Once<Inner: Serialize>,
-        Disk: WriteDisk,
-        Coder: Encoder<Disk::WriteDisk>,
-        E: AsRef<BackedEntry<T, Disk, Coder>> + AsMut<BackedEntry<T, Disk, Coder>>,
-    > DerefMut for BackedEntryMut<T, Disk, Coder, E>
-{
+impl<E: BackedEntryWrite + BackedEntryRead> DerefMut for BackedEntryMut<'_, E> {
     /// [`DerefMut::deref_mut`] that sets a modified flag.
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        self.entry.as_mut().value.get_mut().unwrap()
+        self.entry.get_inner_mut().value.get_mut().unwrap()
     }
 }
 
-impl<
-        T: Once<Inner: Serialize>,
-        Disk: WriteDisk,
-        Coder: Encoder<Disk::WriteDisk>,
-        E: AsMut<BackedEntry<T, Disk, Coder>>,
-    > BackedEntryMut<T, Disk, Coder, E>
-{
+impl<E: BackedEntryWrite> BackedEntryMut<'_, E> {
     /// Returns true if the memory version is desynced from the disk version
     #[allow(dead_code)]
     pub fn is_modified(&self) -> bool {
@@ -153,20 +187,14 @@ impl<
     }
 
     /// Saves modifications to disk, unsetting the modified flag if sucessful.
-    pub fn flush(&mut self) -> Result<&mut Self, Coder::Error> {
-        self.entry.as_mut().update()?;
+    pub fn flush(&mut self) -> Result<&mut Self, E::WriteError> {
+        self.entry.get_inner_mut().update()?;
         self.modified = false;
         Ok(self)
     }
 }
 
-impl<
-        T: Once<Inner: Serialize>,
-        Disk: WriteDisk,
-        Coder: Encoder<Disk::WriteDisk>,
-        E: AsMut<BackedEntry<T, Disk, Coder>>,
-    > Drop for BackedEntryMut<T, Disk, Coder, E>
-{
+impl<E: BackedEntryWrite> Drop for BackedEntryMut<'_, E> {
     /// [`Drop::drop`] that attempts a write if modified, and panics if that
     /// write returns and error.
     fn drop(&mut self) {
@@ -176,24 +204,17 @@ impl<
     }
 }
 
-impl<
-        T: Once<Inner: Serialize + for<'de> Deserialize<'de>>,
-        Disk: WriteDisk + ReadDisk,
-        Coder: Encoder<Disk::WriteDisk> + Decoder<Disk::ReadDisk>,
-        E: AsMut<BackedEntry<T, Disk, Coder>>,
-    > BackedEntryMut<T, Disk, Coder, E>
-{
+impl<'a, E: BackedEntryRead + BackedEntryWrite> BackedEntryMut<'a, E> {
     /// Returns [`BackedEntryMut`] to allow efficient in-memory modifications
     /// if variable-sized writes are safe for the underlying storage.
     ///
     /// Make sure to call [`BackedEntryMut::flush`] to sync with disk before
     /// dropping.
-    pub fn mut_handle(mut backed: E) -> Result<Self, <Coder as Decoder<Disk::ReadDisk>>::Error> {
-        backed.as_mut().load()?;
+    pub fn mut_handle(backed: &'a mut E) -> Result<Self, E::ReadError> {
+        backed.get_mut().load()?;
         Ok(BackedEntryMut {
             entry: backed,
             modified: false,
-            _phantom: (PhantomData, PhantomData, PhantomData),
         })
     }
 }
@@ -207,11 +228,8 @@ impl<
     /// Convenience wrapper for [`BackedEntryMut::mut_handle`]
     pub fn mut_handle(
         &mut self,
-    ) -> Result<
-        BackedEntryMut<T, Disk, Coder, ToMut<Self>>,
-        <Coder as Decoder<Disk::ReadDisk>>::Error,
-    > {
-        BackedEntryMut::mut_handle(ToMut(self))
+    ) -> Result<BackedEntryMut<Self>, <Coder as Decoder<Disk::ReadDisk>>::Error> {
+        BackedEntryMut::mut_handle(self)
     }
 }
 
@@ -463,20 +481,20 @@ mod tests {
         assert!(!backed_entry.is_loaded());
         scope(|s| {
             let backed_share = Arc::new(&backed_entry);
-            for idx in 0..VALUES.len() {
+            (0..VALUES.len()).for_each(|idx| {
                 let backed_share = backed_share.clone();
                 s.spawn(move || assert_eq!(backed_share.load().unwrap()[idx], VALUES[idx]));
-            }
+            });
         });
 
         backed_entry.write(NEW_VALUES.into()).unwrap();
         assert!(backed_entry.is_loaded());
         scope(|s| {
             let backed_share = Arc::new(&backed_entry);
-            for idx in 0..NEW_VALUES.len() {
+            (0..NEW_VALUES.len()).for_each(|idx| {
                 let backed_share = backed_share.clone();
                 s.spawn(move || assert_eq!(backed_share.load().unwrap()[idx], NEW_VALUES[idx]));
-            }
+            });
         });
     }
 
@@ -548,7 +566,7 @@ mod tests {
             assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
         }
 
-        // Check that data is preserved alternative reader
+        // Check that data is preserved in the alternative reader
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
         backed_entry.unload();
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);

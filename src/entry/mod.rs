@@ -1,6 +1,6 @@
 use std::{cell::OnceCell, sync::OnceLock};
 
-use crate::utils::Once;
+use crate::utils::{InternalUse, Once};
 
 #[cfg(feature = "async")]
 pub mod async_impl;
@@ -154,6 +154,39 @@ impl<T, Disk, Coder> AsRef<BackedEntry<T, Disk, Coder>> for BackedEntry<T, Disk,
 
 impl<T, Disk, Coder> AsMut<BackedEntry<T, Disk, Coder>> for BackedEntry<T, Disk, Coder> {
     fn as_mut(&mut self) -> &mut BackedEntry<T, Disk, Coder> {
+        self
+    }
+}
+
+/// Wrapper to minimize bounds specification for [`BackedEntry`].
+///
+/// [`BackedEntry`] is always this.
+/// Only [`BackedEntry`] is this.
+#[allow(private_bounds)]
+pub trait BackedEntryTrait:
+    InternalUse<Internal = BackedEntry<Self::T, Self::Disk, Self::Coder>>
+{
+    type T;
+    type Disk;
+    type Coder;
+
+    fn get(self) -> BackedEntry<Self::T, Self::Disk, Self::Coder>;
+    fn get_ref(&self) -> &BackedEntry<Self::T, Self::Disk, Self::Coder>;
+    fn get_mut(&mut self) -> &mut BackedEntry<Self::T, Self::Disk, Self::Coder>;
+}
+
+impl<T, Disk, Coder> BackedEntryTrait for BackedEntry<T, Disk, Coder> {
+    type T = T;
+    type Disk = Disk;
+    type Coder = Coder;
+
+    fn get(self) -> BackedEntry<Self::T, Self::Disk, Self::Coder> {
+        self
+    }
+    fn get_ref(&self) -> &BackedEntry<Self::T, Self::Disk, Self::Coder> {
+        self
+    }
+    fn get_mut(&mut self) -> &mut BackedEntry<Self::T, Self::Disk, Self::Coder> {
         self
     }
 }
