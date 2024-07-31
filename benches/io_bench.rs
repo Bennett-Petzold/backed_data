@@ -14,6 +14,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
 
 const DATA_SIZE: usize = 1024 * 16;
+const DATA_CHUNKS: usize = 8;
+const SEED_VALUE: u64 = 3448;
 
 fn create_plainfiles(path: PathBuf, data: &[[u8; DATA_SIZE]]) {
     let mut arr: DirectoryBackedArray<u8> = DirectoryBackedArray::new(path).unwrap();
@@ -31,8 +33,8 @@ fn create_zstdfiles(path: PathBuf, data: &[[u8; DATA_SIZE]]) {
 }
 
 fn file_creation_bench(c: &mut Criterion) {
-    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; 8];
-    let mut rng = StdRng::seed_from_u64(3448);
+    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; DATA_CHUNKS];
+    let mut rng = StdRng::seed_from_u64(SEED_VALUE);
     data.iter_mut()
         .for_each(|subdata| rng.fill(&mut subdata[..]));
 
@@ -74,8 +76,8 @@ fn read_zstdfiles(f: &mut File) -> usize {
 }
 
 fn file_load_bench(c: &mut Criterion) {
-    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; 8];
-    let mut rng = StdRng::seed_from_u64(3448);
+    let data: &mut [[u8; DATA_SIZE]] = &mut [[0; DATA_SIZE]; DATA_CHUNKS];
+    let mut rng = StdRng::seed_from_u64(SEED_VALUE);
     data.iter_mut()
         .for_each(|subdata| rng.fill(&mut subdata[..]));
 
@@ -83,10 +85,6 @@ fn file_load_bench(c: &mut Criterion) {
     let _ = remove_dir_all(path.clone());
     create_dir(path.clone()).unwrap();
 
-    let mut arr: DirectoryBackedArray<u8> = DirectoryBackedArray::new(path.clone()).unwrap();
-    for inner_data in &mut *data {
-        arr.append(inner_data).unwrap();
-    }
     let mut file = File::options()
         .create(true)
         .read(true)
@@ -94,6 +92,11 @@ fn file_load_bench(c: &mut Criterion) {
         .truncate(true)
         .open(path.join("CONFIG"))
         .unwrap();
+
+    let mut arr: DirectoryBackedArray<u8> = DirectoryBackedArray::new(path.clone()).unwrap();
+    for inner_data in &mut *data {
+        arr.append(inner_data).unwrap();
+    }
     arr.save_to_disk(file.try_clone().unwrap()).unwrap();
 
     c.bench_function("read_plainfiles", |b| {
@@ -103,10 +106,6 @@ fn file_load_bench(c: &mut Criterion) {
     let _ = remove_dir_all(path.clone());
     create_dir(path.clone()).unwrap();
 
-    let mut arr: ZstdDirBackedArray<u8> = ZstdDirBackedArray::new(path.clone(), None).unwrap();
-    for inner_data in &mut *data {
-        arr.append(inner_data).unwrap();
-    }
     let mut file = File::options()
         .create(true)
         .read(true)
@@ -114,6 +113,12 @@ fn file_load_bench(c: &mut Criterion) {
         .truncate(true)
         .open(path.join("CONFIG"))
         .unwrap();
+
+    let mut arr: ZstdDirBackedArray<u8> = ZstdDirBackedArray::new(path.clone(), None).unwrap();
+    for inner_data in &mut *data {
+        arr.append(inner_data).unwrap();
+    }
+
     arr.save_to_disk(file.try_clone().unwrap()).unwrap();
 
     #[cfg(feature = "zstd")]

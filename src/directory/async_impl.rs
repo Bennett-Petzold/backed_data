@@ -30,8 +30,8 @@ use super::PathBufVisitor;
 /// File, but serializes based on path string
 #[derive(Debug)]
 pub struct SerialFile {
-    pub file: File,
-    pub path: PathBuf,
+    file: File,
+    path: PathBuf,
 }
 
 impl SerialFile {
