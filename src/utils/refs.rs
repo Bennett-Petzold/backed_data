@@ -1,5 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
+use stable_deref_trait::StableDeref;
+
 /// Wrapper that allows &T to implement [`AsRef<T>`].
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ToRef<'a, T: ?Sized>(pub &'a T);
@@ -43,6 +45,8 @@ where
         self.0.partial_cmp(other)
     }
 }
+
+unsafe impl<T: ?Sized> StableDeref for ToRef<'_, T> {}
 
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -100,6 +104,8 @@ where
     }
 }
 
+unsafe impl<T: ?Sized> StableDeref for ToMut<'_, T> {}
+
 /// Wrapper that allows &T to implement [`AsRef<T>`].
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IndirectRef<'a, T: ?Sized>(pub &'a T);
@@ -143,6 +149,8 @@ where
         self.0.partial_cmp(other)
     }
 }
+
+unsafe impl<T: ?Sized> StableDeref for IndirectRef<'_, T> {}
 
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -199,6 +207,8 @@ where
         self.0.partial_cmp(other)
     }
 }
+
+unsafe impl<T: ?Sized> StableDeref for IndirectMut<'_, T> {}
 
 /// Combined trait for types with both [`AsRef`] and [`AsMut`].
 pub trait AsRefMut<T>: AsRef<T> + AsMut<T> {}

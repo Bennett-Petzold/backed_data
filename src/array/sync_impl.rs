@@ -11,7 +11,7 @@ use crate::{
         sync_impl::{BackedEntryMut, BackedEntryRead, BackedEntryWrite},
         BackedEntry,
     },
-    utils::{BorrowExtender, BorrowExtenderMut, BorrowNest},
+    utils::{BorrowExtender, BorrowExtenderMut, BorrowNest, NestDeref},
 };
 
 use super::{
@@ -99,7 +99,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
         let entry = BorrowExtender::try_new(wrapped_container, |wrapped_container| {
             // Opening layers of abstraction, no transformations.
             let wrapped_container: &BackedEntry<_, _, _> =
-                BackedEntryContainer::get_ref(wrapped_container.as_ref());
+                BackedEntryContainer::get_ref(wrapped_container.deref());
 
             // Use the wrapped_container pointer once, to load the backing.
             let inner_container = wrapped_container.load().map_err(BackedArrayError::Coder)?;
@@ -133,8 +133,8 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     pub fn get(
         &self,
         idx: usize,
-    ) -> Result<impl AsRef<E::InnerData> + '_, BackedArrayError<E::ReadError>> {
-        self.internal_get(idx)
+    ) -> Result<impl Deref<Target = E::InnerData> + '_, BackedArrayError<E::ReadError>> {
+        Ok(NestDeref::from(self.internal_get(idx)?))
     }
 }
 
@@ -171,7 +171,7 @@ impl<
     /// array.append(values.0, file_0.into(), BincodeCoder {});
     /// array.append(values.1, file_1.into(), BincodeCoder {});
     ///
-    /// assert_eq!(array.get(4).unwrap().as_ref(), &3);
+    /// assert_eq!(*array.get(4).unwrap(), 3);
     /// remove_dir_all(FILENAME_BASE).unwrap();
     /// }
     /// ```
@@ -223,7 +223,7 @@ impl<
     ///     // Overwrite file, making disk pointer for first array invalid
     ///     array.append_memory(values.1, FILENAME.clone().into(), BincodeCoder {});
     ///
-    ///     assert_eq!(array.get(0).unwrap().as_ref(), &0);
+    ///     assert_eq!(*array.get(0).unwrap(), 0);
     ///     remove_file(FILENAME).unwrap();
     /// }
     /// ```
@@ -659,7 +659,7 @@ impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArra
 #[cfg(test)]
 #[cfg(feature = "bincode")]
 mod tests {
-    use std::{io::Cursor, sync::Mutex};
+    use std::{io::Cursor, ops::Deref, sync::Mutex};
 
     use itertools::Itertools;
 
@@ -690,19 +690,13 @@ mod tests {
             .append_memory(INPUT_1, back_vector_1, BincodeCoder {})
             .unwrap();
 
-        assert_eq!(backed.get(0).unwrap().as_ref(), &0);
-        assert_eq!(backed.get(4).unwrap().as_ref(), &3);
-        assert_eq!(
-            (
-                backed.get(0).unwrap().as_ref(),
-                backed.get(4).unwrap().as_ref()
-            ),
-            (&0, &3)
-        );
+        assert_eq!(*backed.get(0).unwrap(), 0);
+        assert_eq!(*backed.get(4).unwrap(), 3);
+        assert_eq!((*backed.get(0).unwrap(), *backed.get(4).unwrap()), (0, 3));
 
         [0, 2, 4, 5, 5, 1, 0, 5]
             .into_iter()
-            .for_each(|x| assert_eq!(backed.get(x).unwrap().as_ref(), &combined[x]));
+            .for_each(|x| assert_eq!(*backed.get(x).unwrap(), combined[x]));
     }
 
     #[test]
@@ -771,8 +765,8 @@ mod tests {
             .append(INPUT_1, back_vector_1, BincodeCoder {})
             .unwrap();
         let collected = backed.iter().collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(collected[5].as_ref(), &7);
-        assert_eq!(collected[2].as_ref(), &1);
+        assert_eq!(**collected[5], 7);
+        assert_eq!(**collected[2], 1);
         assert_eq!(collected.len(), 6);
     }
 
@@ -829,13 +823,12 @@ mod tests {
                 INPUT_1[1]
             );
         }
-
         drop(handle_vec);
 
         backed
             .iter()
             .zip([20, 1, 30, 5, 7, 40, 5, 7])
-            .for_each(|(back, x)| assert_eq!(back.unwrap().as_ref(), &x));
+            .for_each(|(back, x)| assert_eq!(**back.unwrap(), x));
     }
 
     #[test]

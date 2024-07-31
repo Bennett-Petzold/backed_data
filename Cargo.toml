@@ -18,7 +18,7 @@ resolver = "2"
 
 [features]
 default = ["bincode", "directory", "zstd"]
-array = []
+array = ["dep:stable_deref_trait"]
 directory = ["array", "dep:uuid"]
 async = ["dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-scoped"]
 
@@ -28,7 +28,7 @@ all_formats = ["bincode", "serde_json", "simd_json", "encrypted", "async_bincode
 bincode = ["dep:bincode"]
 serde_json = ["dep:serde_json"]
 simd_json = ["dep:simd-json"]
-encrypted = ["dep:secrets", "dep:aes-gcm"]
+encrypted = ["dep:secrets", "dep:aes-gcm", "dep:stable_deref_trait"]
 
 async_bincode = ["async", "dep:async-bincode", "dep:bincode"]
 
@@ -48,6 +48,7 @@ async_zstdmt = ["async_zstd", "async-compression/zstdmt", "dep:lazy_static"]
 # END DISKS
 
 test = [] # For doctests to access test utils
+stable_deref_trait = ["dep:stable_deref_trait"]
 
 [dependencies]
 # Core dependencies
@@ -79,6 +80,7 @@ async-scoped = { version = "0.9.0", optional = true, features = ["use-tokio"] }
 
 # Async format dependencies
 async-bincode = { version = "0.7.2", optional = true }
+stable_deref_trait = { version = "1.2.0", optional = true }
 
 [dev-dependencies]
 # Multithread test runtime
