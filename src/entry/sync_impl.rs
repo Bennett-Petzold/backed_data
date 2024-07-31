@@ -1,12 +1,15 @@
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     path::PathBuf,
 };
 
 use bincode::Options;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::utils::ToMut;
 
 use super::{BackedEntry, BackedEntryUnload};
 
@@ -130,28 +133,39 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntry<T, Disk> {
 ///
 /// Call [`BackedEntryMut::flush`] to sync with underlying storage before
 /// dropping. Otherwise, a panicking drop implementation runs.
-pub struct BackedEntryMut<'a, T: Serialize, Disk: WriteDisk> {
-    entry: &'a mut BackedEntry<T, Disk>,
+pub struct BackedEntryMut<T: Serialize, Disk: WriteDisk, E: AsMut<BackedEntry<T, Disk>>> {
+    entry: E,
     modified: bool,
+    _phantom: (PhantomData<T>, PhantomData<Disk>),
 }
 
-impl<'a, T: Serialize, Disk: WriteDisk> Deref for BackedEntryMut<'a, T, Disk> {
+impl<
+        T: Serialize,
+        Disk: WriteDisk + ReadDisk,
+        E: AsRef<BackedEntry<T, Disk>> + AsMut<BackedEntry<T, Disk>>,
+    > Deref for BackedEntryMut<T, Disk, E>
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.entry.value.as_ref().unwrap()
+        self.entry.as_ref().value.as_ref().unwrap()
     }
 }
 
-impl<'a, T: Serialize, Disk: WriteDisk> DerefMut for BackedEntryMut<'a, T, Disk> {
+impl<
+        T: Serialize,
+        Disk: WriteDisk + ReadDisk,
+        E: AsRef<BackedEntry<T, Disk>> + AsMut<BackedEntry<T, Disk>>,
+    > DerefMut for BackedEntryMut<T, Disk, E>
+{
     /// [`DerefMut::deref_mut`] that sets a modified flag.
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        self.entry.value.as_mut().unwrap()
+        self.entry.as_mut().value.as_mut().unwrap()
     }
 }
 
-impl<'a, T: Serialize, Disk: WriteDisk> BackedEntryMut<'a, T, Disk> {
+impl<T: Serialize, Disk: WriteDisk, E: AsMut<BackedEntry<T, Disk>>> BackedEntryMut<T, Disk, E> {
     /// Returns true if the memory version is desynced from the disk version
     #[allow(dead_code)]
     pub fn is_modified(&self) -> bool {
@@ -160,13 +174,15 @@ impl<'a, T: Serialize, Disk: WriteDisk> BackedEntryMut<'a, T, Disk> {
 
     /// Saves modifications to disk, unsetting the modified flag if sucessful.
     pub fn flush(&mut self) -> bincode::Result<&mut Self> {
-        self.entry.update()?;
+        self.entry.as_mut().update()?;
         self.modified = false;
         Ok(self)
     }
 }
 
-impl<'a, T: Serialize, Disk: WriteDisk> Drop for BackedEntryMut<'a, T, Disk> {
+impl<T: Serialize, Disk: WriteDisk, E: AsMut<BackedEntry<T, Disk>>> Drop
+    for BackedEntryMut<T, Disk, E>
+{
     /// [`Drop::drop`] that attempts a write if modified, and panics if that
     /// write returns and error.
     fn drop(&mut self) {
@@ -176,18 +192,31 @@ impl<'a, T: Serialize, Disk: WriteDisk> Drop for BackedEntryMut<'a, T, Disk> {
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedEntry<T, Disk> {
+impl<
+        T: Serialize + for<'de> Deserialize<'de>,
+        Disk: WriteDisk + ReadDisk,
+        E: AsMut<BackedEntry<T, Disk>>,
+    > BackedEntryMut<T, Disk, E>
+{
     /// Returns [`BackedEntryMut`] to allow efficient in-memory modifications
     /// if variable-sized writes are safe for the underlying storage.
     ///
     /// Make sure to call [`BackedEntryMut::flush`] to sync with disk before
     /// dropping.
-    pub fn mut_handle(&mut self) -> bincode::Result<BackedEntryMut<T, Disk>> {
-        self.load()?;
+    pub fn mut_handle(mut backed: E) -> bincode::Result<Self> {
+        backed.as_mut().load()?;
         Ok(BackedEntryMut {
-            entry: self,
+            entry: backed,
             modified: false,
+            _phantom: (PhantomData, PhantomData),
         })
+    }
+}
+
+impl<T: Serialize + for<'de> Deserialize<'de>, Disk: WriteDisk + ReadDisk> BackedEntry<T, Disk> {
+    /// Convenience wrapper for [`BackedEntryMut::mut_handle`]
+    pub fn mut_handle(&mut self) -> bincode::Result<BackedEntryMut<T, Disk, ToMut<Self>>> {
+        BackedEntryMut::mut_handle(ToMut(self))
     }
 }
 
