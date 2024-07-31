@@ -193,6 +193,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simd-json",
+ "stable_deref_trait",
  "tokio",
  "tokio-util",
  "uuid",

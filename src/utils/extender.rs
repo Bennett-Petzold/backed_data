@@ -1,3 +1,5 @@
+#![cfg(any(feature = "array", feature = "encrypted"))]
+
 use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -5,20 +7,23 @@ use std::{
 
 #[cfg(feature = "async")]
 use futures::Future;
+use stable_deref_trait::StableDeref;
 
 /// Takes ownership of a parent value and computes the child with a reference.
 ///
 /// Used to prevent the parent from being freed, and therefore return a
 /// referenced value from a function.
 #[derive(Debug)]
-pub struct BorrowExtender<T, U> {
+pub struct BorrowExtender<T: StableDeref, U> {
     _parent: T,
     child: U,
 }
 
+unsafe impl<T: StableDeref, U: StableDeref> StableDeref for BorrowExtender<T, U> {}
+
 pub type BorrowNest<A, B, C> = BorrowExtender<BorrowExtender<A, B>, C>;
 
-impl<T, U> BorrowExtender<T, U> {
+impl<T: StableDeref, U> BorrowExtender<T, U> {
     pub fn new<V: FnOnce(&T) -> U>(parent: T, child: V) -> Self {
         let child = (child)(&parent);
         Self {
@@ -81,7 +86,7 @@ impl<T> ExtenderPtr<T> {
 }
 
 #[cfg(feature = "async")]
-impl<T, U> BorrowExtender<T, U> {
+impl<T: StableDeref, U> BorrowExtender<T, U> {
     pub async fn a_new<F: Future<Output = U>, V: FnOnce(ExtenderPtr<T>) -> F>(
         parent: T,
         child: V,
@@ -116,32 +121,32 @@ impl<T, U> BorrowExtender<T, U> {
     }
 }
 
-impl<T, U> Deref for BorrowExtender<T, U> {
+impl<T: StableDeref, U> Deref for BorrowExtender<T, U> {
     type Target = U;
     fn deref(&self) -> &Self::Target {
         &self.child
     }
 }
 
-impl<T, U> DerefMut for BorrowExtender<T, U> {
+impl<T: StableDeref, U> DerefMut for BorrowExtender<T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.child
     }
 }
 
-impl<T, U: AsRef<V>, V> AsRef<V> for BorrowExtender<T, U> {
+impl<T: StableDeref, U: AsRef<V>, V> AsRef<V> for BorrowExtender<T, U> {
     fn as_ref(&self) -> &V {
         self.child.as_ref()
     }
 }
 
-impl<T, U> AsMut<U> for BorrowExtender<T, U> {
-    fn as_mut(&mut self) -> &mut U {
-        &mut self.child
+impl<T: StableDeref, U: AsMut<V>, V> AsMut<V> for BorrowExtender<T, U> {
+    fn as_mut(&mut self) -> &mut V {
+        self.child.as_mut()
     }
 }
 
-impl<'a, T, U> PartialEq<&'a U> for BorrowExtender<T, U>
+impl<'a, T: StableDeref, U> PartialEq<&'a U> for BorrowExtender<T, U>
 where
     U: PartialEq<&'a U>,
 {
@@ -150,7 +155,7 @@ where
     }
 }
 
-impl<T, U> PartialEq<U> for BorrowExtender<T, U>
+impl<T: StableDeref, U> PartialEq<U> for BorrowExtender<T, U>
 where
     U: PartialEq<U>,
 {
@@ -159,7 +164,7 @@ where
     }
 }
 
-impl<T, U> PartialOrd<U> for BorrowExtender<T, U>
+impl<T: StableDeref, U> PartialOrd<U> for BorrowExtender<T, U>
 where
     U: PartialOrd<U>,
 {
@@ -168,7 +173,7 @@ where
     }
 }
 
-impl<T, V, F> BorrowExtender<T, Result<V, F>> {
+impl<T: StableDeref, V, F> BorrowExtender<T, Result<V, F>> {
     pub fn open_result(self) -> Result<BorrowExtender<T, V>, F> {
         Ok(BorrowExtender::<T, V> {
             _parent: self._parent,
@@ -177,12 +182,30 @@ impl<T, V, F> BorrowExtender<T, Result<V, F>> {
     }
 }
 
-impl<T, V> BorrowExtender<T, Option<V>> {
+impl<T: StableDeref, V> BorrowExtender<T, Option<V>> {
     pub fn open_option(self) -> Option<BorrowExtender<T, V>> {
         Some(BorrowExtender::<T, V> {
             _parent: self._parent,
             child: self.child?,
         })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct NestDeref<A: StableDeref, B: StableDeref, C>(BorrowNest<A, B, C>);
+
+impl<A: StableDeref, B: StableDeref, C> From<BorrowNest<A, B, C>> for NestDeref<A, B, C> {
+    fn from(value: BorrowNest<A, B, C>) -> Self {
+        Self(value)
+    }
+}
+
+impl<A: StableDeref, B: StableDeref, C: StableDeref + Deref<Target = D>, D> Deref
+    for NestDeref<A, B, C>
+{
+    type Target = D;
+    fn deref(&self) -> &D {
+        &self.0
     }
 }
 

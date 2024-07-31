@@ -2,6 +2,7 @@ use std::{
     borrow::BorrowMut,
     io::{Cursor, Read, Write},
     marker::PhantomData,
+    mem::transmute,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     sync::OnceLock,
@@ -13,6 +14,7 @@ use aes_gcm::{
 };
 use secrets::{traits::Bytes, SecretBox, SecretVec};
 use serde::{Deserialize, Serialize};
+use stable_deref_trait::StableDeref;
 
 use crate::utils::BorrowExtender;
 
@@ -23,6 +25,35 @@ struct KeyNonce {
 }
 
 unsafe impl Bytes for KeyNonce {}
+
+#[derive(Debug)]
+struct SecretVecWrapper<T: Bytes>(secrets::SecretVec<T>);
+
+/// [`secrets::SecretVec::borrow`] is backed by a Box pointer, and meets the
+/// [`StableDeref`] API requirements (all methods rely on this box pointer, or
+/// non-addressed memory).
+unsafe impl<T: Bytes> StableDeref for SecretVecWrapper<T> {}
+
+impl<T: Bytes> Deref for SecretVecWrapper<T> {
+    type Target = secrets::SecretVec<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+struct SecretBoxRef<'a, T: Bytes>(secrets::secret_box::Ref<'a, T>);
+
+/// [`secrets::secret_vec::Ref`] is backed by a Box pointer, and meets the
+/// [`StableDeref`] API requirements.
+unsafe impl<T: Bytes> StableDeref for SecretBoxRef<'_, T> {}
+
+impl<T: Bytes> Deref for SecretBoxRef<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 fn random_key_nonce() -> SecretBox<KeyNonce> {
     SecretBox::random()
@@ -111,23 +142,24 @@ impl<B: Bytes> Encrypted<'_, B> {
     }
 
     pub fn get_key(&self) -> impl Deref<Target = [u8; 32]> + '_ {
-        BorrowExtender::new(self.secrets.borrow(), |secrets| secrets.key)
+        BorrowExtender::new(SecretBoxRef(self.secrets.borrow()), |secrets| secrets.key)
     }
 
     pub fn get_nonce(&self) -> impl Deref<Target = [u8; 96]> + '_ {
-        BorrowExtender::new(self.secrets.borrow(), |secrets| secrets.nonce)
+        BorrowExtender::new(SecretBoxRef(self.secrets.borrow()), |secrets| secrets.nonce)
     }
 }
 
 #[derive(Debug)]
-struct SecretVecU8<'a>(BorrowExtender<SecretVec<u8>, secrets::secret_vec::Ref<'a, u8>>);
+struct SecretVecU8<'a>(BorrowExtender<SecretVecWrapper<u8>, secrets::secret_vec::Ref<'a, u8>>);
 
-impl From<SecretVec<u8>> for SecretVecU8<'_> {
+impl<'a> From<SecretVec<u8>> for SecretVecU8<'a> {
     fn from(value: SecretVec<u8>) -> Self {
         // Lifetime shenanigans
-        Self(BorrowExtender::new(value, |value| {
-            let value_ptr: *const _ = value;
-            unsafe { &*value_ptr }.borrow()
+        Self(BorrowExtender::new(SecretVecWrapper(value), |value| {
+            let value =
+                unsafe { transmute::<&SecretVecWrapper<u8>, &'a SecretVecWrapper<u8>>(value) };
+            value.borrow()
         }))
     }
 }

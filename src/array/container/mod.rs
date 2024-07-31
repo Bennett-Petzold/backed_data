@@ -1,4 +1,7 @@
+use std::ops::{Deref, DerefMut};
+
 use serde::{Deserialize, Serialize};
+use stable_deref_trait::StableDeref;
 
 use crate::{
     entry::{
@@ -10,14 +13,14 @@ use crate::{
 };
 
 pub trait RefIter<T> {
-    type IterRef<'b>: AsRef<T>
+    type IterRef<'b>: AsRef<T> + Deref<Target = T> + StableDeref
     where
         Self: 'b;
     fn ref_iter(&self) -> impl Iterator<Item = Self::IterRef<'_>>;
 }
 
 pub trait MutIter<T> {
-    type IterMut<'b>: AsMut<T>
+    type IterMut<'b>: AsMut<T> + DerefMut<Target = T> + StableDeref
     where
         Self: 'b;
     fn mut_iter(&mut self) -> impl Iterator<Item = Self::IterMut<'_>>;
@@ -32,16 +35,16 @@ pub trait MutIter<T> {
 pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
     /// The data container entries give references to.
     type Data;
-    type Ref<'b>: AsRef<Self::Data>
+    type Ref<'b>: AsRef<Self::Data> + Deref<Target = Self::Data> + StableDeref
     where
         Self: 'b;
-    type Mut<'b>: AsMut<Self::Data>
+    type Mut<'b>: AsMut<Self::Data> + DerefMut<Target = Self::Data> + StableDeref
     where
         Self: 'b;
-    type RefSlice<'b>: AsRef<[Self::Data]>
+    type RefSlice<'b>: AsRef<[Self::Data]> + Deref<Target = [Self::Data]> + StableDeref
     where
         Self: 'b;
-    type MutSlice<'b>: AsMut<[Self::Data]>
+    type MutSlice<'b>: AsMut<[Self::Data]> + DerefMut<Target = [Self::Data]> + StableDeref
     where
         Self: 'b;
 

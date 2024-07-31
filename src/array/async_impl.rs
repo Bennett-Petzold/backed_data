@@ -17,7 +17,7 @@ use crate::{
         formats::{AsyncDecoder, AsyncEncoder},
         BackedEntryAsync,
     },
-    utils::BorrowExtender,
+    utils::{BorrowExtender, NestDeref},
 };
 
 use super::{
@@ -195,8 +195,8 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     pub async fn a_get(
         &self,
         idx: usize,
-    ) -> Result<impl AsRef<E::InnerData> + '_, BackedArrayError<E::AsyncReadError>> {
-        self.internal_a_get(idx).await
+    ) -> Result<impl Deref<Target = E::InnerData> + '_, BackedArrayError<E::AsyncReadError>> {
+        Ok(NestDeref::from(self.internal_a_get(idx).await?))
     }
 }
 
@@ -596,16 +596,16 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(backed.a_get(0).await.unwrap().as_ref(), &0);
-        assert_eq!(backed.a_get(4).await.unwrap().as_ref(), &3);
+        assert_eq!(*backed.a_get(0).await.unwrap(), 0);
+        assert_eq!(*backed.a_get(4).await.unwrap(), 3);
 
         let (first, second) = join!(async { backed.a_get(0).await.unwrap() }, async {
             backed.a_get(4).await.unwrap()
         });
-        assert_eq!((first.as_ref(), second.as_ref()), (&0, &3));
+        assert_eq!((*first, *second), (0, 3));
 
         for x in [0, 2, 4, 5, 5, 2, 0, 5] {
-            assert_eq!(backed.a_get(x).await.unwrap().as_ref(), &combined[x])
+            assert_eq!(*backed.a_get(x).await.unwrap(), combined[x])
         }
     }
 
@@ -690,8 +690,8 @@ mod tests {
             .try_collect::<Vec<_>>()
             .await
             .unwrap();
-        assert_eq!(collected[5].as_ref(), &7);
-        assert_eq!(collected[2].as_ref(), &1);
+        assert_eq!(*collected[5], &7);
+        assert_eq!(*collected[2], &1);
         assert_eq!(collected.len(), 6);
     }
 
@@ -727,8 +727,8 @@ mod tests {
                     .try_collect::<Vec<_>>()
                     .await
                     .unwrap();
-                assert_eq!(collected[5].as_ref(), &7);
-                assert_eq!(collected[2].as_ref(), &1);
+                assert_eq!(*collected[5], &7);
+                assert_eq!(*collected[2], &1);
                 assert_eq!(collected.len(), 6);
             });
     }

@@ -303,8 +303,8 @@ mod tests {
 
         arr.append_memory(values).unwrap();
         arr.append(second_values).unwrap();
-        assert_eq!(arr.get(10).unwrap().as_ref(), &"TEST STRING");
-        assert_eq!(arr.get(150).unwrap().as_ref(), &"OTHER VALUE");
+        assert_eq!(*arr.get(10).unwrap(), *"TEST STRING");
+        assert_eq!(*arr.get(150).unwrap(), *"OTHER VALUE");
 
         remove_dir_all(directory).unwrap();
     }
@@ -326,10 +326,10 @@ mod tests {
         let arr: StdDirBackedArray<String, BincodeCoder> = BincodeCoder::default()
             .decode(&mut File::open(directory.join(META_FILE)).unwrap())
             .unwrap();
-        assert_eq!(arr.get(10).unwrap().as_ref(), &"TEST STRING");
-        assert_eq!(arr.get(150).unwrap().as_ref(), &"OTHER VALUE");
-        assert_eq!(arr.get(20).unwrap().as_ref(), &"TEST STRING");
-        assert_eq!(arr.get(1).unwrap().as_ref(), &"TEST STRING");
+        assert_eq!(*arr.get(10).unwrap(), "TEST STRING");
+        assert_eq!(*arr.get(150).unwrap(), "OTHER VALUE");
+        assert_eq!(*arr.get(20).unwrap(), "TEST STRING");
+        assert_eq!(*arr.get(1).unwrap(), "TEST STRING");
 
         remove_dir_all(directory).unwrap();
     }
