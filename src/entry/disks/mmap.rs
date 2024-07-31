@@ -8,8 +8,11 @@ use std::{
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
 
-use memmap2::{Advice, MmapOptions, RemapOptions};
+use memmap2::{Advice, MmapOptions};
 use serde::{Deserialize, Serialize};
+
+#[cfg(target_os = "linux")]
+use memmap2::RemapOptions;
 
 use crate::utils::BorrowExtender;
 
@@ -508,10 +511,7 @@ impl MmapWriter {
             // Increase mapping size to file size and re-advise.
             // Don't advise write, as that may produce an arbitrarily long
             // load (especially if a huge sparse file is allocated).
-            unsafe {
-                self.mmap
-                    .remap(self.reserved_len, RemapOptions::new().may_move(true))
-            }?;
+            self.remap()?;
             let _ = self.mmap.advise(Advice::Sequential);
         }
         Ok(())
@@ -534,10 +534,7 @@ impl MmapWriter {
             self.file()?.set_len(self.written_len as u64)?;
 
             self.reserved_len = self.written_len;
-            unsafe {
-                self.mmap
-                    .remap(self.written_len, RemapOptions::new().may_move(true))
-            }?;
+            self.remap()?;
         }
 
         Ok(())
@@ -550,6 +547,26 @@ impl MmapWriter {
         Ok(std::mem::replace(&mut self.mmap, unsafe {
             MmapOptions::new().map_mut(&file)
         }?))
+    }
+
+    /// Remap to the current reserved len.
+    ///
+    /// Uses a remap call on Linux, has to create a new map on other systems.
+    fn remap(&mut self) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            unsafe {
+                self.mmap
+                    .remap(self.reserved_len, RemapOptions::new().may_move(true))
+            }?;
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
+        }
+
+        Ok(())
     }
 }
 
