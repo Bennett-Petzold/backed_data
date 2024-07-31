@@ -563,7 +563,7 @@ impl MmapWriter {
 
         #[cfg(not(target_os = "linux"))]
         {
-            self.mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
+            self.mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
         }
 
         Ok(())
