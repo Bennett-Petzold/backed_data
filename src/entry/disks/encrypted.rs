@@ -277,6 +277,10 @@ impl Read for SecretReadVec<'_> {
     }
 }
 
+// Does not alias internal data, so ignore NonNull !Send + !Sync
+unsafe impl Send for SecretReadVec<'_> {}
+unsafe impl Sync for SecretReadVec<'_> {}
+
 impl<'a, B: ReadDisk> ReadDisk for Encrypted<'a, B> {
     type ReadDisk = SecretReadVec<'a>;
 
@@ -646,6 +650,10 @@ mod async_impl {
             }
         }
     }
+
+    // All internal data aliasing is via Mutex, so ignore NonNull !Send + !Sync
+    unsafe impl<A, B, C> Send for AsyncEncryptedWriter<'_, A, B, C> {}
+    unsafe impl<A, B, C> Sync for AsyncEncryptedWriter<'_, A, B, C> {}
 
     impl<'a, B, FD, FE, R> AsyncWriteDisk for AsyncEncrypted<'a, B, FD, FE>
     where
