@@ -853,6 +853,10 @@
 <a href="#853" id="853">853</a>
 <a href="#854" id="854">854</a>
 <a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
@@ -1399,7 +1403,11 @@
     <span class="doccomment">/// Extend the underlying file to fit `buf_len` new bytes.
     </span><span class="kw">fn </span>reserve_for(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf_len: usize) -&gt; std::io::Result&lt;()&gt; {
         <span class="comment">// 8 KiB, matching capacity for `std::io::BufWriter` as of 1.8.0.
+        </span><span class="attr">#[cfg(not(target_os = <span class="string">"windows"</span>))]
         </span><span class="kw">const </span>MIN_RESERVE_LEN: usize = <span class="number">8 </span>* <span class="number">1024</span>;
+
+        <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+        </span><span class="kw">const </span>MIN_RESERVE_LEN: usize = <span class="number">1</span>;
 
         <span class="kw">let </span>remaining_len = <span class="self">self</span>.reserved_len - <span class="self">self</span>.written_len;
         <span class="kw">if </span>buf_len &gt; remaining_len {
