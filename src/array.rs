@@ -59,8 +59,7 @@ pub mod sync_impl {
     use crate::entry::{BackedEntryArr, BackedEntryUnload};
 
     use super::{
-        internal_idx, multiple_internal_idx, multiple_internal_idx_strict, ArrayLoc,
-        BackedArrayError,
+        internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayError,
     };
 
     /// Array stored as multiple arrays on disk
@@ -389,13 +388,13 @@ pub mod sync_impl {
 
 #[cfg(feature = "async")]
 pub mod async_impl {
-    use crate::entry::{BackedEntryArr, BackedEntryArrAsync, BackedEntryUnload};
+    use crate::entry::{BackedEntryArrAsync, BackedEntryUnload};
     use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
     use derive_getters::Getters;
     use futures::{SinkExt, StreamExt};
     use itertools::Itertools;
     use serde::{de::DeserializeOwned, Deserialize, Serialize};
-    use std::ops::{Deref, DerefMut, Range};
+    use std::ops::Range;
     use tokio::{
         io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt},
         task::JoinSet,
