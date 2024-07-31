@@ -1243,7 +1243,7 @@
 
         <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
         </span>{
-            len = <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.file_size() == <span class="number">0 </span>{
+            len = <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.len() == <span class="number">0 </span>{
                 <span class="number">0
             </span>} <span class="kw">else </span>{
                 mmap.len()
