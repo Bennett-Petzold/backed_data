@@ -40,7 +40,7 @@ jobs:
       run: brew install libsodium
 
     - name: Install libsodium (Windows)
-      if: ${{ matrix.os == 'macos' }}
+      if: ${{ matrix.os == 'windows' }}
       run: |
         git clone https://github.com/Microsoft/vcpkg.git
         cd vcpkg
