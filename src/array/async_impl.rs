@@ -30,9 +30,6 @@ pub struct BackedArray<K, E> {
 pub type VecBackedArray<T, Disk> =
     BackedArray<Vec<Range<usize>>, Vec<BackedEntryArrAsync<T, Disk>>>;
 
-//keys: Vec<Range<usize>>,
-//entries: Vec<BackedEntryArrAsync<T, Disk>>,
-
 impl<T, Disk: for<'de> Deserialize<'de>> Default for VecBackedArray<T, Disk> {
     fn default() -> Self {
         Self {
