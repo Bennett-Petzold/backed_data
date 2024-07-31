@@ -45,6 +45,7 @@ create_fn!(async concurrent create_zstdfiles_async_con, AsyncZstdDirBackedArray<
 create_fn!(async parallel create_zstdfiles_async_par, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
 
 read_dir!(read_plainfiles, StdDirBackedArray<u8, BincodeCoder>);
+read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder>);
 #[cfg(feature = "zstd")]
 read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder>);
 
@@ -184,6 +185,13 @@ fn file_load_benches(c: &mut Criterion) {
         let path = create_files(create_plainfiles);
         group.bench_function("load_plainfiles", |b| {
             b.iter(|| black_box(read_plainfiles(&path)))
+        });
+    }
+
+    {
+        let path = create_files(create_plainfiles);
+        group.bench_function("load_plainfiles_generic", |b| {
+            b.iter(|| black_box(read_plainfiles_generic(&path)))
         });
     }
 
