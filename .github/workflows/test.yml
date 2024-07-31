@@ -1,0 +1,32 @@
+name: test
+
+on: 
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu, windows, macos]
+        arch: [x86_64]
+        include:
+          - os: macos
+            arch: arm
+            triple: aarch64-apple-darwin
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: dtolnay/rust-toolchain@stable
+      if: ${{ matrix.triple == null }}
+    - uses: dtolnay/rust-toolchain@stable
+      if: ${{ matrix.triple }}
+      with:
+        target: ${{ matrix.triple }}
+
+    - uses: Swatinem/rust-cache@v2
+
+    - run: cargo test --verbose --features all_formats,all_disks,directory,async,test
