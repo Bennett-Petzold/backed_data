@@ -831,6 +831,28 @@
 <a href="#831" id="831">831</a>
 <a href="#832" id="832">832</a>
 <a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
+<a href="#843" id="843">843</a>
+<a href="#844" id="844">844</a>
+<a href="#845" id="845">845</a>
+<a href="#846" id="846">846</a>
+<a href="#847" id="847">847</a>
+<a href="#848" id="848">848</a>
+<a href="#849" id="849">849</a>
+<a href="#850" id="850">850</a>
+<a href="#851" id="851">851</a>
+<a href="#852" id="852">852</a>
+<a href="#853" id="853">853</a>
+<a href="#854" id="854">854</a>
+<a href="#855" id="855">855</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
@@ -850,9 +872,6 @@
 <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
 </span><span class="kw">use </span>memmap2::RemapOptions;
 
-<span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
-</span><span class="kw">use </span>std::os::windows::fs::MetadataExt;
-
 <span class="kw">use </span><span class="kw">crate</span>::utils::BorrowExtender;
 
 <span class="kw">use super</span>::{ReadDisk, WriteDisk};
@@ -861,6 +880,7 @@
 
 </span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub enum </span>SwitchingMmap {
+    EmptyFile,
     ReadMmap(memmap2::Mmap),
     WriteMmap(MmapWriter),
 }
@@ -878,7 +898,13 @@
 
 <span class="kw">impl </span>SwitchingMmap {
     <span class="kw">fn </span>init_read&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map(<span class="kw-2">&amp;</span>open_mmap(path)<span class="question-mark">?</span>) }<span class="question-mark">?</span>;
+        <span class="kw">let </span>file = open_mmap(path)<span class="question-mark">?</span>;
+
+        <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.len() == <span class="number">0 </span>{
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="self">Self</span>::EmptyFile);
+        }
+
+        <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
         <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
         </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
 
@@ -887,6 +913,7 @@
 
     <span class="kw">fn </span>conv_to_read(<span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::EmptyFile),
             <span class="self">Self</span>::ReadMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(x)),
             <span class="self">Self</span>::WriteMmap(<span class="kw-2">mut </span>x) =&gt; {
                 <span class="kw">let </span>mmap = x.get_map()<span class="question-mark">?</span>.make_read_only()<span class="question-mark">?</span>;
@@ -900,6 +927,7 @@
 
     <span class="kw">fn </span>conv_to_write&lt;P: AsRef&lt;Path&gt;&gt;(<span class="self">self</span>, path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::WriteMmap(MmapWriter::no_advise(path)<span class="question-mark">?</span>)),
             <span class="self">Self</span>::ReadMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::WriteMmap(MmapWriter::from_args(path, x.make_mut()<span class="question-mark">?</span>)<span class="question-mark">?</span>)),
             <span class="self">Self</span>::WriteMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::WriteMmap(x)),
         }
@@ -909,6 +937,7 @@
 <span class="kw">impl </span>AsRef&lt;[u8]&gt; <span class="kw">for </span>SwitchingMmap {
     <span class="kw">fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
         <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::EmptyFile =&gt; <span class="kw-2">&amp;</span>[],
             <span class="self">Self</span>::ReadMmap(x) =&gt; x.as_ref(),
             <span class="self">Self</span>::WriteMmap(x) =&gt; x.as_ref(),
         }
@@ -918,6 +947,10 @@
 <span class="kw">impl </span>Write <span class="kw">for </span>SwitchingMmap {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; std::io::Result&lt;usize&gt; {
         <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
+                ErrorKind::Other,
+                <span class="string">"Cannot write to an empty mmap"</span>,
+            )),
             <span class="self">Self</span>::ReadMmap(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
                 ErrorKind::Other,
                 <span class="string">"Cannot write to ReadMmap"</span>,
@@ -928,6 +961,10 @@
 
     <span class="kw">fn </span>write_vectored(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bufs: <span class="kw-2">&amp;</span>[std::io::IoSlice&lt;<span class="lifetime">'_</span>&gt;]) -&gt; std::io::Result&lt;usize&gt; {
         <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
+                ErrorKind::Other,
+                <span class="string">"Cannot write to an empty mmap"</span>,
+            )),
             <span class="self">Self</span>::ReadMmap(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
                 ErrorKind::Other,
                 <span class="string">"Cannot write to ReadMmap"</span>,
@@ -938,6 +975,7 @@
 
     <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
         <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Ok</span>(()),
             <span class="self">Self</span>::ReadMmap(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(()),
             <span class="self">Self</span>::WriteMmap(x) =&gt; x.flush(),
         }
@@ -1239,6 +1277,12 @@
 
     <span class="kw">fn </span>no_advise&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>file = open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+
+        <span class="comment">// If the file is empty, we need to push in a garbage byte for mmap to
+        // succeed.
+        </span><span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.len() == <span class="number">0 </span>{
+            file.set_len(<span class="number">1</span>)<span class="question-mark">?</span>;
+        }
 
         <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map_mut(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
 
