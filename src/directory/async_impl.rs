@@ -13,7 +13,6 @@ use serde::{
 use tokio::fs::{create_dir_all, remove_file};
 use tokio::{
     fs::{copy, remove_dir_all, rename},
-    spawn,
     task::JoinSet,
 };
 use uuid::Uuid;

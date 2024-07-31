@@ -18,7 +18,6 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{
     fs::{copy, create_dir_all, remove_dir_all, remove_file, rename, File},
     io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader},
-    spawn,
     task::JoinSet,
 };
 use uuid::Uuid;
@@ -204,7 +203,6 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
         while let Some(future) = copy_futures.join_next().await {
             let _ = future?;
         }
-        dir_remove.await??;
 
         Ok(self)
     }

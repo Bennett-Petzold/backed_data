@@ -4,6 +4,7 @@ use std::{
     io::{Seek, Write},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
+    time::Duration,
 };
 
 use backed_array::{
@@ -14,6 +15,16 @@ use chrono::Local;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fs_extra::dir::get_size;
 use humansize::{format_size, BINARY};
+
+#[cfg(feature = "async")]
+use backed_array::{
+    directory::async_impl::DirectoryBackedArray as AsyncDirBacked,
+    meta::async_impl::BackedArrayWrapper as AsyncWrapper,
+};
+
+#[cfg(feature = "async-zstd")]
+use backed_array::zstd::async_impl::ZstdDirBackedArray as AsyncZstdBacked;
+use tokio::runtime::Runtime;
 
 fn logfile() -> &'static Mutex<File> {
     static LOGFILE: OnceLock<Mutex<File>> = OnceLock::new();
@@ -61,6 +72,52 @@ fn create_zstdfiles(path: PathBuf, data: &[String], level: Option<i32>) -> ZstdD
     arr
 }
 
+#[cfg(feature = "async")]
+async fn create_plainfiles_async(path: PathBuf, data: &[String]) -> AsyncDirBacked<u8> {
+    use std::iter::repeat;
+
+    use futures::{stream, StreamExt};
+
+    let gen = stream::iter(data.iter().zip(repeat(path.clone()))).map(|(point, path)| async move {
+        let mut arr: AsyncDirBacked<u8> = AsyncDirBacked::new(path).await.unwrap();
+        arr.append(point.as_ref()).await.unwrap();
+        arr
+    });
+    let mut gen = gen.buffer_unordered(data.len());
+
+    let combined = gen.next().await.unwrap();
+    gen.fold(combined, |mut combined, next| async move {
+        combined.append_array(next).await.unwrap();
+        combined
+    })
+    .await
+}
+
+#[cfg(feature = "async-zstd")]
+async fn create_zstdfiles_async(
+    path: PathBuf,
+    data: &[String],
+    level: Option<i32>,
+) -> AsyncZstdBacked<u8> {
+    use std::iter::repeat;
+
+    use futures::{stream, StreamExt};
+
+    let gen = stream::iter(data.iter().zip(repeat(path.clone()))).map(|(point, path)| async move {
+        let mut arr: AsyncZstdBacked<u8> = AsyncZstdBacked::new(path, level).await.unwrap();
+        arr.append(point.as_ref()).await.unwrap();
+        arr
+    });
+    let mut gen = gen.buffer_unordered(data.len());
+
+    let combined = gen.next().await.unwrap();
+    gen.fold(combined, |mut combined, next| async move {
+        combined.append_array(next).await.unwrap();
+        combined
+    })
+    .await
+}
+
 fn file_creation_bench(c: &mut Criterion) {
     let data = complete_works();
 
@@ -101,6 +158,49 @@ fn file_creation_bench(c: &mut Criterion) {
         format_size(get_size(path.clone()).unwrap(), BINARY)
     )
     .unwrap();
+
+    #[cfg(feature = "async")]
+    {
+        let rt = Runtime::new().unwrap();
+        group.bench_function("async_create_plainfiles", |b| {
+            let _ = remove_dir_all(path.clone());
+            create_dir(path.clone()).unwrap();
+            b.to_async(&rt)
+                .iter(|| create_plainfiles_async(black_box(path.clone()), black_box(data)))
+        });
+
+        println!(
+            "Async plainfiles size: {}",
+            format_size(get_size(path.clone()).unwrap(), BINARY)
+        );
+        writeln!(
+            logfile().lock().unwrap(),
+            "Async plainfiles size: {}",
+            format_size(get_size(path.clone()).unwrap(), BINARY)
+        )
+        .unwrap();
+
+        #[cfg(feature = "async-zstd")]
+        {
+            group.bench_function("async_create_zstdfiles", |b| {
+                let _ = remove_dir_all(path.clone());
+                create_dir(path.clone()).unwrap();
+                b.to_async(&rt)
+                    .iter(|| create_zstdfiles_async(black_box(path.clone()), black_box(data), None))
+            });
+
+            println!(
+                "Async zstdfiles size: {}",
+                format_size(get_size(path.clone()).unwrap(), BINARY)
+            );
+            writeln!(
+                logfile().lock().unwrap(),
+                "Async zstdfiles size: {}",
+                format_size(get_size(path.clone()).unwrap(), BINARY)
+            )
+            .unwrap();
+        }
+    }
 
     remove_dir_all(path.clone()).unwrap();
 }
@@ -276,7 +376,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
 
 criterion_group! {
     name = io_benches;
-    config = Criterion::default().sample_size(10);
+    config = Criterion::default().sample_size(10).measurement_time(Duration::from_secs(10));
     targets = file_creation_bench,
     file_load_bench,
     zstd_setting_benches
