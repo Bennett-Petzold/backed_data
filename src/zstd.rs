@@ -1,6 +1,6 @@
 pub mod sync_impl {
     use std::{
-        fs::{create_dir_all, remove_file, File},
+        fs::{copy, create_dir_all, remove_file, rename, File},
         io::{BufReader, Read, Seek, Write},
         ops::{Deref, DerefMut},
         path::PathBuf,
@@ -198,6 +198,12 @@ pub mod sync_impl {
             )?;
             Ok(self)
         }
+
+        fn append_array(&mut self, mut rhs: Self) -> Result<&Self, Self::BackingError> {
+            rhs.move_root(self.directory_root.clone())?;
+            self.array.append_array(rhs.array);
+            Ok(self)
+        }
     }
 
     impl<'a, T> Deref for ZstdDirBackedArray<'a, T> {
@@ -239,6 +245,24 @@ pub mod sync_impl {
             });
             self.directory_root = new_root;
             self
+        }
+
+        /// Moves the directory to a new location wholesale.
+        pub fn move_root(&mut self, new_root: PathBuf) -> std::io::Result<&Self> {
+            if rename(self.directory_root.clone(), new_root.clone()).is_err() {
+                create_dir_all(new_root.clone())?;
+                self.array
+                    .get_disks()
+                    .iter()
+                    .map(|disk| {
+                        copy(
+                            disk.path.clone(),
+                            new_root.join(disk.path.file_name().unwrap()),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+            }
+            Ok(self.update_root(new_root))
         }
     }
 
@@ -321,13 +345,15 @@ pub mod async_impl {
     use async_trait::async_trait;
     use derive_getters::Getters;
     use futures::{executor::block_on, SinkExt, StreamExt};
+    use itertools::Itertools;
     use serde::{
         de::{DeserializeOwned, Error},
         Deserialize, Serialize,
     };
     use tokio::{
-        fs::{create_dir_all, remove_file, File},
+        fs::{copy, create_dir_all, remove_file, rename, File},
         io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader},
+        task::JoinSet,
     };
     use uuid::Uuid;
 
@@ -535,6 +561,12 @@ pub mod async_impl {
                 .await?;
             Ok(self)
         }
+
+        async fn append_array(&mut self, mut rhs: Self) -> Result<&Self, Self::BackingError> {
+            rhs.move_root(self.directory_root.clone()).await?;
+            self.array.append_array(rhs.array);
+            Ok(self)
+        }
     }
 
     impl<T> ZstdDirBackedArray<T> {
@@ -612,6 +644,37 @@ pub mod async_impl {
             });
             self.directory_root = new_root;
             self
+        }
+
+        /// Moves the directory to a new location wholesale.
+        pub async fn move_root(&mut self, new_root: PathBuf) -> std::io::Result<&Self> {
+            let mut copy_futures = JoinSet::new();
+
+            if rename(self.directory_root.clone(), new_root.clone())
+                .await
+                .is_err()
+            {
+                create_dir_all(new_root.clone()).await?;
+
+                let disks: Vec<PathBuf> = self
+                    .array
+                    .get_disks()
+                    .into_iter()
+                    .map(|x| x.path.clone())
+                    .collect_vec();
+                disks.into_iter().for_each(|path| {
+                    let new_root_clone = new_root.clone();
+                    copy_futures.spawn(async move {
+                        copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
+                    });
+                });
+            }
+
+            self.update_root(new_root);
+            while let Some(future) = copy_futures.join_next().await {
+                let _ = future?;
+            }
+            Ok(self)
         }
     }
 

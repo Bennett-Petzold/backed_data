@@ -35,6 +35,9 @@ pub mod sync_impl {
         fn remove(&mut self, entry_idx: usize) -> Result<&Self, Self::BackingError>;
         fn append(&mut self, values: &[T]) -> bincode::Result<&Self>;
         fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self>;
+
+        /// Moves all entries of `rhs` into `self`
+        fn append_array(&mut self, rhs: Self) -> Result<&Self, Self::BackingError>;
     }
 }
 
@@ -94,5 +97,8 @@ pub mod async_impl {
         async fn append(&mut self, values: &[T]) -> bincode::Result<&Self>;
         /// Wraps [`BackedArray::append_memory`] to create backing storage
         async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self>;
+
+        /// Moves all entries of `rhs` into `self`
+        async fn append_array(&mut self, rhs: Self) -> Result<&Self, Self::BackingError>;
     }
 }
