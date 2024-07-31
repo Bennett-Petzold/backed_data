@@ -2,7 +2,10 @@
 pub mod async_impl;
 pub mod sync_impl;
 
-use std::ops::Range;
+use std::{
+    ops::{Index, IndexMut, Range},
+    slice::{Iter, IterMut, SliceIndex},
+};
 
 use derive_getters::Getters;
 
@@ -67,10 +70,29 @@ where
     idxs.into_iter().map(|idx| internal_idx(keys, idx))
 }
 
-pub trait BackingContainer<T>: Default {
-    // add code here
+pub trait Container:
+    Default
+    + IndexMut<usize, Output: Sized>
+    + AsRef<[Self::Output]>
+    + AsMut<[Self::Output]>
+    + FromIterator<Self::Output>
+    + IntoIterator<Item = Self::Output>
+    + Extend<Self::Output>
+{
+    /// [`Vec::last`].
+    fn c_push(&mut self, value: Self::Output);
+    fn c_remove(&mut self, index: usize) -> Self::Output;
+    fn c_append(&mut self, other: &mut Self);
 }
 
-impl<T> BackingContainer<T> for Vec<T> {
-    // add code here
+impl<T> Container for Vec<T> {
+    fn c_push(&mut self, value: Self::Output) {
+        self.push(value)
+    }
+    fn c_remove(&mut self, index: usize) -> Self::Output {
+        self.remove(index)
+    }
+    fn c_append(&mut self, other: &mut Self) {
+        self.append(other)
+    }
 }

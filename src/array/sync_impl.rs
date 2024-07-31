@@ -1,6 +1,7 @@
 use std::{
     fmt::Debug,
     io::{Read, Write},
+    marker::PhantomData,
     ops::Range,
 };
 
@@ -15,7 +16,7 @@ use crate::entry::{
 
 use super::{
     internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayEntry,
-    BackedArrayError, BackingContainer,
+    BackedArrayError, Container,
 };
 
 /// Array stored as multiple arrays on disk.
@@ -33,85 +34,98 @@ use super::{
 /// Getting and overwriting the entries without these handles will write to
 /// disk on every single change.
 #[derive(Debug, Serialize, Deserialize, Getters)]
-pub struct BackedArray<K, E> {
+pub struct BackedArray<T, Disk, K, E> {
     // keys and entries must always have the same length
     // keys must always be sorted min-max
     keys: K,
     //#[serde(deserialize_with = "entries_deserialize")]
     entries: E,
+    _phantom: (PhantomData<T>, PhantomData<Disk>),
 }
 
-impl<K: Clone, E: Clone> Clone for BackedArray<K, E> {
+impl<T, Disk, K: Clone, E: Clone> Clone for BackedArray<T, Disk, K, E> {
     fn clone(&self) -> Self {
         Self {
             keys: self.keys.clone(),
             entries: self.entries.clone(),
+            _phantom: (PhantomData, PhantomData),
         }
     }
 }
 
-pub type VecBackedArray<T, Disk> = BackedArray<Vec<Range<usize>>, Vec<BackedEntryArr<T, Disk>>>;
+pub type VecBackedArray<T, Disk> =
+    BackedArray<T, Disk, Vec<Range<usize>>, Vec<BackedEntryArr<T, Disk>>>;
 
-//K: BackingContainer<Range<usize>>
-//E: Vec<BackedEntryArr<T, Disk>>
-
-/*
-/// Helper function to make deserialization work.
-fn entries_deserialize<'de, D, Backing: Deserialize<'de>>(
-    deserializer: D,
-) -> Result<Backing, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer)
-}
-*/
-
-impl<T, Disk: for<'de> Deserialize<'de>> Default for VecBackedArray<T, Disk> {
+impl<T, Disk, K: Default, E: Default> Default for BackedArray<T, Disk, K, E> {
     fn default() -> Self {
         Self {
-            keys: vec![],
-            entries: vec![],
+            keys: K::default(),
+            entries: E::default(),
+            _phantom: (PhantomData, PhantomData),
         }
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
+impl<T, Disk, K: Default, E: Default> BackedArray<T, Disk, K, E> {
     pub fn new() -> Self {
         Self::default()
     }
+}
 
+impl<T, Disk, K: Container<Output = Range<usize>>, E> BackedArray<T, Disk, K, E> {
     /// Total size of stored data.
     pub fn len(&self) -> usize {
-        self.keys.last().unwrap_or(&(0..0)).end
+        self.keys.as_ref().last().unwrap_or(&(0..0)).end
     }
+}
 
+impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr<T, Disk>>>
+    BackedArray<T, Disk, K, E>
+{
     /// Number of underlying chunks.
     pub fn chunks_len(&self) -> usize {
-        self.entries.len()
+        self.entries.as_ref().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.as_ref().is_empty()
     }
+}
 
+impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr<T, Disk>>>
+    BackedArray<T, Disk, K, E>
+where
+    E::Output: BackedEntryUnload,
+{
     /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
-        self.entries.iter_mut().for_each(|entry| entry.unload());
+        self.entries
+            .as_mut()
+            .iter_mut()
+            .for_each(|entry| entry.unload());
     }
 
     /// Move the chunk at `idx` out of memory.
     pub fn clear_chunk(&mut self, idx: usize) {
         self.entries[idx].unload();
     }
+}
 
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Returns all backing entries and the range they cover.
     pub fn backed_array_entries(
         &self,
     ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>> {
         self.keys
+            .as_ref()
             .iter()
-            .zip(self.entries.iter())
+            .zip(self.entries.as_ref().iter())
             .map(BackedArrayEntry::from)
     }
 
@@ -133,10 +147,21 @@ impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
             .map(|backed| backed.range.len())
             .sum()
     }
+}
 
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+where
+    E::Output: BackedEntryUnload,
+{
     /// Removes all backing stores not needed to hold `idxs` in memory.
     pub fn shrink_to_query(&mut self, idxs: &[usize]) {
         self.keys
+            .as_ref()
             .iter()
             .enumerate()
             .filter(|(_, key)| !idxs.iter().any(|idx| key.contains(idx)))
@@ -144,12 +169,17 @@ impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<VecBackedArray<T, Disk>>
-    for bincode::Result<Box<[T]>>
+impl<
+        T: DeserializeOwned + Clone,
+        Disk: ReadDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > From<BackedArray<T, Disk, K, E>> for bincode::Result<Box<[T]>>
 {
-    fn from(mut val: VecBackedArray<T, Disk>) -> Self {
+    fn from(mut val: BackedArray<T, Disk, K, E>) -> Self {
         Ok(val
             .entries
+            .as_mut()
             .iter_mut()
             .map(|entry| entry.load())
             .collect::<Result<Vec<_>, _>>()?
@@ -160,12 +190,19 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<VecBackedArray<T, Disk>>
 }
 
 /// Read implementations
-impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
+impl<
+        T: DeserializeOwned,
+        Disk: ReadDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Return a value (potentially loading its backing array).
     ///
     /// Backing arrays stay in memory until freed.
     pub fn get(&mut self, idx: usize) -> Result<&T, BackedArrayError> {
-        let loc = internal_idx(&self.keys, idx).ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        let loc = internal_idx(self.keys.as_ref(), idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
         Ok(&self.entries[loc.entry_idx]
             .load()
             .map_err(BackedArrayError::Bincode)?[loc.inside_entry_idx])
@@ -184,8 +221,8 @@ impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
         // The code is safe: iterators execute sequentially, so loads to the
         // same entry will not interleave, and the resultant borrowing follows
         // the usual rules.
-        let entries_ptr = self.entries.as_mut_ptr();
-        multiple_internal_idx(&self.keys, idxs)
+        let entries_ptr = self.entries.as_mut().as_mut_ptr();
+        multiple_internal_idx(self.keys.as_ref(), idxs)
             .map(|loc| unsafe {
                 Ok(&(*entries_ptr.add(loc.entry_idx)).load()?[loc.inside_entry_idx])
             })
@@ -198,8 +235,8 @@ impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
         I: IntoIterator<Item = usize> + 'a,
     {
         // See [`Self::get_multiple_entries`] note.
-        let entries_ptr = self.entries.as_mut_ptr();
-        multiple_internal_idx_strict(&self.keys, idxs)
+        let entries_ptr = self.entries.as_mut().as_mut_ptr();
+        multiple_internal_idx_strict(self.keys.as_ref(), idxs)
             .enumerate()
             .map(|(idx, loc)| {
                 let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
@@ -217,13 +254,20 @@ impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
     /// See [`Self::get_chunk_mut`] for a modifiable handle.
     pub fn get_chunk(&mut self, idx: usize) -> Option<bincode::Result<&[T]>> {
         self.entries
+            .as_mut()
             .get_mut(idx)
             .map(|arr| arr.load().map(|entry| entry.as_ref()))
     }
 }
 
 /// Write implementations
-impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
+impl<
+        T: Serialize,
+        Disk: WriteDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Adds new values by writing them to the backing store.
     ///
     /// Does not keep the values in memory.
@@ -255,11 +299,16 @@ impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
         let values = values.into();
 
         // End of a range is exclusive
-        let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
-        self.keys.push(start_idx..(start_idx + values.len()));
+        let start_idx = self
+            .keys
+            .as_ref()
+            .last()
+            .map(|key_range| key_range.end)
+            .unwrap_or(0);
+        self.keys.c_push(start_idx..(start_idx + values.len()));
         let mut entry = BackedEntryArr::new(backing_store);
         entry.write_unload(values)?;
-        self.entries.push(entry);
+        self.entries.c_push(entry);
         Ok(self)
     }
 
@@ -291,45 +340,77 @@ impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
         let values = values.into();
 
         // End of a range is exclusive
-        let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
-        self.keys.push(start_idx..(start_idx + values.len()));
+        let start_idx = self
+            .keys
+            .as_ref()
+            .last()
+            .map(|key_range| key_range.end)
+            .unwrap_or(0);
+        self.keys.c_push(start_idx..(start_idx + values.len()));
         let mut entry = BackedEntryArr::new(backing_store);
         entry.write(values)?;
-        self.entries.push(entry);
+        self.entries.c_push(entry);
         Ok(self)
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> VecBackedArray<T, Disk> {
+impl<
+        T: Serialize + DeserializeOwned,
+        Disk: WriteDisk + ReadDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Returns a mutable handle to a given chunk.
     pub fn get_chunk_mut(
         &mut self,
         idx: usize,
     ) -> Option<bincode::Result<BackedEntryMut<Box<[T]>, Disk>>> {
-        self.entries.get_mut(idx).map(|arr| arr.mut_handle())
+        self.entries
+            .as_mut()
+            .get_mut(idx)
+            .map(|arr| arr.mut_handle())
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to indentify the target index.
     pub fn remove(&mut self, entry_idx: usize) -> &mut Self {
         let width = self.keys[entry_idx].len();
-        self.keys.remove(entry_idx);
-        self.entries.remove(entry_idx);
+        self.keys.c_remove(entry_idx);
+        self.entries.c_remove(entry_idx);
 
         // Shift all later ranges downwards
-        self.keys[entry_idx..].iter_mut().for_each(|key_range| {
-            key_range.start -= width;
-            key_range.end -= width
-        });
+        self.keys
+            .as_mut()
+            .iter_mut()
+            .skip(entry_idx)
+            .for_each(|key_range| {
+                key_range.start -= width;
+                key_range.end -= width
+            });
 
         self
     }
+}
 
+impl<T, Disk: for<'de> Deserialize<'de>, K, E: Container<Output = BackedEntryArr<T, Disk>>>
+    BackedArray<T, Disk, K, E>
+{
     pub fn get_disks(&self) -> Vec<&Disk> {
-        self.entries.iter().map(|entry| entry.get_disk()).collect()
+        self.entries
+            .as_ref()
+            .iter()
+            .map(|entry| entry.get_disk())
+            .collect()
     }
 
     /// Get a mutable handle to disks.
@@ -337,13 +418,20 @@ impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
     /// Used primarily to update paths, when old values are out of date.
     pub fn get_disks_mut(&mut self) -> Vec<&mut Disk> {
         self.entries
+            .as_mut()
             .iter_mut()
             .map(|entry| entry.get_disk_mut())
             .collect()
     }
 }
 
-impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
+impl<
+        T,
+        Disk: WriteDisk,
+        K: Serialize,
+        E: Container<Output = BackedEntryArr<T, Disk>> + Serialize,
+    > BackedArray<T, Disk, K, E>
+{
     /// Serializes this to disk after clearing all entries from memory to disk.
     ///
     /// Writing directly from serialize wastes disk space and increases load
@@ -354,7 +442,13 @@ impl<T: Serialize, Disk: WriteDisk> VecBackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: ReadDisk> VecBackedArray<T, Disk> {
+impl<
+        T,
+        Disk: WriteDisk,
+        K: for<'de> Deserialize<'de>,
+        E: Container<Output = BackedEntryArr<T, Disk>> + for<'df> Deserialize<'df>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Loads the backed array. Does not load backing arrays, unless this
     /// was saved with data (was not saved with [`Self::save_to_disk`]).
     pub fn load<R: Read>(writer: &mut R) -> bincode::Result<Self> {
@@ -362,56 +456,83 @@ impl<T: Serialize, Disk: ReadDisk> VecBackedArray<T, Disk> {
     }
 }
 
-impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> VecBackedArray<T, Disk> {
+impl<
+        T: Clone,
+        Disk: for<'de> Deserialize<'de> + Clone,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Combine `self` and `rhs` into a new [`Self`].
     ///
     /// Appends entries of `self` and `rhs`.
     pub fn join(&self, rhs: &Self) -> Self {
-        let offset = self.keys.last().unwrap_or(&(0..0)).end;
+        let offset = self.keys.as_ref().last().unwrap_or(&(0..0)).end;
         let other_keys = rhs
             .keys
+            .as_ref()
             .iter()
             .map(|range| (range.start + offset)..(range.end + offset));
         Self {
-            keys: self.keys.iter().cloned().chain(other_keys).collect(),
+            keys: self
+                .keys
+                .as_ref()
+                .iter()
+                .cloned()
+                .chain(other_keys)
+                .collect(),
             entries: self
                 .entries
+                .as_ref()
                 .iter()
-                .chain(rhs.entries.iter())
+                .chain(rhs.entries.as_ref().iter())
                 .cloned()
                 .collect(),
+            _phantom: (PhantomData, PhantomData),
         }
     }
-
     /// Copy entries in `rhs` to `self`.
     pub fn merge(&mut self, rhs: &Self) -> &mut Self {
-        let offset = self.keys.last().unwrap_or(&(0..0)).end;
+        let offset = self.keys.as_ref().last().unwrap_or(&(0..0)).end;
         self.keys.extend(
             rhs.keys
+                .as_ref()
                 .iter()
                 .map(|range| (range.start + offset)..(range.end + offset)),
         );
-        self.entries.extend_from_slice(&rhs.entries);
+        self.entries.extend(rhs.entries.as_ref().iter().cloned());
         self
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Moves all entries of `rhs` into `self`.
     pub fn append_array(&mut self, mut rhs: Self) -> &mut Self {
-        let offset = self.keys.last().unwrap_or(&(0..0)).end;
-        rhs.keys.iter_mut().for_each(|range| {
+        let offset = self.keys.as_ref().last().unwrap_or(&(0..0)).end;
+        rhs.keys.as_mut().iter_mut().for_each(|range| {
             range.start += offset;
             range.end += offset;
         });
-        self.keys.append(&mut rhs.keys);
-        self.entries.append(&mut rhs.entries);
+        self.keys.c_append(&mut rhs.keys);
+        self.entries.c_append(&mut rhs.entries);
         self
     }
 }
 
 // Iterator returns
-impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
+impl<
+        T: for<'df> Deserialize<'df>,
+        Disk: ReadDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Outputs items in order.
     ///
     /// Excluding chunks before the initial offset, all chunks will load in
@@ -424,7 +545,7 @@ impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
         let mut outer_pos = usize::MAX;
         let mut inner_pos = usize::MAX;
 
-        if let Some(loc) = internal_idx(&self.keys, offset) {
+        if let Some(loc) = internal_idx(self.keys.as_ref(), offset) {
             outer_pos = loc.entry_idx;
             inner_pos = loc.inside_entry_idx;
         };
@@ -448,13 +569,20 @@ impl<T: DeserializeOwned, Disk: ReadDisk> VecBackedArray<T, Disk> {
     /// * `offset`: Starting chunk (skips loading offset - 1 chunks)
     pub fn chunk_iter(&mut self, offset: usize) -> impl Iterator<Item = bincode::Result<&[T]>> {
         self.entries
+            .as_mut()
             .iter_mut()
             .skip(offset)
             .map(|entry| entry.load().map(|entry| entry.as_ref()))
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> VecBackedArray<T, Disk> {
+impl<
+        T: Serialize + DeserializeOwned,
+        Disk: ReadDisk + WriteDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
     ///
     /// See [`Self::chunk_iter`] for the immutable iterator.
@@ -463,13 +591,20 @@ impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> VecBackedArray
         offset: usize,
     ) -> impl Iterator<Item = bincode::Result<BackedEntryMut<Box<[T]>, Disk>>> {
         self.entries
+            .as_mut()
             .iter_mut()
             .skip(offset)
             .map(|entry| entry.mut_handle())
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: ReadDisk> VecBackedArray<T, Disk> {
+impl<
+        T: DeserializeOwned + Clone,
+        Disk: ReadDisk,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Returns an iterator that outputs clones of chunk data.
     ///
     /// See [`Self::chunk_iter`] for a version that produces references.
@@ -477,7 +612,7 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> VecBackedArray<T, Disk> {
         &mut self,
         offset: usize,
     ) -> impl Iterator<Item = bincode::Result<Vec<T>>> + '_ {
-        self.entries.iter_mut().skip(offset).map(|entry| {
+        self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
             let val = entry.load()?.to_vec();
             entry.unload();
             Ok(val)
@@ -485,7 +620,13 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> VecBackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Construct a backed array from entry range, backing storage pairs.
     ///
     /// Not recommended for use outside of VecBackedArray wrappers.
@@ -496,24 +637,40 @@ impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
         I: IntoIterator<Item = (Range<usize>, BackedEntry<Box<[T]>, Disk>)>,
     {
         let (keys, entries) = pairs.into_iter().unzip();
-        Self { keys, entries }
+        Self {
+            keys,
+            entries,
+            _phantom: (PhantomData, PhantomData),
+        }
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>> VecBackedArray<T, Disk> {
+impl<
+        T,
+        Disk: for<'de> Deserialize<'de>,
+        K: Container<Output = Range<usize>>,
+        E: Container<Output = BackedEntryArr<T, Disk>>,
+    > BackedArray<T, Disk, K, E>
+{
     /// Replaces the underlying entry disk.
     ///
     /// Not recommended for use outside of VecBackedArray wrappers.
     /// If ranges do not correspond to the entry arrays, the resulting
     /// [`VecBackedArray`] will be invalid.
-    pub fn replace_disk<OtherDisk>(self) -> VecBackedArray<T, OtherDisk>
+    pub fn replace_disk<OtherDisk>(self) -> BackedArray<T, OtherDisk, K, E>
     where
         OtherDisk: for<'de> Deserialize<'de>,
         Disk: Into<OtherDisk>,
+        BackedEntryArr<T, OtherDisk>: Into<BackedEntryArr<T, Disk>>,
     {
-        VecBackedArray::<T, OtherDisk> {
+        BackedArray::<T, OtherDisk, K, E> {
             keys: self.keys,
-            entries: self.entries.into_iter().map(|x| x.replace_disk()).collect(),
+            entries: self
+                .entries
+                .into_iter()
+                .map(|x| x.replace_disk().into())
+                .collect(),
+            _phantom: (PhantomData, PhantomData),
         }
     }
 }

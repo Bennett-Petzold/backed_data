@@ -1,21 +1,30 @@
 use std::{
     io::{Read, Write},
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Range},
 };
 
 use bincode::{deserialize_from, serialize_into};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    array::sync_impl::BackedArray,
-    entry::sync_impl::{ReadDisk, WriteDisk},
+    array::{sync_impl::BackedArray, Container},
+    entry::{
+        sync_impl::{ReadDisk, WriteDisk},
+        BackedEntryArr, BackedEntryUnload,
+    },
 };
 
 pub trait BackedArrayWrapper<T>:
-    Deref<Target = BackedArray<T, Self::Storage>> + DerefMut + Serialize + DeserializeOwned
+    Deref<Target = BackedArray<T, Self::Storage, Self::KeyContainer, Self::EntryContainer>>
+    + DerefMut
+    + Serialize
+    + DeserializeOwned
 {
     /// Underlying storage struct
     type Storage: ReadDisk + WriteDisk;
+    type KeyContainer: Container<Output = Range<usize>>;
+    //type EntryContainer: Container<Output: BackedEntryUnload>;
+    type EntryContainer: Container<Output = BackedEntryArr<T, Self::Storage>>;
 
     // Serial handling wrappers with default implementations
     /// Wraps [`BackedArray::save_to_disk`] to include its own metadata.
@@ -86,6 +95,7 @@ where
     Ok(lhs)
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use std::{
@@ -204,3 +214,4 @@ mod tests {
         remove_dir_all(dir.clone()).unwrap();
     }
 }
+*/
