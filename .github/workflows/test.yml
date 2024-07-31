@@ -27,6 +27,12 @@ jobs:
       with:
         target: ${{ matrix.triple }}
 
+    - name: Install libsodium (Ubuntu)
+      if: ${{ matrix.os == 'ubuntu' }}
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: libsodium-dev
+
     - uses: Swatinem/rust-cache@v2
 
     - run: cargo test --verbose --all-features

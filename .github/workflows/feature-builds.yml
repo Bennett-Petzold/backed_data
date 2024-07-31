@@ -12,7 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
+    - uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: libsodium-dev
+
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
     - uses: taiki-e/install-action@cargo-hack
+
     - run: |
         cargo hack --each-feature build --ignore-private
         cargo hack --each-feature test --ignore-private --no-run 

@@ -12,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libsodium-dev
+
       - name: Install Miri
         run: |
           rustup toolchain install nightly --component miri
