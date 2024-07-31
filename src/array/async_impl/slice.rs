@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, iter::FusedIterator, mem::transmute, ops::Range, pin::Pin, sync::Arc};
+use std::{borrow::Borrow, iter::FusedIterator, mem::transmute, pin::Pin, sync::Arc};
 
 use futures::Future;
 
@@ -10,7 +10,7 @@ use super::{
 };
 
 /// Read implementations
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E>
 where
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
@@ -20,8 +20,12 @@ where
         &self,
         idx: usize,
     ) -> Result<&E::InnerData, BackedArrayError<E::AsyncReadError>> {
-        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        let loc = internal_idx(
+            self.key_starts.c_ref().as_ref(),
+            self.key_ends.c_ref().as_ref(),
+            idx,
+        )
+        .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
         let wrapped_container = &self.entries.as_ref()[loc.entry_idx];
         let backed_entry: &BackedEntryAsync<_, _, _> = wrapped_container.as_ref();
@@ -72,7 +76,7 @@ impl<K, E> BackedArrayFutIterSend<K, E> {
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> Iterator
     for BackedArrayFutIter<'a, K, E>
 where
     E: AsRef<[E::Data]>,
@@ -111,7 +115,7 @@ where
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> Iterator
     for BackedArrayFutIterSend<K, E>
 where
     K: Send + Sync + 'static,
@@ -172,7 +176,7 @@ where
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
     for BackedArrayFutIter<'a, K, E>
 where
     E: AsRef<[E::Data]>,
@@ -180,7 +184,7 @@ where
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
     for BackedArrayFutIterSend<K, E>
 where
     K: Send + Sync + 'static,
@@ -197,7 +201,7 @@ where
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E>
 where
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
@@ -234,7 +238,7 @@ where
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E>
 where
     E: AsRef<[E::Data]>,
 {

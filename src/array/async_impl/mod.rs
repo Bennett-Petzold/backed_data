@@ -1,5 +1,6 @@
-use std::ops::Range;
+use std::cmp::max;
 
+use futures::{stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 
 use crate::entry::{
@@ -146,11 +147,70 @@ impl<T> BackedEntryContainerNestedAsyncAll for T where
 }
 
 pub type AsyncVecBackedArray<T, Disk, Coder> =
-    BackedArray<Vec<Range<usize>>, Vec<BackedEntryAsync<Box<[T]>, Disk, Coder>>>;
+    BackedArray<Vec<usize>, Vec<BackedEntryAsync<Box<[T]>, Disk, Coder>>>;
+
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncWrite> BackedArray<K, E>
+where
+    K: From<Vec<K::Data>>,
+    E: From<Vec<BackedEntryAsync<E::Unwrapped, E::Disk, E::Coder>>>,
+    E::Disk: Clone,
+    E::Coder: Clone,
+{
+    /// Async version of [`Self::from_containers`].
+    ///
+    /// Executes between 1 and [# iterator entries] write futures concurrently.
+    /// Keeps all data in memory.
+    pub async fn a_from_containers<C, I>(
+        iter: I,
+        disk: &E::Disk,
+        coder: &E::Coder,
+    ) -> Result<Self, <E::Coder as AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk>>::Error>
+    where
+        C: Into<E::Unwrapped>,
+        I: IntoIterator<Item = C>,
+    {
+        let iter = iter.into_iter();
+        let (lower_size, upper_size) = iter.size_hint();
+        let size_hint = upper_size.unwrap_or(max(lower_size, 1));
+
+        let (lens, entries): (Vec<_>, Vec<BackedEntryAsync<E::Unwrapped, _, _>>) =
+            stream::iter(iter.map(|x| x.into()))
+                .map(|x| {
+                    let len = x.c_len();
+                    async move {
+                        let mut entry = BackedEntryAsync::new(disk.clone(), coder.clone());
+                        entry.a_write(x).await?;
+                        let ret = (len, entry);
+                        Ok(ret)
+                    }
+                })
+                .buffered(size_hint)
+                .try_collect::<Vec<_>>()
+                .await?
+                .into_iter()
+                .unzip();
+
+        let mut start = 0;
+        let (key_starts, key_ends): (Vec<_>, Vec<_>) = lens
+            .into_iter()
+            .map(|len| {
+                let prev_start = start;
+                start += len;
+                (prev_start, start)
+            })
+            .unzip();
+
+        Ok(Self {
+            key_starts: key_starts.into(),
+            key_ends: key_ends.into(),
+            entries: entries.into(),
+        })
+    }
+}
 
 /// Write implementations
 impl<
-        K: ResizingContainer<Data = Range<usize>>,
+        K: ResizingContainer<Data = usize>,
         E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     > BackedArray<K, E>
 {
@@ -198,14 +258,9 @@ impl<
         let values = values.into();
 
         // End of a range is exclusive
-        let start_idx = self
-            .keys
-            .c_ref()
-            .as_ref()
-            .last()
-            .map(|key_range| key_range.end)
-            .unwrap_or(0);
-        self.keys.c_push(start_idx..(start_idx + values.c_len()));
+        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+        self.key_starts.c_push(start_idx);
+        self.key_ends.c_push(start_idx + values.c_len());
 
         let mut entry = BackedEntryAsync::new(backing_store, coder);
         entry.a_write_unload(values).await?;
@@ -254,14 +309,10 @@ impl<
         let values = values.into();
 
         // End of a range is exclusive
-        let start_idx = self
-            .keys
-            .c_ref()
-            .as_ref()
-            .last()
-            .map(|key_range| key_range.end)
-            .unwrap_or(0);
-        self.keys.c_push(start_idx..(start_idx + values.c_len()));
+        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+        self.key_starts.c_push(start_idx);
+        self.key_ends.c_push(start_idx + values.c_len());
+
         let mut entry = BackedEntryAsync::new(backing_store, coder);
         entry.a_write(values).await?;
         self.entries.c_push(entry.into());

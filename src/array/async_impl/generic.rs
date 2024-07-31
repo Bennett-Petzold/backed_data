@@ -1,11 +1,4 @@
-use std::{
-    borrow::Borrow,
-    iter::FusedIterator,
-    mem::transmute,
-    ops::{Deref, Range},
-    pin::Pin,
-    sync::Arc,
-};
+use std::{borrow::Borrow, iter::FusedIterator, mem::transmute, ops::Deref, pin::Pin, sync::Arc};
 
 use futures::Future;
 
@@ -23,7 +16,7 @@ use super::{
 };
 
 /// Read implementations
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
     /// Implementor for [`Self::a_generic_get`] that retains type information.
     #[allow(clippy::type_complexity)]
     async fn internal_a_get(
@@ -36,8 +29,12 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
         >,
         BackedArrayError<E::AsyncReadError>,
     > {
-        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        let loc = internal_idx(
+            self.key_starts.c_ref().as_ref(),
+            self.key_ends.c_ref().as_ref(),
+            idx,
+        )
+        .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
         let wrapped_container = self
             .entries
@@ -114,7 +111,7 @@ impl<K, E> BackedArrayFutIterGenericSend<K, E> {
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> Iterator
     for BackedArrayFutIterGeneric<'a, K, E>
 {
     type Item = Pin<
@@ -162,7 +159,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRe
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> Iterator
     for BackedArrayFutIterGenericSend<K, E>
 where
     K: Send + Sync + 'static,
@@ -232,12 +229,12 @@ where
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
     for BackedArrayFutIterGeneric<'a, K, E>
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
     for BackedArrayFutIterGenericSend<K, E>
 where
     K: Send + Sync + 'static,
@@ -252,7 +249,7 @@ where
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
     /// Future iterator over each backed item.
     ///
     /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a

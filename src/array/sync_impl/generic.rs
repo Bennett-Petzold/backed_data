@@ -1,10 +1,12 @@
 use std::{
     fmt::Debug,
-    iter::{FusedIterator, Peekable},
+    iter::{FusedIterator, Peekable, Zip},
     mem::transmute,
-    ops::{Deref, DerefMut, Range},
+    ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
+
+use stable_deref_trait::StableDeref;
 
 use crate::{
     array::container::open_mut,
@@ -24,7 +26,7 @@ use super::{
 };
 
 /// Read implementations
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
     /// Implementor for [`Self::get`] that retains type information.
     #[allow(clippy::type_complexity)]
     fn internal_get(
@@ -34,8 +36,12 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
         BorrowNest<E::Ref<'_>, &E::Unwrapped, <E::Unwrapped as Container>::Ref<'_>>,
         BackedArrayError<E::ReadError>,
     > {
-        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        let loc = internal_idx(
+            self.key_starts.c_ref().as_ref(),
+            self.key_ends.c_ref().as_ref(),
+            idx,
+        )
+        .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
         let wrapped_container = self
             .entries
@@ -104,7 +110,7 @@ impl<'a, K, E> BackedArrayGenericIter<'a, K, E> {
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Iterator
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedRead> Iterator
     for BackedArrayGenericIter<'a, K, E>
 {
     type Item = Result<
@@ -139,7 +145,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> I
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> FusedIterator
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> FusedIterator
     for BackedArrayGenericIter<'_, K, E>
 {
 }
@@ -152,7 +158,11 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Fused
 pub struct BackedArrayGenericIterMut<'a, K: Container + 'a, E: BackedEntryContainerNestedAll + 'a> {
     pos: usize,
     len: usize,
-    keys: BorrowExtender<<K as Container>::RefSlice<'a>, Peekable<std::slice::Iter<'a, K::Data>>>,
+    #[allow(clippy::type_complexity)]
+    keys: BorrowExtender<
+        BorrowTuple<<K as Container>::RefSlice<'a>, <K as Container>::RefSlice<'a>>,
+        Peekable<Zip<std::slice::Iter<'a, usize>, std::slice::Iter<'a, usize>>>,
+    >,
     entries: BorrowExtender<Box<<E as Container>::MutSlice<'a>>, std::slice::IterMut<'a, E::Data>>,
     // TODO: Rewrite this to be a box of Once or MaybeUninit type
     // Problem with once types is that either a generic needs to be introduced,
@@ -170,18 +180,39 @@ pub struct BackedArrayGenericIterMut<'a, K: Container + 'a, E: BackedEntryContai
     >,
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll>
+// Getting around can't implement on tuple as foreign
+pub struct BorrowTuple<X, Y>(pub X, pub Y);
+impl<X, Y> Deref for BorrowTuple<X, Y> {
+    type Target = (X, Y);
+    fn deref(&self) -> &Self::Target {
+        panic!("Requires transmutes to represent this pattern")
+    }
+}
+
+unsafe impl<X: StableDeref, Y: StableDeref> StableDeref for BorrowTuple<X, Y> {}
+
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedAll>
     BackedArrayGenericIterMut<'a, K, E>
 {
     fn new(backed: &'a mut BackedArray<K, E>) -> Self {
-        let len = backed.keys.c_ref().as_ref().last().unwrap_or(&(0..0)).end;
+        let key_ends = backed.key_ends.c_ref();
+        let key_ends = key_ends.as_ref();
+        let len = *key_ends.last().unwrap_or(&0);
+
         let mut handles = Vec::with_capacity(backed.chunks_len());
-        let keys = BorrowExtender::new(backed.keys.c_ref(), |keys| {
-            // The keys reference is valid as long for the life of this struct,
-            // which is valid as long as `Self` is valid.
-            let keys = unsafe { transmute::<&K::RefSlice<'_>, &'a K::RefSlice<'a>>(keys) };
-            keys.as_ref().iter().peekable()
-        });
+        let keys = BorrowExtender::new(
+            BorrowTuple(backed.key_starts.c_ref(), backed.key_ends.c_ref()),
+            |keys| {
+                let (key_starts, key_ends) = (&keys.0, &keys.1);
+                // The keys reference is valid as long for the life of this struct,
+                // which is valid as long as `Self` is valid.
+                let key_starts =
+                    unsafe { transmute::<&K::RefSlice<'_>, &'a K::RefSlice<'a>>(key_starts) };
+                let key_ends =
+                    unsafe { transmute::<&K::RefSlice<'_>, &'a K::RefSlice<'a>>(key_ends) };
+                key_starts.as_ref().iter().zip(key_ends.as_ref()).peekable()
+            },
+        );
 
         let mut entries = BorrowExtender::new_mut(Box::new(backed.entries.c_mut()), |mut ent| {
             let ent: &mut _ = unsafe { ent.as_mut() }; // Open NonNull
@@ -232,7 +263,7 @@ impl<K: Container, E: BackedEntryContainerNestedAll> Drop for BackedArrayGeneric
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>> + 'a, E: BackedEntryContainerNestedAll + 'a> Iterator
+impl<'a, K: Container<Data = usize> + 'a, E: BackedEntryContainerNestedAll + 'a> Iterator
     for BackedArrayGenericIterMut<'a, K, E>
 where
     E::Unwrapped: 'a,
@@ -262,7 +293,7 @@ where
         // This iterator only goes forward, so keys are not reused once
         // passed.
         while let Some(key) = self.keys.by_ref().peek() {
-            if key.end > self.pos {
+            if *key.1 > self.pos {
                 // Update to latest entry handle
                 break;
             }
@@ -270,7 +301,7 @@ where
             step_count += 1;
         }
 
-        let inner_pos = self.pos - self.keys.peek()?.start;
+        let inner_pos = self.pos - self.keys.peek()?.0;
         self.pos += 1; // Position advances, even on errors
 
         if step_count > 0 {
@@ -309,8 +340,8 @@ where
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>> + 'a, E: BackedEntryContainerNestedAll + 'a>
-    FusedIterator for BackedArrayGenericIterMut<'a, K, E>
+impl<'a, K: Container<Data = usize> + 'a, E: BackedEntryContainerNestedAll + 'a> FusedIterator
+    for BackedArrayGenericIterMut<'a, K, E>
 where
     E::Unwrapped: 'a,
     E::ReadError: 'a,
@@ -318,7 +349,7 @@ where
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
     /// [`Self::iter`] that works on containers that don't directly
     /// dereference to slices.
     pub fn generic_iter(&self) -> BackedArrayGenericIter<'_, K, E> {
@@ -342,7 +373,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAll> BackedArray<K, E> {
     /// [`Self::iter_mut`] that works on containers that don't directly
     /// dereference to slices.
     pub fn generic_iter_mut<'a>(&'a mut self) -> BackedArrayGenericIterMut<'a, K, E>
