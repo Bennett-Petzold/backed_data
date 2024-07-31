@@ -379,8 +379,7 @@ impl MmapWriter {
     // Windows cannot handle an mmap of length zero, if the file is empty we
     // cannot read mmap's len.
     fn get_reserved_len(
-        #[cfg(not(target_os = "windows"))] mmap: &memmap2::MmapMut,
-        #[cfg(target_os = "windows")] mmap: &Option<memmap2::MmapMut>,
+        mmap: &memmap2::MmapMut,
         #[cfg(target_os = "windows")] file: &File,
     ) -> std::io::Result<usize> {
         let len;
@@ -395,7 +394,7 @@ impl MmapWriter {
             len = if file.metadata()?.len() == 0 {
                 0
             } else {
-                mmap.unwrap().len()
+                mmap.len()
             };
         }
 
@@ -409,10 +408,7 @@ impl MmapWriter {
         let _ = mmap.advise(Advice::PopulateWrite);
 
         let reserved_len = Self::get_reserved_len(
-            #[cfg(not(target_os = "windows"))]
             &mmap,
-            #[cfg(target_os = "windows")]
-            &Some(mmap),
             #[cfg(target_os = "windows")]
             &open_mmap(&path)?,
         )?;
@@ -442,10 +438,7 @@ impl MmapWriter {
         let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
 
         let reserved_len = Self::get_reserved_len(
-            #[cfg(not(target_os = "windows"))]
             &mmap,
-            #[cfg(target_os = "windows")]
-            &Some(mmap),
             #[cfg(target_os = "windows")]
             &file,
         )?;
@@ -773,7 +766,7 @@ impl AsRef<[u8]> for MmapWriter {
         }
         #[cfg(target_os = "windows")]
         {
-            ret = self.mmap.as_ref().unwrap()[0..self.written_len];
+            ret = &self.mmap.as_ref().unwrap()[0..self.written_len];
         }
 
         ret
@@ -790,7 +783,7 @@ impl AsMut<[u8]> for MmapWriter {
         }
         #[cfg(target_os = "windows")]
         {
-            ret = self.mmap.as_mut().unwrap()[0..self.written_len];
+            ret = &mut self.mmap.as_mut().unwrap()[0..self.written_len];
         }
 
         ret
