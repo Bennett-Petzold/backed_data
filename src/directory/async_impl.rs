@@ -212,8 +212,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_and_read() {
-        let directory = temp_dir().join("directory_write_and_read_async");
+    async fn cross_write_and_read() {
+        let directory = temp_dir().join("directory_write_and_read_async_cross");
         let _ = remove_dir_all(directory.clone()).await;
         let mut arr = DirectoryBackedArray::new(directory.clone()).await.unwrap();
         let (values, second_values) = values();

@@ -10,9 +10,11 @@ use std::{
 };
 use tokio::{
     fs::File,
-    io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
+    io::{
+        AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufReader,
+        BufWriter,
+    },
 };
-use tokio_util::io::SyncIoBridge;
 
 use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload, DiskOverwritable};
 
@@ -206,6 +208,22 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryAsync<T, Disk> {
     }
 }
 
+impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryAsync<T, Disk> {
+    pub async fn into_sync_entry(mut self) -> bincode::Result<BackedEntry<T, Disk>> {
+        self.conv_to_sync().await?;
+        Ok(self.inner)
+    }
+
+    pub async fn from_sync_entry(sync_entry: BackedEntry<T, Disk>) -> bincode::Result<Self> {
+        let mut this = Self {
+            inner: sync_entry,
+            mode: BackedEntryWriteMode::Sync,
+        };
+        this.conv_to_async().await?;
+        Ok(this)
+    }
+}
+
 impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryArrAsync<T, Disk> {
     /// Write the value to disk only, unloading current memory.
     ///
@@ -270,9 +288,12 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryArrAsync<T, Disk> {
         if self.inner.value.is_empty() {
             let mut read_disk = pin!(self.inner.disk.read_disk().await?);
             read_disk.rewind().await?;
+
             match self.mode {
                 BackedEntryWriteMode::Sync => {
-                    self.inner.value = deserialize_from(SyncIoBridge::new(&mut read_disk))?;
+                    return Err(Box::new(bincode::ErrorKind::Custom(
+                        "Encoded as sync, not async.".to_string(),
+                    )));
                 }
                 BackedEntryWriteMode::Async => {
                     self.inner.value = AsyncBincodeReader::from(&mut read_disk)
@@ -300,7 +321,9 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedEntryOptionAsync<T, Disk> {
             read_disk.rewind().await?;
             match self.mode {
                 BackedEntryWriteMode::Sync => {
-                    self.inner.value = deserialize_from(SyncIoBridge::new(&mut read_disk))?;
+                    return Err(Box::new(bincode::ErrorKind::Custom(
+                        "Encoded as sync, not async.".to_string(),
+                    )));
                 }
                 BackedEntryWriteMode::Async => {
                     self.inner.value = AsyncBincodeReader::from(&mut read_disk)
@@ -356,6 +379,16 @@ impl<'a, T: Serialize, Disk: AsyncWriteDisk> BackedEntryMutAsync<'a, T, Disk> {
     pub async fn flush(&mut self) -> bincode::Result<&mut Self> {
         self.entry.update().await?;
         self.modified = false;
+        Ok(self)
+    }
+
+    pub async fn conv_to_sync(&mut self) -> bincode::Result<&mut Self> {
+        self.entry.conv_to_sync().await?;
+        Ok(self)
+    }
+
+    pub async fn conv_to_async(&mut self) -> bincode::Result<&mut Self> {
+        self.entry.conv_to_async().await?;
         Ok(self)
     }
 }

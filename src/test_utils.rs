@@ -1,10 +1,11 @@
 use core::panic;
 use std::{
-    io::Cursor,
+    io::{Cursor, Read, Seek, Write},
     ops::{Deref, DerefMut},
 };
 
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncSeekExt;
 
 use crate::entry::{
     async_impl::{AsyncReadDisk, AsyncWriteDisk},
@@ -52,6 +53,8 @@ impl<'a> WriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
     fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        self.inner.get_mut().clear();
+        std::io::Seek::rewind(&mut self.inner).unwrap();
         let self_inner: *mut Cursor<Vec<u8>> = self.inner;
         unsafe { Ok(&mut *self_inner) }
     }
@@ -70,6 +73,8 @@ impl<'a> AsyncWriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
     async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        self.inner.get_mut().clear();
+        std::io::Seek::rewind(&mut self.inner).unwrap();
         let self_inner: *mut Cursor<Vec<u8>> = self.inner;
         unsafe { Ok(&mut *self_inner) }
     }
@@ -88,6 +93,8 @@ impl<'a> WriteDisk for &mut CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
     fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        self.inner.get_mut().clear();
+        std::io::Seek::rewind(&mut self.inner).unwrap();
         let self_inner: *mut Cursor<Vec<u8>> = self.inner;
         unsafe { Ok(&mut *self_inner) }
     }
@@ -106,6 +113,8 @@ impl<'a> AsyncWriteDisk for &mut CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
     async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        self.inner.get_mut().clear();
+        std::io::Seek::rewind(&mut self.inner).unwrap();
         let self_inner: *mut Cursor<Vec<u8>> = self.inner;
         unsafe { Ok(&mut *self_inner) }
     }
