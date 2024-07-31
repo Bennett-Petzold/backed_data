@@ -314,12 +314,13 @@ impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIt
     fn next(&mut self) -> Option<Self::Item> {
         // No GAT support, so we make do with pointers
         // The lifetimes work out, but the compiler doesn't know that
-        let val_ptr: Option<bincode::Result<*const [T]>> = self
+        let val_ptr: bincode::Result<*const [T]> = self
             .backed_entry
             .entries
             .get_mut(self.pos)
-            .map(move |x| x.load().map(|y| y as *const [T]));
-        val_ptr.map(|y| y.map(|x| unsafe { &*x }))
+            .map(move |x| x.load().map(|y| y as *const [T]))?;
+        self.pos += 1;
+        Some(val_ptr.map(|x| unsafe { &*x }))
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -368,18 +369,24 @@ impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
             .as_ref()
             .map(|entry| {
                 entry.as_ref().map(|loaded_entry| {
-                    loaded_entry.get(self.inner_pos).map(Ok).or_else(|| {
-                        self.inner_pos = 0;
+                    loaded_entry
+                        .get(self.inner_pos)
+                        .map(|x| {
+                            self.inner_pos += 1;
+                            Ok(x)
+                        })
+                        .or_else(|| {
+                            self.inner_pos = 0;
 
-                        // Mutating the backed entry,
-                        // but the borrowed value is being discarded
-                        unsafe {
-                            (*self_ptr).backed_entry = self.chunk_iter.next();
-                        };
+                            // Mutating the backed entry,
+                            // but the borrowed value is being discarded
+                            unsafe {
+                                (*self_ptr).backed_entry = self.chunk_iter.next();
+                            };
 
-                        // Mutating self to call method again
-                        unsafe { (*self_ptr).next() }
-                    })
+                            // Mutating self to call method again
+                            unsafe { (*self_ptr).next() }
+                        })
                 })
             })
             .transpose()
@@ -519,5 +526,46 @@ mod tests {
             .collect::<bincode::Result<Vec<_>>>()
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn chunk_iteration() {
+        let back_vector_0 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+
+        const INPUT_0: &[u8] = &[0, 1, 1];
+        const INPUT_1: &[u8] = &[2, 5, 7];
+
+        let mut backed = BackedArray::new();
+        backed.append(INPUT_0, back_vector_0).unwrap();
+        backed.append(INPUT_1, back_vector_1).unwrap();
+
+        let collected = backed
+            .chunk_iter_default()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(collected[0], INPUT_0);
+        assert_eq!(collected[1], INPUT_1);
+        assert_eq!(collected.len(), 2);
+    }
+
+    #[test]
+    fn item_iteration() {
+        let back_vector_0 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+
+        const INPUT_0: &[u8] = &[0, 1, 1];
+        const INPUT_1: &[u8] = &[2, 5, 7];
+
+        let mut backed = BackedArray::new();
+        backed.append(INPUT_0, back_vector_0).unwrap();
+        backed.append(INPUT_1, back_vector_1).unwrap();
+        let collected = backed
+            .item_iter_default()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(collected[5], &7);
+        assert_eq!(collected[2], &1);
+        assert_eq!(collected.len(), 6);
     }
 }
