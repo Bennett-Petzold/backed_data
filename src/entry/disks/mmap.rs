@@ -504,7 +504,7 @@ impl MmapWriter {
 
             #[cfg(not(target_os = "linux"))]
             {
-                file.set_len(self.reserved_len as u64)?;
+                file.set_len(new_reservation as u64)?;
                 self.reserved_len = new_reservation;
             }
 
