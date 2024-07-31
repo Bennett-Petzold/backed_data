@@ -11,7 +11,7 @@ use serde::{de::Error, Deserialize, Serialize};
 use uuid::Uuid;
 use zstd::{Decoder, Encoder};
 
-use crate::array::BackedArray;
+use crate::array::sync_impl::BackedArray;
 
 /// File encoded with zstd
 pub struct ZstdFile<'a> {

@@ -12,7 +12,7 @@ use serde::{
 };
 use uuid::Uuid;
 
-use crate::array::BackedArray;
+use crate::array::sync_impl::BackedArray;
 
 /// File, but serializes based on path string
 #[derive(Debug)]
