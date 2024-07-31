@@ -171,6 +171,11 @@ impl<T, Disk> BackedEntryArr<T, Disk> {
 
 #[cfg(feature = "async")]
 impl<T, Disk> BackedEntryArrAsync<T, Disk> {
+    /// Set underlying storage and [`BackedEntryWriteMode`].
+    ///
+    /// # Arguments
+    /// * `disk_entry`: Async storage to write/read
+    /// * `mode`: Whether to write to sync or async reads. Default async.
     pub fn new(disk_entry: Disk, mode: Option<BackedEntryWriteMode>) -> Self {
         let mode = mode.unwrap_or(BackedEntryWriteMode::Async);
         Self {
@@ -237,8 +242,8 @@ impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryAsync<T, Disk> {
 
     /// Writes the new value to memory and disk.
     ///
-    /// See [`Self::async_write_unload`] to skip the memory write.
-    pub async fn write_async(&mut self, new_value: T) -> bincode::Result<()> {
+    /// See [`Self::write_unload`] to skip the memory write.
+    pub async fn write(&mut self, new_value: T) -> bincode::Result<()> {
         self.update_lower_async(&new_value).await?;
         self.inner.value = new_value;
         Ok(())
@@ -271,16 +276,46 @@ impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryAsync<T, Disk> {
 }
 
 #[cfg(feature = "async")]
-impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryAsync<T, Disk>
-where
-    BackedEntryAsync<T, Disk>: BackedEntryUnload,
-{
+impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryArrAsync<T, Disk> {
     /// Write the value to disk only, unloading current memory.
     ///
-    /// See [`Self::async_write`] to keep the value in memory.
-    pub async fn write_unload_async(&mut self, new_value: &T) -> bincode::Result<()> {
+    /// See [`Self::write`] to keep the value in memory.
+    pub async fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
         self.unload();
-        self.update_lower_async(new_value).await
+        let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
+        match self.mode {
+            BackedEntryWriteMode::Async => {
+                bincode_writer.for_async().send(&new_value).await?;
+            }
+            BackedEntryWriteMode::Sync => {
+                bincode_writer.send(&new_value).await?;
+            }
+        };
+
+        self.inner.disk_entry.flush().await?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryOptionAsync<T, Disk> {
+    /// Write the value to disk only, unloading current memory.
+    ///
+    /// See [`Self::write`] to keep the value in memory.
+    pub async fn write_unload(&mut self, new_value: &T) -> bincode::Result<()> {
+        self.unload();
+        let mut bincode_writer = AsyncBincodeWriter::from(&mut self.inner.disk_entry);
+        match self.mode {
+            BackedEntryWriteMode::Async => {
+                bincode_writer.for_async().send(&new_value).await?;
+            }
+            BackedEntryWriteMode::Sync => {
+                bincode_writer.send(&new_value).await?;
+            }
+        };
+
+        self.inner.disk_entry.flush().await?;
+        Ok(())
     }
 }
 
@@ -367,7 +402,7 @@ impl<T: DeserializeOwned, Disk: AsyncRead + Unpin> BackedEntryOptionAsync<T, Dis
     /// Will use AsyncBincodeReader or BincodeReader depending on mode.
     /// Check that [`Self::get_mode`] is async for optimal read performance.
     /// The sync implementation will block the thread.
-    pub async fn load_async(&mut self) -> Result<&T, Box<bincode::ErrorKind>> {
+    pub async fn load(&mut self) -> Result<&T, Box<bincode::ErrorKind>> {
         if self.inner.value.is_none() {
             match self.mode {
                 BackedEntryWriteMode::Sync => {
