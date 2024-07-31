@@ -114,7 +114,11 @@ impl<
 #[cfg(feature = "async")]
 impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedArray<T, Disk> {
     /// Async version of [`Self::append`]
-    pub async fn append(&mut self, values: &[T], backing_store: Disk) -> bincode::Result<&Self> {
+    pub async fn append(
+        &mut self,
+        values: &[T],
+        backing_store: Disk,
+    ) -> bincode::Result<&mut Self> {
         // End of a range is exclusive
         let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
         self.keys.push(start_idx..(start_idx + values.len()));
@@ -129,7 +133,7 @@ impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedArray<T, Disk> {
         &mut self,
         values: Box<[T]>,
         backing_store: Disk,
-    ) -> bincode::Result<&Self> {
+    ) -> bincode::Result<&mut Self> {
         // End of a range is exclusive
         let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
         self.keys.push(start_idx..(start_idx + values.len()));
@@ -144,7 +148,7 @@ impl<T, Disk> BackedArray<T, Disk> {
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to indentify the target index.
-    pub fn remove(&mut self, entry_idx: usize) -> &Self {
+    pub fn remove(&mut self, entry_idx: usize) -> &mut Self {
         let width = self.keys[entry_idx].len();
         self.keys.remove(entry_idx);
         self.entries.remove(entry_idx);
@@ -221,7 +225,7 @@ impl<T: Clone, Disk: Clone> BackedArray<T, Disk> {
     }
 
     /// Copy entries in `rhs` to `self`
-    pub fn merge(&mut self, rhs: &Self) -> &Self {
+    pub fn merge(&mut self, rhs: &Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
         self.keys.extend(
             rhs.keys
@@ -235,7 +239,7 @@ impl<T: Clone, Disk: Clone> BackedArray<T, Disk> {
 
 impl<T, Disk> BackedArray<T, Disk> {
     /// Moves all entries of `rhs` into `self`
-    pub fn append_array(&mut self, mut rhs: Self) -> &Self {
+    pub fn append_array(&mut self, mut rhs: Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
         rhs.keys.iter_mut().for_each(|range| {
             range.start += offset;
