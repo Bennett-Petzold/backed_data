@@ -297,8 +297,7 @@ pub mod sync_impl {
     impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
         /// Loads the backed array. Does not load backing arrays, unless this
         /// was saved with data (was not saved with [`Self::save_to_disk`]).
-        pub fn load<R: Read>(&mut self, writer: &mut R) -> bincode::Result<Self> {
-            self.clear_memory();
+        pub fn load<R: Read>(writer: &mut R) -> bincode::Result<Self> {
             deserialize_from(writer)
         }
     }
@@ -589,11 +588,7 @@ pub mod async_impl {
 
     impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
         /// Async version of [`Self::load`]
-        pub async fn load<R: AsyncRead + Unpin>(
-            &mut self,
-            writer: &mut R,
-        ) -> bincode::Result<Self> {
-            self.clear_memory();
+        pub async fn load<R: AsyncRead + Unpin>(writer: &mut R) -> bincode::Result<Self> {
             AsyncBincodeReader::from(writer)
                 .next()
                 .await

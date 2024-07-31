@@ -198,7 +198,7 @@ impl<T: Serialize, U: Write> BackedEntryOption<T, U> {
 #[cfg(feature = "async")]
 pub mod async_impl {
     use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
-    use bincode::{deserialize_from, serialize_into};
+    use bincode::deserialize_from;
     use futures::{SinkExt, StreamExt};
     use serde::{de::DeserializeOwned, Deserialize, Serialize};
     use std::borrow::Borrow;
