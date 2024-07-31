@@ -3,6 +3,8 @@ pub mod async_impl;
 pub mod container;
 pub mod sync_impl;
 
+pub mod slice_sync_impl;
+
 use std::ops::Range;
 
 use container::Container;
@@ -38,17 +40,27 @@ impl<'a, T> From<(&'a Range<usize>, &'a T)> for BackedArrayEntry<'a, T> {
     }
 }
 
-fn internal_idx<'a, K: IntoIterator<Item = &'a Range<usize>>>(
-    keys: K,
-    idx: usize,
-) -> Option<ArrayLoc> {
-    keys.into_iter()
-        .enumerate()
-        .find(|(_, key_range)| key_range.contains(&idx))
-        .map(|(entry_idx, key_range)| ArrayLoc {
-            entry_idx,
-            inside_entry_idx: (idx - key_range.start),
-        })
+/// Find the internal index for an entry.
+///
+/// Uses the knowledge that `keys` is sorted.
+fn internal_idx<K: AsRef<[Range<usize>]>>(keys: K, idx: usize) -> Option<ArrayLoc> {
+    let keys = keys.as_ref();
+    let entry_idx = match keys.binary_search_by_key(&idx, |k| k.end) {
+        // Matched with a range end, but not the final one. The final range
+        // end is out of bounds.
+        Ok(x) if x != keys.len() - 1 => x + 1,
+        // Can be inserted at some position beyond the final end range.
+        Err(x) if x != keys.len() => x,
+        // Out of bounds
+        _ => {
+            return None;
+        }
+    };
+
+    Some(ArrayLoc {
+        entry_idx,
+        inside_entry_idx: (idx - keys[entry_idx].start),
+    })
 }
 
 /// Array stored as multiple arrays on disk.
