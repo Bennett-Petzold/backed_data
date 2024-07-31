@@ -6,6 +6,7 @@ use std::{
     path::PathBuf,
 };
 
+use itertools::Either;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::utils::{Once, ToMut};
@@ -254,17 +255,115 @@ impl<
     }
 }
 
-impl<T, Disk: for<'de> Deserialize<'de>, Coder> BackedEntry<T, Disk, Coder> {
-    pub fn replace_disk<OtherDisk>(self) -> BackedEntry<T, OtherDisk, Coder>
+impl<
+        T: Once<Inner: for<'de> Deserialize<'de> + Serialize>,
+        Disk: ReadDisk,
+        Coder: Decoder<Disk::ReadDisk>,
+    > BackedEntry<T, Disk, Coder>
+{
+    /// Converts [`self`] to another disk and encoding representation.
+    ///
+    /// This loads the value from the original disk in the original format (if necessary),
+    /// and then encodes the value to the target disk. This may produce a disk read,
+    /// and will always produce a disk write. See [`Self::change_encoder`] and
+    /// [`Self::change_disk`] to replace only one backing part.
+    pub fn change_backing<OtherDisk, OtherCoder>(
+        self,
+        disk: OtherDisk,
+        coder: OtherCoder,
+    ) -> Result<BackedEntry<T, OtherDisk, OtherCoder>, Either<Coder::Error, OtherCoder::Error>>
     where
-        OtherDisk: for<'de> Deserialize<'de>,
-        Disk: Into<OtherDisk>,
+        OtherDisk: WriteDisk,
+        OtherCoder: Encoder<OtherDisk::WriteDisk>,
     {
-        BackedEntry::<T, OtherDisk, Coder> {
+        self.load().map_err(|e| Either::Left(e))?;
+        let mut other = BackedEntry::<T, OtherDisk, OtherCoder> {
             value: self.value,
-            disk: self.disk.into(),
+            disk,
+            coder,
+        };
+        other.update().map_err(|e| Either::Right(e))?;
+        Ok(other)
+    }
+
+    /// Converts [`self`] to another disk representation.
+    ///
+    /// Specialization of [`Self::change_backing`].
+    pub fn change_disk<OtherDisk>(
+        self,
+        disk: OtherDisk,
+    ) -> Result<
+        BackedEntry<T, OtherDisk, Coder>,
+        Either<
+            <Coder as Decoder<<Disk as ReadDisk>::ReadDisk>>::Error,
+            <Coder as Encoder<<OtherDisk as WriteDisk>::WriteDisk>>::Error,
+        >,
+    >
+    where
+        OtherDisk: WriteDisk,
+        Coder: Encoder<OtherDisk::WriteDisk>,
+    {
+        self.load().map_err(|e| Either::Left(e))?;
+        let mut other = BackedEntry::<T, OtherDisk, Coder> {
+            value: self.value,
+            disk,
             coder: self.coder,
+        };
+        other.update().map_err(|e| Either::Right(e))?;
+        Ok(other)
+    }
+
+    /// Converts [`self`] to another encoder representation.
+    ///
+    /// Specialization of [`Self::change_backing`].
+    pub fn change_encoder<OtherCoder>(
+        self,
+        coder: OtherCoder,
+    ) -> Result<
+        BackedEntry<T, Disk, OtherCoder>,
+        Either<
+            <Coder as Decoder<<Disk as ReadDisk>::ReadDisk>>::Error,
+            <OtherCoder as Encoder<<Disk as WriteDisk>::WriteDisk>>::Error,
+        >,
+    >
+    where
+        Disk: WriteDisk,
+        OtherCoder: Encoder<Disk::WriteDisk>,
+    {
+        self.load().map_err(|e| Either::Left(e))?;
+        let mut other = BackedEntry::<T, Disk, OtherCoder> {
+            value: self.value,
+            disk: self.disk,
+            coder,
+        };
+        other.update().map_err(|e| Either::Right(e))?;
+        Ok(other)
+    }
+
+    /// Replaces [`self`]'s encoder without any disk operation.
+    pub fn encoder_into<OtherCoder>(self) -> BackedEntry<T, Disk, OtherCoder>
+    where
+        OtherCoder: From<Coder>,
+    {
+        BackedEntry {
+            value: self.value,
+            disk: self.disk,
+            coder: self.coder.into(),
         }
+    }
+
+    /// Replaces [`self`]'s encoder without any disk operation.
+    pub fn encoder_from<OtherCoder>(
+        self,
+    ) -> Result<BackedEntry<T, Disk, OtherCoder>, OtherCoder::Error>
+    where
+        OtherCoder: TryFrom<Coder>,
+    {
+        Ok(BackedEntry {
+            value: self.value,
+            disk: self.disk,
+            coder: self.coder.try_into()?,
+        })
     }
 }
 
