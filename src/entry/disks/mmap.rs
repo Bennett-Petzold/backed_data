@@ -17,9 +17,6 @@ use memmap2::Advice;
 #[cfg(target_os = "linux")]
 use memmap2::RemapOptions;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::fs::MetadataExt;
-
 use crate::utils::BorrowExtender;
 
 use super::{ReadDisk, WriteDisk};
@@ -28,6 +25,7 @@ use super::{ReadDisk, WriteDisk};
 
 #[derive(Debug)]
 pub enum SwitchingMmap {
+    EmptyFile,
     ReadMmap(memmap2::Mmap),
     WriteMmap(MmapWriter),
 }
@@ -45,7 +43,13 @@ fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
 
 impl SwitchingMmap {
     fn init_read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let mmap = unsafe { MmapOptions::new().map(&open_mmap(path)?) }?;
+        let file = open_mmap(path)?;
+
+        if file.metadata()?.len() == 0 {
+            return Ok(Self::EmptyFile);
+        }
+
+        let mmap = unsafe { MmapOptions::new().map(&file) }?;
         #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateRead);
 
@@ -54,6 +58,7 @@ impl SwitchingMmap {
 
     fn conv_to_read(self) -> std::io::Result<Self> {
         match self {
+            Self::EmptyFile => Ok(Self::EmptyFile),
             Self::ReadMmap(x) => Ok(Self::ReadMmap(x)),
             Self::WriteMmap(mut x) => {
                 let mmap = x.get_map()?.make_read_only()?;
@@ -67,6 +72,7 @@ impl SwitchingMmap {
 
     fn conv_to_write<P: AsRef<Path>>(self, path: P) -> std::io::Result<Self> {
         match self {
+            Self::EmptyFile => Ok(Self::WriteMmap(MmapWriter::no_advise(path)?)),
             Self::ReadMmap(x) => Ok(Self::WriteMmap(MmapWriter::from_args(path, x.make_mut()?)?)),
             Self::WriteMmap(x) => Ok(Self::WriteMmap(x)),
         }
@@ -76,6 +82,7 @@ impl SwitchingMmap {
 impl AsRef<[u8]> for SwitchingMmap {
     fn as_ref(&self) -> &[u8] {
         match self {
+            Self::EmptyFile => &[],
             Self::ReadMmap(x) => x.as_ref(),
             Self::WriteMmap(x) => x.as_ref(),
         }
@@ -85,6 +92,10 @@ impl AsRef<[u8]> for SwitchingMmap {
 impl Write for SwitchingMmap {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
+            Self::EmptyFile => Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Cannot write to an empty mmap",
+            )),
             Self::ReadMmap(_) => Err(std::io::Error::new(
                 ErrorKind::Other,
                 "Cannot write to ReadMmap",
@@ -95,6 +106,10 @@ impl Write for SwitchingMmap {
 
     fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
         match self {
+            Self::EmptyFile => Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Cannot write to an empty mmap",
+            )),
             Self::ReadMmap(_) => Err(std::io::Error::new(
                 ErrorKind::Other,
                 "Cannot write to ReadMmap",
@@ -105,6 +120,7 @@ impl Write for SwitchingMmap {
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
+            Self::EmptyFile => Ok(()),
             Self::ReadMmap(_) => Ok(()),
             Self::WriteMmap(x) => x.flush(),
         }
@@ -406,6 +422,12 @@ impl MmapWriter {
 
     fn no_advise<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let file = open_mmap(&path)?;
+
+        // If the file is empty, we need to push in a garbage byte for mmap to
+        // succeed.
+        if file.metadata()?.len() == 0 {
+            file.set_len(1)?;
+        }
 
         let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
 
