@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     cmp::max,
     fs::File,
@@ -24,25 +23,35 @@ pub enum SwitchingMmap {
     WriteMmap(MmapWriter),
 }
 
+fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+    File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path.as_ref())
+}
+
 impl SwitchingMmap {
-    fn read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let mmap = unsafe {
-            MmapOptions::new().map(
-                #[allow(clippy::suspicious_open_options)]
-                &File::options()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .open(path.as_ref())?,
-            )
-        }?;
+    fn init_read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let mmap = unsafe { MmapOptions::new().map(&open_mmap(path)?) }?;
         let _ = mmap.advise(Advice::PopulateRead);
 
         Ok(Self::ReadMmap(mmap))
     }
 
-    fn write<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        Ok(Self::WriteMmap(MmapWriter::new(&path)?))
+    fn conv_to_read(self) -> std::io::Result<Self> {
+        match self {
+            Self::ReadMmap(x) => Ok(Self::ReadMmap(x)),
+            Self::WriteMmap(mut x) => Ok(Self::ReadMmap(x.get_map()?.make_read_only()?)),
+        }
+    }
+
+    fn conv_to_write<P: AsRef<Path>>(self, path: P) -> std::io::Result<Self> {
+        match self {
+            Self::ReadMmap(x) => Ok(Self::WriteMmap(MmapWriter::from_args(path, x.make_mut()?)?)),
+            Self::WriteMmap(x) => Ok(Self::WriteMmap(x)),
+        }
     }
 }
 
@@ -148,7 +157,7 @@ struct GuardedMmap {
 impl GuardedMmap {
     fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         Ok(Self {
-            inner: RwLock::new(SwitchingMmap::read(path)?),
+            inner: RwLock::new(SwitchingMmap::init_read(path)?),
             access_lock: Mutex::new(()),
         })
     }
@@ -185,12 +194,13 @@ impl GuardedMmap {
 
             match write_lock {
                 Ok(mut mmap) => {
-                    if let SwitchingMmap::WriteMmap(writer) = &mut *mmap {
-                        writer.flush()?
-                    } else {
-                        panic!("It should be impossible for another thread to hold and modify the RwLock.");
-                    };
-                    *mmap = SwitchingMmap::read(path.as_ref())?;
+                    let temp_mmap = std::mem::replace(
+                        &mut *mmap,
+                        SwitchingMmap::ReadMmap(unsafe {
+                            MmapOptions::new().map(&open_mmap(&path)?)?
+                        }),
+                    );
+                    *mmap = temp_mmap.conv_to_read()?;
 
                     drop(mmap);
                     Ok(ReadMmapGuard(gen_read_lock(&this)?))
@@ -225,7 +235,11 @@ impl GuardedMmap {
         let is_read = matches!(**write_lock, SwitchingMmap::ReadMmap(_));
 
         if is_read {
-            **write_lock = SwitchingMmap::write(path)?;
+            let temp_mmap = std::mem::replace(
+                &mut **write_lock,
+                SwitchingMmap::WriteMmap(MmapWriter::no_advise(&path)?),
+            );
+            **write_lock = temp_mmap.conv_to_write(path)?;
         }
 
         Ok(WriteMmapGuard(write_lock))
@@ -304,9 +318,6 @@ impl ReadDisk for Mmap {
     type ReadDisk = Cursor<ReadMmapGuard>;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        let mmap = unsafe { MmapOptions::new().map(&File::open(&self.path)?) }?;
-        let _ = mmap.advise(Advice::PopulateRead);
-
         let mmap = GuardedMmap::get_read(self.mmap.clone(), &self.path)?;
 
         Ok(Cursor::new(mmap))
@@ -323,17 +334,26 @@ pub struct MmapWriter {
 }
 
 impl MmapWriter {
-    fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = File::options()
-            .write(true)
-            .read(true)
-            .create(true)
-            .truncate(false) // Don't get rid of existing length
-            .open(path)?;
+    fn from_args<P: AsRef<Path>>(path: P, mmap: memmap2::MmapMut) -> std::io::Result<Self> {
+        let file = open_mmap(path)?;
 
-        let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
         let _ = mmap.advise(Advice::Sequential);
         let _ = mmap.advise(Advice::PopulateWrite);
+
+        let reserved_len = mmap.len();
+
+        Ok(MmapWriter {
+            file,
+            mmap,
+            written_len: 0,
+            reserved_len,
+        })
+    }
+
+    fn no_advise<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let file = open_mmap(&path)?;
+
+        let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
 
         let reserved_len = mmap.len();
 
@@ -390,6 +410,14 @@ impl MmapWriter {
 
         Ok(())
     }
+
+    fn get_map(&mut self) -> std::io::Result<memmap2::MmapMut> {
+        self.flush()?;
+
+        Ok(std::mem::replace(&mut self.mmap, unsafe {
+            MmapOptions::new().map_mut(&self.file)
+        }?))
+    }
 }
 
 impl Write for MmapWriter {
@@ -421,14 +449,20 @@ impl Write for MmapWriter {
 
 impl Drop for MmapWriter {
     fn drop(&mut self) {
-        self.truncate().unwrap_or_else(|x| {
-            panic!(
-                "{} {}\n Error: {:#?}",
-                "Failed to truncate on drop, call `self.flush` first to avoid",
-                "using this panicking drop implementation.",
-                x
-            )
-        })
+        if self.written_len > 0 {
+            // Skip if this drop is for an temporary
+            // instance that existed for memory
+            // consistency. Otherwise the truncation can
+            // trigger SIGBUS on later writes.
+            self.truncate().unwrap_or_else(|x| {
+                panic!(
+                    "{} {}\n Error: {:#?}",
+                    "Failed to truncate on drop, call `self.flush` first to avoid",
+                    "using this panicking drop implementation.",
+                    x
+                )
+            })
+        }
     }
 }
 

@@ -360,6 +360,28 @@ fn file_load_benches(c: &mut Criterion) {
         }
     }
 
+    #[cfg(feature = "mmap")]
+    {
+        {
+            let path = create_files(create_mmap);
+
+            let mut arr = DirectoryBackedArray::<
+                Vec<usize>,
+                Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>,
+            >::load(&path, &BincodeCoder::default())
+            .unwrap();
+            arr.iter().collect::<Result<Vec<_>, _>>().unwrap();
+
+            group.bench_function("primed_load_mmap", |b| {
+                arr.shrink_to_query(&[]);
+                assert_eq!(arr.loaded_len(), 0);
+                {
+                    b.iter(|| black_box(arr.iter().collect::<Result<Vec<_>, _>>().unwrap()))
+                }
+            });
+        }
+    }
+
     #[cfg(feature = "async_bincode")]
     {
         let rt = runtime::Builder::new_multi_thread()
