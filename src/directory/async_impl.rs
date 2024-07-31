@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::array::{
     async_impl::{BackedEntryContainerNestedAsync, BackedEntryContainerNestedAsyncWrite},
     container::{
-        open_ref, BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
+        BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
         ResizingContainer,
     },
     sync_impl::BackedArray,
@@ -26,7 +26,7 @@ where
 {
     pub async fn a_remove(&mut self, entry_idx: usize) -> Result<&mut Self, tokio::io::Error> {
         if let Some(chunk) = self.entries().c_get(entry_idx) {
-            remove_file(open_ref!(chunk).get_disk()).await?;
+            remove_file(chunk.as_ref().get_ref().get_disk()).await?;
         }
         self.array.remove(entry_idx);
         Ok(self)
@@ -83,7 +83,7 @@ where
                 .then(|chunk| {
                     let directory_root = &self.directory_root;
                     async move {
-                        let disk = open_ref!(chunk).get_disk().as_ref();
+                        let disk = chunk.as_ref().get_ref().get_disk().as_ref();
                         let new_loc = directory_root.join(disk.file_name().unwrap());
                         if disk != new_loc {
                             match rename(disk, &new_loc).await {
@@ -140,7 +140,7 @@ where
                 .then(|chunk| {
                     let new_root = &new_root;
                     async move {
-                        let disk = open_ref!(chunk).get_disk().as_ref();
+                        let disk = chunk.as_ref().get_ref().get_disk().as_ref();
                         copy(disk, new_root.join(disk.file_name().unwrap())).await?;
                         remove_file(disk).await
                     }

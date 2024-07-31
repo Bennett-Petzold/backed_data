@@ -74,14 +74,14 @@ impl<K: Default, E: Default> BackedArray<K, E> {
 impl<K: Container<Data = Range<usize>>, E> BackedArray<K, E> {
     /// Total size of stored data.
     pub fn len(&self) -> usize {
-        self.keys.as_ref().last().unwrap_or(&(0..0)).end
+        self.keys.c_ref().as_ref().last().unwrap_or(&(0..0)).end
     }
 }
 
 impl<K, E: Container> BackedArray<K, E> {
     /// Number of underlying chunks.
     pub fn chunks_len(&self) -> usize {
-        self.entries.as_ref().len()
+        self.entries.c_ref().as_ref().len()
     }
 
     /// Access to the underlying chunks, without loading data.
@@ -90,14 +90,14 @@ impl<K, E: Container> BackedArray<K, E> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.as_ref().is_empty()
+        self.entries.c_ref().as_ref().is_empty()
     }
 }
 
 impl<K, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
-        self.entries.as_mut().iter_mut().for_each(|entry| {
+        self.entries.c_mut().as_mut().iter_mut().for_each(|entry| {
             let entry = entry.get_mut();
             BackedEntryContainer::get_mut(entry).unload()
         });
@@ -119,9 +119,10 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArr
     /// the per-item size.
     pub fn loaded_len(&self) -> usize {
         self.entries
+            .c_ref()
             .as_ref()
             .iter()
-            .zip(self.keys.as_ref())
+            .zip(self.keys.c_ref().as_ref())
             .filter(|(ent, _)| ent.get_ref().is_loaded())
             .map(|(_, key)| key.len())
             .sum()
@@ -132,6 +133,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArr
     /// Removes all backing stores not needed to hold `idxs` in memory.
     pub fn shrink_to_query(&mut self, idxs: &[usize]) {
         self.keys
+            .c_ref()
             .as_ref()
             .iter()
             .enumerate()
@@ -153,7 +155,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
         &self,
         idx: usize,
     ) -> Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::ReadError>> {
-        let loc = internal_idx(self.keys.as_ref(), idx)
+        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
             .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
         let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
@@ -183,7 +185,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     where
         I: IntoIterator<Item = usize> + 'a,
     {
-        multiple_internal_idx(self.keys.as_ref(), idxs).flat_map(|loc| {
+        multiple_internal_idx(self.keys.c_ref(), idxs).flat_map(|loc| {
             let entry_container =
                 BorrowExtender::maybe_new(&self.entries, |entries| entries.c_get(loc.entry_idx))?;
             let entry = BorrowExtender::try_new(entry_container, |entry_container| {
@@ -202,7 +204,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     where
         I: IntoIterator<Item = usize> + Clone + 'a,
     {
-        multiple_internal_idx_strict(self.keys.as_ref(), idxs.clone())
+        multiple_internal_idx_strict(self.keys.c_ref(), idxs.clone())
             .zip(idxs)
             .map(|(loc, idx)| {
                 let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
@@ -271,6 +273,7 @@ impl<
         // End of a range is exclusive
         let start_idx = self
             .keys
+            .c_ref()
             .as_ref()
             .last()
             .map(|key_range| key_range.end)
@@ -296,17 +299,17 @@ impl<
     ///         },
     ///     };
     ///     use std::fs::{File, remove_file, OpenOptions};
-    ///    
+    ///
     ///     let FILENAME = std::env::temp_dir().join("example_array_append_memory");
     ///     let values = ([0, 1, 1],
     ///         [2, 3, 5]);
-    ///    
+    ///
     ///     let mut array: VecBackedArray<u32, Plainfile, _> = VecBackedArray::default();
     ///     array.append_memory(values.0, FILENAME.clone().into(), BincodeCoder {});
-    ///    
+    ///
     ///     // Overwrite file, making disk pointer for first array invalid
     ///     array.append_memory(values.1, FILENAME.clone().into(), BincodeCoder {});
-    ///    
+    ///
     ///     assert_eq!(array.get(0).unwrap().as_ref(), &0);
     ///     remove_file(FILENAME).unwrap();
     /// }
@@ -322,6 +325,7 @@ impl<
         // End of a range is exclusive
         let start_idx = self
             .keys
+            .c_ref()
             .as_ref()
             .last()
             .map(|key_range| key_range.end)
@@ -352,6 +356,7 @@ impl<
 
             // Shift all later ranges downwards
             self.keys
+                .c_mut()
                 .as_mut()
                 .iter_mut()
                 .skip(entry_idx)
@@ -368,9 +373,10 @@ impl<
 impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArray<K, E> {
     /// Move entries in `rhs` to [`self`].
     pub fn merge(&mut self, mut rhs: Self) -> &mut Self {
-        let offset = self.keys.as_ref().last().unwrap_or(&(0..0)).end;
+        let offset = self.keys.c_ref().as_ref().last().unwrap_or(&(0..0)).end;
         self.keys.extend(
             rhs.keys
+                .c_ref()
                 .as_ref()
                 .iter()
                 .map(|range| (range.start + offset)..(range.end + offset)),
@@ -486,11 +492,11 @@ impl<E: BackedEntryWrite + BackedEntryRead, V> Drop for CountedHandle<'_, E, V> 
 /// To keep an accurate size count, failed reads will not be retried.
 /// This will keep each disk loaded after pulling data from it.
 /// Stepping by > 1 with `nth` implementation may skip loading a disk.
-pub struct BackedArrayIterMut<'a, K: Container, E: BackedEntryContainerNestedAll> {
+pub struct BackedArrayIterMut<'a, K: Container + 'a, E: BackedEntryContainerNestedAll + 'a> {
     pos: usize,
     len: usize,
-    keys: Peekable<std::slice::Iter<'a, K::Data>>,
-    entries: std::slice::IterMut<'a, E::Data>,
+    keys: BorrowExtender<<K as Container>::RefSlice<'a>, Peekable<std::slice::Iter<'a, K::Data>>>,
+    entries: BorrowExtender<<E as Container>::MutSlice<'a>, std::slice::IterMut<'a, E::Data>>,
     // TODO: Rewrite this to be a box of Once or MaybeUninit type
     // Problem with once types is that either a generic needs to be introduced,
     // or this iterator needs to choose between cell/lock tradeoffs.
@@ -511,10 +517,16 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll>
     BackedArrayIterMut<'a, K, E>
 {
     fn new(backed: &'a mut BackedArray<K, E>) -> Self {
-        let len = backed.keys.as_ref().last().unwrap_or(&(0..0)).end;
+        let len = backed.keys.c_ref().as_ref().last().unwrap_or(&(0..0)).end;
         let mut handles = Vec::with_capacity(backed.chunks_len());
-        let keys = backed.keys.as_ref().iter().peekable();
-        let mut entries = backed.entries.as_mut().iter_mut();
+        let keys = BorrowExtender::new(backed.keys.c_ref(), |keys| {
+            let keys_ptr: *const _ = keys;
+            unsafe { &*keys_ptr }.as_ref().iter().peekable()
+        });
+        let mut entries = BorrowExtender::new_mut(backed.entries.c_mut(), |ent| {
+            let ent_ptr: *mut _ = ent;
+            unsafe { &mut *ent_ptr }.as_mut().iter_mut()
+        });
 
         if let Some(entry) = entries.by_ref().next() {
             handles.push(Arc::new(Mutex::new(entry.get_mut().mut_handle())));
@@ -556,7 +568,7 @@ impl<K: Container, E: BackedEntryContainerNestedAll> Drop for BackedArrayIterMut
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Iterator
+impl<'a, K: Container<Data = Range<usize>> + 'a, E: BackedEntryContainerNestedAll + 'a> Iterator
     for BackedArrayIterMut<'a, K, E>
 where
     E::Unwrapped: 'a,
@@ -630,8 +642,8 @@ where
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> FusedIterator
-    for BackedArrayIterMut<'a, K, E>
+impl<'a, K: Container<Data = Range<usize>> + 'a, E: BackedEntryContainerNestedAll + 'a>
+    FusedIterator for BackedArrayIterMut<'a, K, E>
 where
     E::Unwrapped: 'a,
     E::ReadError: 'a,
@@ -649,8 +661,16 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     ///
     /// This will load each chunk before providing it.
     /// All chunks loaded earlier in the iteration will remain loaded.
-    pub fn chunk_iter(&mut self) -> impl Iterator<Item = Result<&E::Unwrapped, E::ReadError>> {
-        self.entries.as_ref().iter().map(|arr| arr.get_ref().load())
+    pub fn chunk_iter(
+        &self,
+    ) -> impl Iterator<Item = Result<impl AsRef<&E::Unwrapped>, E::ReadError>> {
+        self.entries.ref_iter().map(|arr| {
+            BorrowExtender::new(arr, |arr| {
+                let arr_ptr: *const _ = arr;
+                unsafe { &*arr_ptr }.as_ref().get_ref().load()
+            })
+            .open_result()
+        })
     }
 }
 
@@ -673,14 +693,17 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Backed
         &mut self,
     ) -> impl Iterator<
         Item = Result<
-            BackedEntryMut<'_, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>,
+            impl AsMut<BackedEntryMut<'_, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>>,
             E::ReadError,
         >,
     > {
-        self.entries
-            .as_mut()
-            .iter_mut()
-            .map(|arr| arr.get_mut().mut_handle())
+        self.entries.mut_iter().map(|arr| {
+            BorrowExtender::new_mut(arr, |arr| {
+                let arr_ptr: *mut _ = arr;
+                unsafe { &mut *arr_ptr }.as_mut().get_mut().mut_handle()
+            })
+            .open_result()
+        })
     }
 }
 
@@ -805,8 +828,8 @@ mod tests {
             .unwrap();
 
         let collected = backed.chunk_iter().collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(collected[0].as_ref(), INPUT_0);
-        assert_eq!(collected[1].as_ref(), INPUT_1);
+        assert_eq!(collected[0].as_ref().as_ref(), INPUT_0);
+        assert_eq!(collected[1].as_ref().as_ref(), INPUT_1);
         assert_eq!(collected.len(), 2);
     }
 
@@ -870,12 +893,12 @@ mod tests {
         let handle = backed.chunk_mut_iter();
 
         let mut handle_vec = handle.collect::<Result<Vec<_>, _>>().unwrap();
-        handle_vec[0][0] = 20;
-        handle_vec[0][2] = 30;
-        handle_vec[1][0] = 40;
+        handle_vec[0].as_mut()[0] = 20;
+        handle_vec[0].as_mut()[2] = 30;
+        handle_vec[1].as_mut()[0] = 40;
 
-        handle_vec[0].flush().unwrap();
-        handle_vec[1].flush().unwrap();
+        handle_vec[0].as_mut().flush().unwrap();
+        handle_vec[1].as_mut().flush().unwrap();
         #[cfg(not(miri))]
         {
             assert_eq!(backing_store_0[backing_store_0.len() - FIB.len()], 20);

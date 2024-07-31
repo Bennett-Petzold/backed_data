@@ -6,11 +6,14 @@ use crate::{
         formats::{Decoder, Encoder},
         BackedEntry,
     },
-    utils::{Once, ToMut, ToRef},
+    utils::Once,
 };
 
 pub trait RefIter<T> {
-    fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>>;
+    type IterRef<'b>: AsRef<T>
+    where
+        Self: 'b;
+    fn ref_iter(&self) -> impl Iterator<Item = Self::IterRef<'_>>;
 }
 
 pub trait MutIter<T> {
@@ -23,9 +26,7 @@ pub trait MutIter<T> {
 ///
 /// `&[T]` is insufficiently generic for types that return a ref handle to `T`,
 /// instead of `&T` directly, so this allows for more complex container types.
-pub trait Container:
-    AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::Data> + MutIter<Self::Data>
-{
+pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
     /// The data container entries give references to.
     type Data;
     type Ref<'b>: AsRef<Self::Data>
@@ -34,10 +35,18 @@ pub trait Container:
     type Mut<'b>: AsMut<Self::Data>
     where
         Self: 'b;
+    type RefSlice<'b>: AsRef<[Self::Data]>
+    where
+        Self: 'b;
+    type MutSlice<'b>: AsMut<[Self::Data]>
+    where
+        Self: 'b;
 
     fn c_get(&self, index: usize) -> Option<Self::Ref<'_>>;
     fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>>;
     fn c_len(&self) -> usize;
+    fn c_ref(&self) -> Self::RefSlice<'_>;
+    fn c_mut(&mut self) -> Self::MutSlice<'_>;
 }
 
 /// A [`Container`] that supports resizing operations.
@@ -194,108 +203,15 @@ pub(crate) use open_mut;
 /// Immutable open for a reference to a [`BackedEntryContainer`].
 macro_rules! open_ref {
     ($x:expr) => {
-        $x.as_ref().get_ref()
+        $x.as_ref().as_ref()
     };
 }
 pub(crate) use open_ref;
 
-// ---------- Standard Type Impls ---------- //
+mod standard_types;
+#[allow(unused_imports)]
+pub use standard_types::*;
 
-impl<T> RefIter<T> for Box<[T]> {
-    fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>> {
-        self.iter().map(|v| ToRef(v))
-    }
-}
-
-impl<T> MutIter<T> for Box<[T]> {
-    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>> {
-        self.iter_mut().map(|v| ToMut(v))
-    }
-}
-
-impl<T> Container for Box<[T]> {
-    type Data = T;
-    type Ref<'b> = ToRef<'b, Self::Data> where Self: 'b;
-    type Mut<'b> = ToMut<'b, Self::Data> where Self: 'b;
-
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
-        self.get(index).map(|v| ToRef(v))
-    }
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
-        self.get_mut(index).map(|v| ToMut(v))
-    }
-    fn c_len(&self) -> usize {
-        self.len()
-    }
-}
-
-impl<T> RefIter<T> for Vec<T> {
-    fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>> {
-        self.iter().map(|v| ToRef(v))
-    }
-}
-
-impl<T> MutIter<T> for Vec<T> {
-    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>> {
-        self.iter_mut().map(|v| ToMut(v))
-    }
-}
-
-impl<T> Container for Vec<T> {
-    type Data = T;
-    type Ref<'b> = ToRef<'b, Self::Data> where Self: 'b;
-    type Mut<'b> = ToMut<'b, Self::Data> where Self: 'b;
-
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
-        self.get(index).map(|v| ToRef(v))
-    }
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
-        self.get_mut(index).map(|v| ToMut(v))
-    }
-    fn c_len(&self) -> usize {
-        self.len()
-    }
-}
-
-impl<T> ResizingContainer for Vec<T> {
-    fn c_push(&mut self, value: Self::Data) {
-        self.push(value)
-    }
-    fn c_remove(&mut self, index: usize) {
-        self.remove(index);
-    }
-    fn c_append(&mut self, other: &mut Self) {
-        self.append(other)
-    }
-}
-
-// ---------- Library Type Impls ---------- //
-
-/*
-#[cfg(feature = "encrypted")]
-#[derive(Debug)]
-pub struct SecretVec<T: Bytes> {
-    inner: secrets::SecretVec<T>,
-}
-
-#[cfg(feature = "encrypted")]
-impl<T: Bytes> Default for SecretVec<T> {
-    fn default() -> Self {
-        Self {
-            inner: secrets::SecretVec::<T>::zero(0),
-        }
-    }
-}
-
-impl<T: Bytes> Container for SecretVec<T> {
-    fn c_push(&mut self, value: Self::Data) {
-        todo!()
-    }
-    fn c_remove(&mut self, index: usize) -> Self::Data {
-        todo!()
-    }
-    fn c_append(&mut self, other: &mut Self) {
-        todo!()
-    }
-}
-*/
+mod encrypted;
+#[allow(unused_imports)]
+pub use encrypted::*;
