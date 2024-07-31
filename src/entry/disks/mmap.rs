@@ -8,8 +8,11 @@ use std::{
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
 
-use memmap2::{Advice, MmapOptions};
+use memmap2::MmapOptions;
 use serde::{Deserialize, Serialize};
+
+#[cfg(target_family = "unix")]
+use memmap2::Advice;
 
 #[cfg(target_os = "linux")]
 use memmap2::RemapOptions;
@@ -512,6 +515,7 @@ impl MmapWriter {
             // Don't advise write, as that may produce an arbitrarily long
             // load (especially if a huge sparse file is allocated).
             self.remap()?;
+            #[cfg(target_family = "unix")]
             let _ = self.mmap.advise(Advice::Sequential);
         }
         Ok(())

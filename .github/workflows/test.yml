@@ -35,10 +35,6 @@ jobs:
       with:
         packages: libsodium-dev
 
-    - name: Install libsodium (MacOS)
-      if: ${{ matrix.os == 'macos' }}
-      run: brew install libsodium
-
     - name: Install libsodium (Windows)
       if: ${{ matrix.os == 'windows' }}
       run: |
