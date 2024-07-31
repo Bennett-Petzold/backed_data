@@ -7,21 +7,21 @@ use std::{
 };
 
 use itertools::Either;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::utils::{Once, ToMut};
 
 use super::{
     disks::{ReadDisk, WriteDisk},
     formats::{Decoder, Encoder},
-    BackedEntry, BackedEntryUnload,
+    BackedEntry,
 };
 
 impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>>
     BackedEntry<T, Disk, Coder>
 {
     /// Updates underlying storage with the current entry
-    fn update(&mut self) -> Result<(), Coder::Error> {
+    pub fn update(&mut self) -> Result<(), Coder::Error> {
         if let Some(val) = self.value.get() {
             let mut disk = self.disk.write_disk()?;
             self.coder.encode(val, &mut disk)?;
@@ -46,7 +46,7 @@ impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>
     }
 }
 
-impl<T: Once<Inner: DeserializeOwned>, Disk: ReadDisk, Coder: Decoder<Disk::ReadDisk>>
+impl<T: Once<Inner: for<'de> Deserialize<'de>>, Disk: ReadDisk, Coder: Decoder<Disk::ReadDisk>>
     BackedEntry<T, Disk, Coder>
 {
     /// Returns the entry, loading from disk if not in memory.
@@ -57,24 +57,22 @@ impl<T: Once<Inner: DeserializeOwned>, Disk: ReadDisk, Coder: Decoder<Disk::Read
             Some(x) => x,
             None => {
                 let mut disk = self.disk.read_disk()?;
-                let _ = self.value.set(self.coder.decode(&mut disk)?);
-                self.value.get().unwrap()
+                let val = self.coder.decode(&mut disk)?;
+                self.value.get_or_init(|| val)
             }
         };
         Ok(value)
     }
 }
 
-impl<T: Once, Disk: for<'de> Deserialize<'de>, Coder> BackedEntry<T, Disk, Coder> {
+impl<T: Once, Disk, Coder> BackedEntry<T, Disk, Coder> {
     pub fn is_loaded(&self) -> bool {
         self.value.get().is_some()
     }
 }
 
-impl<T: Once, Disk: for<'de> Deserialize<'de>, Coder> BackedEntryUnload
-    for BackedEntry<T, Disk, Coder>
-{
-    fn unload(&mut self) {
+impl<T: Once, Disk, Coder> BackedEntry<T, Disk, Coder> {
+    pub fn unload(&mut self) {
         self.value = T::new();
     }
 }
@@ -238,13 +236,13 @@ impl<
         OtherDisk: WriteDisk,
         OtherCoder: Encoder<OtherDisk::WriteDisk>,
     {
-        self.load().map_err(|e| Either::Left(e))?;
+        self.load().map_err(Either::Left)?;
         let mut other = BackedEntry::<T, OtherDisk, OtherCoder> {
             value: self.value,
             disk,
             coder,
         };
-        other.update().map_err(|e| Either::Right(e))?;
+        other.update().map_err(Either::Right)?;
         Ok(other)
     }
 
@@ -265,13 +263,13 @@ impl<
         OtherDisk: WriteDisk,
         Coder: Encoder<OtherDisk::WriteDisk>,
     {
-        self.load().map_err(|e| Either::Left(e))?;
+        self.load().map_err(Either::Left)?;
         let mut other = BackedEntry::<T, OtherDisk, Coder> {
             value: self.value,
             disk,
             coder: self.coder,
         };
-        other.update().map_err(|e| Either::Right(e))?;
+        other.update().map_err(Either::Right)?;
         Ok(other)
     }
 
@@ -292,13 +290,13 @@ impl<
         Disk: WriteDisk,
         OtherCoder: Encoder<Disk::WriteDisk>,
     {
-        self.load().map_err(|e| Either::Left(e))?;
+        self.load().map_err(Either::Left)?;
         let mut other = BackedEntry::<T, Disk, OtherCoder> {
             value: self.value,
             disk: self.disk,
             coder,
         };
-        other.update().map_err(|e| Either::Right(e))?;
+        other.update().map_err(Either::Right)?;
         Ok(other)
     }
 
