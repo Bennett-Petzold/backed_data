@@ -27,7 +27,7 @@ jobs:
     - uses: taiki-e/install-action@cargo-llvm-cov
 
     - name: Regular Tests
-      run: cargo llvm-cov test --no-report --all-targets --all-features
+      run: cargo llvm-cov test --no-report --tests --all-features
 
     - name: Doc Tests
       run: cargo llvm-cov test --no-report --doc --all-features
