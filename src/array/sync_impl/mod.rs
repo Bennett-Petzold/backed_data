@@ -4,6 +4,8 @@ use std::{
 };
 
 use crate::entry::{
+    disks::WriteDisk,
+    formats::Encoder,
     sync_impl::{BackedEntryMut, BackedEntryRead, BackedEntryWrite},
     BackedEntry,
 };
@@ -234,19 +236,72 @@ impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArra
     }
 }
 
-impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArray<K, E> {
-    /// Construct a backed array from entry range, backing storage pairs.
-    ///
-    /// If ranges do not correspond to the entry arrays, the resulting
-    /// [`BackedArray`] will be invalid.
-    pub fn from_pairs<I, U>(pairs: I) -> Self
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedWrite> BackedArray<K, E>
+where
+    K: From<Vec<K::Data>>,
+    E: From<Vec<BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>>,
+    E::Disk: Clone,
+    E::Coder: Clone,
+{
+    /// Builds [`self`] from an iterator of containers, keeping them all loaded
+    /// in memory.
+    pub fn from_containers<C, I>(
+        iter: I,
+        disk: &E::Disk,
+        coder: &E::Coder,
+    ) -> Result<Self, <E::Coder as Encoder<<E::Disk as WriteDisk>::WriteDisk>>::Error>
     where
-        I: IntoIterator<Item = (Range<usize>, U)>,
-        U: Into<E::Data>,
+        C: Into<E::Unwrapped>,
+        I: IntoIterator<Item = C>,
     {
-        let (keys, entries): (_, Vec<_>) = pairs.into_iter().unzip();
-        let entries = entries.into_iter().map(U::into).collect();
-        Self { keys, entries }
+        let iter = iter.into_iter();
+
+        let mut start = 0;
+        let (keys, entries): (Vec<_>, Vec<BackedEntry<E::OnceWrapper, _, _>>) = iter
+            .map(|x| x.into())
+            .map(|x| {
+                let len = x.c_len();
+                let mut entry = BackedEntry::new(disk.clone(), coder.clone());
+                entry.write(x)?;
+                let ret = (start..len, entry);
+                start += len;
+                Ok(ret)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .unzip();
+
+        Ok(Self {
+            keys: keys.into(),
+            entries: entries.into(),
+        })
+    }
+}
+
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedWrite> BackedArray<K, E>
+where
+    K: From<Vec<K::Data>>,
+    E: From<Vec<E::Data>>,
+    E::Disk: Clone,
+    E::Coder: Clone,
+{
+    /// Builds [`self`] from existing backings.
+    ///
+    /// # Parameters
+    /// * `iter`: Iterator of (len, backing) pairs.
+    ///
+    /// # Safety
+    /// Each len argument MUST be correct, otherwise this container is
+    /// incorrectly defined and may crash from an incorrect range address.
+    pub unsafe fn from_backing<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (Range<usize>, E::Data)>,
+    {
+        let (keys, entries): (Vec<_>, Vec<_>) = iter.into_iter().unzip();
+        Self {
+            keys: keys.into(),
+            entries: entries.into(),
+        }
     }
 }
 
