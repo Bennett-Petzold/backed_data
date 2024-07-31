@@ -470,7 +470,9 @@ mod tests {
             assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
         }
 
-        let mut backed_entry = backed_entry.change_encoder(SerdeJsonCoder {}).unwrap();
+        let mut backed_entry = backed_entry
+            .change_backing(unsafe { &mut *back_vec.get() }, SerdeJsonCoder {})
+            .unwrap();
 
         // Check for valid json encoding
         {

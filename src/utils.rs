@@ -5,7 +5,7 @@
 use std::{
     cell::{OnceCell, UnsafeCell},
     marker::PhantomData,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     sync::{Mutex, MutexGuard, OnceLock},
 };
 
@@ -22,7 +22,7 @@ impl<T> InternalUse for T {
 }
 
 /// Wrapper that allows &T to implement [`AsRef<T>`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ToRef<'a, T>(pub &'a T);
 
 impl<T> AsRef<T> for ToRef<'_, T> {
@@ -31,8 +31,33 @@ impl<T> AsRef<T> for ToRef<'_, T> {
     }
 }
 
+impl<T> Deref for ToRef<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl<'a, T> PartialEq<&'a T> for ToRef<'a, T>
+where
+    &'a T: PartialEq<&'a T>,
+{
+    fn eq(&self, other: &&'a T) -> bool {
+        self.0 == other
+    }
+}
+
+impl<'a, T> PartialOrd<&'a T> for ToRef<'a, T>
+where
+    &'a T: PartialOrd<&'a T>,
+{
+    fn partial_cmp(&self, other: &&'a T) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(other)
+    }
+}
+
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ToMut<'a, T>(pub &'a mut T);
 
 impl<T> AsRef<T> for ToMut<'_, T> {
@@ -44,6 +69,37 @@ impl<T> AsRef<T> for ToMut<'_, T> {
 impl<T> AsMut<T> for ToMut<'_, T> {
     fn as_mut(&mut self) -> &mut T {
         self.0
+    }
+}
+
+impl<T> Deref for ToMut<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl<T> DerefMut for ToMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+impl<'a, T> PartialEq<&'a T> for ToMut<'a, T>
+where
+    &'a mut T: PartialEq<&'a T>,
+{
+    fn eq(&self, other: &&'a T) -> bool {
+        self.0 == other
+    }
+}
+
+impl<'a, T> PartialOrd<&'a T> for ToMut<'a, T>
+where
+    &'a mut T: PartialOrd<&'a T>,
+{
+    fn partial_cmp(&self, other: &&'a T) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(other)
     }
 }
 
