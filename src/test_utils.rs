@@ -3,6 +3,7 @@ use std::{
     pin::Pin,
 };
 
+#[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 
 use crate::entry::DiskOverwritable;
@@ -40,6 +41,7 @@ impl Seek for CursorVec {
 
 impl Unpin for CursorVec {}
 
+#[cfg(feature = "async")]
 impl AsyncWrite for CursorVec {
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
@@ -73,6 +75,7 @@ impl AsyncWrite for CursorVec {
     }
 }
 
+#[cfg(feature = "async")]
 impl AsyncRead for CursorVec {
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
@@ -83,6 +86,7 @@ impl AsyncRead for CursorVec {
     }
 }
 
+#[cfg(feature = "async")]
 impl AsyncSeek for CursorVec {
     fn poll_complete(
         self: std::pin::Pin<&mut Self>,
