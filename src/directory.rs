@@ -51,6 +51,7 @@ pub mod sync_impl {
                     .read(true)
                     .write(true)
                     .create(true)
+                    .truncate(true)
                     .open(path.clone())?,
                 path,
             })
@@ -331,6 +332,7 @@ pub mod async_impl {
                     .read(true)
                     .write(true)
                     .create(true)
+                    .truncate(true)
                     .open(path.clone())
                     .await?,
                 path,

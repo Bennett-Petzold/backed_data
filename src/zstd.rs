@@ -71,6 +71,7 @@ pub mod sync_impl {
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(path.clone())?;
 
             #[allow(unused_mut)]
@@ -437,6 +438,7 @@ pub mod async_impl {
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(path.clone())
                 .await?;
             Ok(Self {
