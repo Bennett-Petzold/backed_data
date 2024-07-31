@@ -7,7 +7,6 @@ use backed_data::{
     entry::{formats::BincodeCoder, BackedEntryArr},
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use pprof::criterion::{Output, PProfProfiler};
 
 #[cfg(feature = "zstd")]
 use backed_data::directory::ZstdDirBackedArray;
@@ -458,18 +457,23 @@ fn file_load_benches(c: &mut Criterion) {
     }
 }
 
+fn crit() -> Criterion {
+    let mut crit = Criterion::default()
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(10));
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use pprof::criterion::{Output, PProfProfiler};
+        crit = crit.with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    }
+
+    crit
+}
+
 criterion_group! {
     name = io_benches;
-    config =
-        Criterion::default()
-            .sample_size(10)
-            .measurement_time(Duration::from_secs(10))
-            .with_profiler(
-                PProfProfiler::new(
-                    100,
-                    Output::Flamegraph(None)
-                )
-            );
+    config = crit();
     targets = file_creation_benches,
     file_load_benches,
 }

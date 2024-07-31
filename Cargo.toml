@@ -114,7 +114,6 @@ tokio = { version = "1.37.0", features = ["rt", "rt-multi-thread", "io-util", "f
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 fs_extra = "1.3.0"
 
 # General utilities
@@ -129,6 +128,10 @@ tokio-stream = "0.1.15"
 get-size = { version = "0.1.4", features = ["derive"] }
 indicatif = "0.17.8"
 reqwest = "0.12.5"
+
+# Benchmarking utility, only on non-Windows.
+[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [[bench]]
 name = "io_bench"
