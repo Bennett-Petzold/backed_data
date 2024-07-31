@@ -1,8 +1,10 @@
+use std::{fmt::Debug, iter::FusedIterator, ops::Range};
+
+#[cfg(feature = "unsafe_array")]
 use std::{
-    fmt::Debug,
-    iter::{FusedIterator, Peekable},
+    iter::Peekable,
     mem::transmute,
-    ops::{DerefMut, Range},
+    ops::DerefMut,
     sync::{Arc, Mutex},
 };
 
@@ -375,7 +377,7 @@ mod tests {
 
     #[test]
     fn out_of_bounds_access() {
-        let mut back_vector = &mut Cursor::new(Vec::with_capacity(3));
+        let mut back_vector = &mut Cursor::new(Vec::new());
         let back_vector = CursorVec {
             inner: Mutex::new(&mut back_vector),
         };
@@ -388,6 +390,7 @@ mod tests {
             .unwrap();
 
         assert!(backed.get(0).is_ok());
+        assert!(backed.get(3).is_err());
         assert!(backed.get(10).is_err());
     }
 
