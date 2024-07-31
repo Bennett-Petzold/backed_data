@@ -206,6 +206,7 @@ mod standard_types;
 #[allow(unused_imports)]
 pub use standard_types::*;
 
+#[cfg(feature = "encrypted")]
 mod encrypted;
-#[allow(unused_imports)]
+#[cfg(feature = "encrypted")]
 pub use encrypted::*;
