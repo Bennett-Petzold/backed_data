@@ -111,25 +111,25 @@ impl<T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for DirectoryBackedA
     type Storage = SerialFile;
     type BackingError = std::io::Error;
 
-    fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+    fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, std::io::Error> {
         remove_file(self.get_disks()[entry_idx].path.clone())?;
         self.array.remove(entry_idx);
         Ok(self)
     }
 
-    fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+    fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self> {
         let next_target = self.next_target().map_err(bincode::Error::custom)?;
         self.array.append(values, next_target)?;
         Ok(self)
     }
 
-    fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+    fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self> {
         let next_target = self.next_target().map_err(bincode::Error::custom)?;
         self.array.append_memory(values, next_target)?;
         Ok(self)
     }
 
-    fn append_array(&mut self, mut rhs: Self) -> Result<&Self, Self::BackingError> {
+    fn append_array(&mut self, mut rhs: Self) -> Result<&mut Self, Self::BackingError> {
         rhs.move_root(self.directory_root.clone())?;
         self.array.append_array(rhs.array);
         Ok(self)

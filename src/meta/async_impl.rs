@@ -46,12 +46,12 @@ pub trait BackedArrayWrapper<T>:
     type BackingError;
 
     /// Wraps [`BackedArray::remove`] to delete the file
-    async fn remove(&mut self, entry_idx: usize) -> Result<&Self, Self::BackingError>;
+    async fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, Self::BackingError>;
     /// Wraps [`BackedArray::append`] to create backing storage
-    async fn append(&mut self, values: &[T]) -> bincode::Result<&Self>;
+    async fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self>;
     /// Wraps [`BackedArray::append_memory`] to create backing storage
-    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self>;
+    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self>;
 
     /// Moves all entries of `rhs` into `self`
-    async fn append_array(&mut self, rhs: Self) -> Result<&Self, Self::BackingError>;
+    async fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError>;
 }

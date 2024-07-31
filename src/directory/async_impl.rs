@@ -158,25 +158,25 @@ impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
     type Storage = SerialFile;
     type BackingError = std::io::Error;
 
-    async fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+    async fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, std::io::Error> {
         remove_file(self.get_disks()[entry_idx].path.clone()).await?;
         self.array.remove(entry_idx);
         Ok(self)
     }
 
-    async fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+    async fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self> {
         let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
         self.array.append(values, next_target).await?;
         Ok(self)
     }
 
-    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self> {
         let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
         self.array.append_memory(values, next_target).await?;
         Ok(self)
     }
 
-    async fn append_array(&mut self, mut rhs: Self) -> Result<&Self, Self::BackingError> {
+    async fn append_array(&mut self, mut rhs: Self) -> Result<&mut Self, Self::BackingError> {
         rhs.move_root(self.directory_root.clone()).await?;
         self.array.append_array(rhs.array);
         Ok(self)

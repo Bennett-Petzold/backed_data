@@ -27,10 +27,10 @@ pub trait BackedArrayWrapper<T>:
 
     type BackingError;
     // Functionality wrappers
-    fn remove(&mut self, entry_idx: usize) -> Result<&Self, Self::BackingError>;
-    fn append(&mut self, values: &[T]) -> bincode::Result<&Self>;
-    fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self>;
+    fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, Self::BackingError>;
+    fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self>;
+    fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self>;
 
     /// Moves all entries of `rhs` into `self`
-    fn append_array(&mut self, rhs: Self) -> Result<&Self, Self::BackingError>;
+    fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError>;
 }
