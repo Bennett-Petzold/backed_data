@@ -1,10 +1,10 @@
 use crate::entry::{
-    async_impl::{AsyncReadDisk, AsyncWriteDisk, BackedEntryArrAsync},
-    BackedEntryUnload,
+    async_impl::{AsyncReadDisk, AsyncWriteDisk, BackedEntryArrAsync, BackedEntryMutAsync},
+    BackedEntryUnload, DiskOverwritable,
 };
 use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
 use derive_getters::Getters;
-use futures::{stream, SinkExt, StreamExt};
+use futures::{stream, SinkExt, Stream, StreamExt};
 use itertools::Itertools;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{ops::Range, pin::pin};
@@ -79,9 +79,8 @@ where
         let mut num_items = 0;
 
         let translated_idxes = multiple_internal_idx(&self.keys, idxs)
-            .map(|x| {
+            .inspect(|_| {
                 num_items += 1;
-                x
             })
             .enumerate()
             .sorted_by(|(_, a_loc), (_, b_loc)| Ord::cmp(&a_loc.entry_idx, &b_loc.entry_idx))
@@ -257,6 +256,79 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
         self.keys.append(&mut rhs.keys);
         self.entries.append(&mut rhs.entries);
         self
+    }
+}
+
+// Iterator returns
+impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedArray<T, Disk> {
+    /// Outputs items in order.
+    ///
+    /// Excluding chunks before the initial offset, all chunks will load in
+    /// and remain loaded during iteration.
+    ///
+    /// # Arguments
+    /// * `offset`: Starting position
+    pub fn item_stream(&mut self, offset: usize) -> impl Stream<Item = bincode::Result<&T>> {
+        // Defaults to force a None return from iterator
+        let mut outer_pos = usize::MAX;
+        let mut inner_pos = usize::MAX;
+
+        if let Some(loc) = internal_idx(&self.keys, offset) {
+            outer_pos = loc.entry_idx;
+            inner_pos = loc.inside_entry_idx;
+        };
+
+        self.chunk_stream(outer_pos)
+            .flat_map(|chunk| {
+                let chunk: Box<dyn Stream<Item = bincode::Result<&T>> + Unpin> = match chunk {
+                    Ok(chunk_ok) => Box::new(stream::iter(chunk_ok.iter().map(Ok))),
+                    Err(chunk_err) => Box::new(stream::iter([Err(chunk_err)])),
+                };
+                chunk
+            })
+            .skip(inner_pos)
+    }
+
+    /// Returns underlying chunks in order.
+    ///
+    /// All chunks loaded earlier in the iteration will remain loaded.
+    ///
+    /// # Arguments
+    /// * `offset`: Starting chunk (skips loading offset - 1 chunks)
+    pub fn chunk_stream(&mut self, offset: usize) -> impl Stream<Item = bincode::Result<&[T]>> {
+        stream::iter(self.entries.iter_mut().skip(offset))
+            .then(|entry| async { entry.load().await })
+    }
+}
+
+impl<T: Serialize + DeserializeOwned, Disk: AsyncReadDisk + AsyncWriteDisk + DiskOverwritable>
+    BackedArray<T, Disk>
+{
+    /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
+    ///
+    /// See [`Self::chunk_stream`] for the immutable iterator.
+    pub fn chunk_mod_stream(
+        &mut self,
+        offset: usize,
+    ) -> impl Stream<Item = bincode::Result<BackedEntryMutAsync<Box<[T]>, Disk>>> {
+        stream::iter(self.entries.iter_mut().skip(offset))
+            .then(|entry| async { entry.mut_handle().await })
+    }
+}
+
+impl<T: DeserializeOwned + Clone, Disk: AsyncReadDisk> BackedArray<T, Disk> {
+    /// Returns clones of chunk data.
+    ///
+    /// See [`Self::chunk_stream`] for a version that produces references.
+    pub fn dup_stream(
+        &mut self,
+        offset: usize,
+    ) -> impl Stream<Item = bincode::Result<Vec<T>>> + '_ {
+        stream::iter(self.entries.iter_mut().skip(offset)).then(|entry| async {
+            let val = entry.load().await?.to_owned();
+            entry.unload();
+            Ok(val)
+        })
     }
 }
 

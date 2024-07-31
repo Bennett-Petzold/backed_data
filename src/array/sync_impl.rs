@@ -3,7 +3,6 @@ use std::{
     ops::Range,
 };
 
-use anyhow::anyhow;
 use bincode::{deserialize_from, serialize_into};
 use derive_getters::Getters;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
@@ -382,192 +381,16 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
-/// Iterator over all underlying chunks.
-///
-/// Keeps all loaded chunks in memory while alive.
-///
-/// # Arguments
-/// * `pos`: Current position in chunks
-/// * `backed_array`: The underlying array
-pub struct BackedEntryChunkIter<'a, T, Disk: ReadDisk> {
-    pos: usize,
-    backed_array: &'a mut BackedArray<T, Disk>,
-}
-
-impl<'a, T: DeserializeOwned, Disk: ReadDisk> Iterator for BackedEntryChunkIter<'a, T, Disk> {
-    type Item = bincode::Result<&'a [T]>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // No GAT support, so we make do with pointers
-        // The lifetimes work out, but the compiler doesn't know that
-        let val_ptr: bincode::Result<*const [T]> = self
-            .backed_array
-            .entries
-            .get_mut(self.pos)
-            .map(move |x| x.load().map(|y| y as *const [T]))?;
-        self.pos += 1;
-        Some(val_ptr.map(|x| unsafe { &*x }))
-    }
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.pos += n;
-        self.next()
-    }
-}
-
-/// Iterator over that gives modifiable handles to all underlying chunks.
-///
-/// Keeps all loaded chunks in memory while alive.
-///
-/// # Arguments
-/// * `pos`: Current position in chunks
-/// * `backed_array`: The underlying array
-pub struct BackedEntryChunkModIter<'a, T, Disk: ReadDisk> {
-    pos: usize,
-    backed_array: &'a mut BackedArray<T, Disk>,
-}
-
-impl<'a, T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> Iterator
-    for BackedEntryChunkModIter<'a, T, Disk>
-{
-    type Item = bincode::Result<BackedEntryMut<'a, Box<[T]>, Disk>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // No GAT support, so we make do with pointers
-        // The lifetimes work out, but the compiler doesn't know that
-        let entry_ptr = self
-            .backed_array
-            .entries
-            .get_mut(self.pos)
-            .map(move |x| x as *mut BackedEntry<Box<[T]>, Disk>)?;
-        let val = unsafe { (*entry_ptr).mut_handle() };
-        self.pos += 1;
-        Some(val)
-    }
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.pos += n;
-        self.next()
-    }
-}
-
-/// Iterator that clones all chunks.
-///
-/// Each chunk is loaded for cloning, then immediately unloaded.
-///
-/// # Arguments
-/// * `pos`: Current position in chunks
-/// * `backed_array`: The underlying array
-pub struct BackedEntryDupIter<'a, T, Disk: for<'de> Deserialize<'de>> {
-    pos: usize,
-    backed_array: &'a mut BackedArray<T, Disk>,
-}
-
-impl<'a, T: DeserializeOwned + Clone, Disk: ReadDisk> Iterator for BackedEntryDupIter<'a, T, Disk> {
-    type Item = bincode::Result<Box<[T]>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let chunk = self
-            .backed_array
-            .get_chunk(self.pos)
-            .map(|res| res.map(|val| val.into()));
-
-        if let Some(ref res) = chunk {
-            if res.is_ok() {
-                self.pos += 1;
-            }
-        }
-
-        chunk
-    }
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.pos += n;
-        self.next()
-    }
-}
-
-/// Iterator over all stored items.
-///
-/// Keeps all loaded values in memory while alive.
-///
-/// # Arguments
-/// * `inner_pos`: Current position inside chunk
-/// * `backed_array`: The underlying array
-/// * `chunk_iter`: [`BackedEntryChunkIter`] used to load backing values
-pub struct BackedEntryItemIter<'a, T, Disk: ReadDisk> {
-    inner_pos: usize,
-    backed_array: Option<bincode::Result<&'a [T]>>,
-    chunk_iter: BackedEntryChunkIter<'a, T, Disk>,
-}
-
-impl<'a, T: DeserializeOwned + 'a, Disk: ReadDisk> BackedEntryItemIter<'a, T, Disk> {
-    fn new(inner_pos: usize, mut chunk_iter: BackedEntryChunkIter<'a, T, Disk>) -> Self {
-        let backed_array = chunk_iter.next();
-        Self {
-            inner_pos,
-            backed_array,
-            chunk_iter,
-        }
-    }
-}
-
-impl<'a, T: DeserializeOwned + 'a, Disk: ReadDisk> Iterator for BackedEntryItemIter<'a, T, Disk> {
-    type Item = anyhow::Result<&'a T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // No GAT support, so we make do with pointers
-        // The lifetimes work out, but the compiler doesn't know that
-        // Also need to perform a secondary borrows inside a map
-        let self_ptr: *mut Self = self;
-        let val_ptr = self
-            .backed_array
-            .as_ref()
-            .map(|entry| {
-                entry.as_ref().map(|loaded_entry| {
-                    loaded_entry
-                        .get(self.inner_pos)
-                        .map(|x| {
-                            self.inner_pos += 1;
-                            Ok(x)
-                        })
-                        .or_else(|| {
-                            self.inner_pos = 0;
-
-                            // Mutating the backed entry,
-                            // but the borrowed value is being discarded
-                            unsafe {
-                                (*self_ptr).backed_array = self.chunk_iter.next();
-                            };
-
-                            // Mutating self to call method again
-                            unsafe { (*self_ptr).next() }
-                        })
-                })
-            })
-            .transpose()
-            .map(|x| {
-                x.flatten()
-                    .map(|val| val.map(|checked_val| checked_val as *const T))
-            })
-            .transpose();
-        let val_ptr = val_ptr.map(move |y| match y {
-            Ok(y_inner) => y_inner,
-            Err(y_inner) => Err(anyhow!("{:?}", y_inner)),
-        });
-
-        // Deref to pointer to make lifetimes resolve
-        val_ptr.map(|y| y.map(|x| unsafe { &*x }))
-    }
-}
-
 // Iterator returns
 impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
-    /// Return a [`BackedEntryItemIter`] that outputs items in order.
+    /// Outputs items in order.
+    ///
+    /// Excluding chunks before the initial offset, all chunks will load in
+    /// and remain loaded during iteration.
     ///
     /// # Arguments
     /// * `offset`: Starting position
-    pub fn item_iter(&mut self, offset: usize) -> BackedEntryItemIter<T, Disk> {
+    pub fn item_iter(&mut self, offset: usize) -> impl Iterator<Item = bincode::Result<&T>> {
         // Defaults to force a None return from iterator
         let mut outer_pos = usize::MAX;
         let mut inner_pos = usize::MAX;
@@ -577,72 +400,59 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
             inner_pos = loc.inside_entry_idx;
         };
 
-        BackedEntryItemIter::new(inner_pos, self.chunk_iter(outer_pos))
+        self.chunk_iter(outer_pos)
+            .flat_map(|chunk| {
+                let chunk: Box<dyn Iterator<Item = bincode::Result<&T>>> = match chunk {
+                    Ok(chunk_ok) => Box::new(chunk_ok.iter().map(Ok)),
+                    Err(chunk_err) => Box::new([Err(chunk_err)].into_iter()),
+                };
+                chunk
+            })
+            .skip(inner_pos)
     }
 
-    /// Default for [`BackedEntryItemIter`].
+    /// Returns underlying chunks in order.
     ///
-    /// Starts at entry 0.
-    pub fn item_iter_default(&mut self) -> BackedEntryItemIter<T, Disk> {
-        self.item_iter(0)
-    }
-
-    /// Return a [`BackedEntryChunkIter`] that outputs underlying chunks
-    /// in order.
+    /// All chunks loaded earlier in the iteration will remain loaded.
     ///
     /// # Arguments
-    /// * `offset`: Starting chunk
-    pub fn chunk_iter(&mut self, offset: usize) -> BackedEntryChunkIter<T, Disk> {
-        BackedEntryChunkIter {
-            pos: offset,
-            backed_array: self,
-        }
-    }
-
-    /// Default for [`BackedEntryChunkIter`].
-    ///
-    /// Starts at chunk 0.
-    pub fn chunk_iter_default(&mut self) -> BackedEntryChunkIter<T, Disk> {
-        self.chunk_iter(0)
+    /// * `offset`: Starting chunk (skips loading offset - 1 chunks)
+    pub fn chunk_iter(&mut self, offset: usize) -> impl Iterator<Item = bincode::Result<&[T]>> {
+        self.entries
+            .iter_mut()
+            .skip(offset)
+            .map(|entry| entry.load())
     }
 }
 
 impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> BackedArray<T, Disk> {
-    /// Return a [`BackedEntryChunkModIter`] that provides mutable handles to
-    /// underlying chunks, using [`BackedEntryMut`].
+    /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
     ///
     /// See [`Self::chunk_iter`] for the immutable iterator.
-    pub fn chunk_mod_iter(&mut self, offset: usize) -> BackedEntryChunkModIter<T, Disk> {
-        BackedEntryChunkModIter {
-            pos: offset,
-            backed_array: self,
-        }
-    }
-
-    /// Default for [`BackedEntryChunkModIter`].
-    ///
-    /// Starts at chunk 0.
-    pub fn chunk_mod_iter_default(&mut self) -> BackedEntryChunkModIter<T, Disk> {
-        self.chunk_mod_iter(0)
+    pub fn chunk_mod_iter(
+        &mut self,
+        offset: usize,
+    ) -> impl Iterator<Item = bincode::Result<BackedEntryMut<Box<[T]>, Disk>>> {
+        self.entries
+            .iter_mut()
+            .skip(offset)
+            .map(|entry| entry.mut_handle())
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
     /// Returns a [`BackedEntryDupIter`] that outputs clones of chunk data.
     ///
     /// See [`Self::chunk_iter`] for a version that produces references.
-    pub fn dup_iter(&mut self, offset: usize) -> BackedEntryDupIter<T, Disk> {
-        BackedEntryDupIter {
-            pos: offset,
-            backed_array: self,
-        }
-    }
-
-    /// Default for [`BackedEntryDupIter`].
-    ///
-    /// Starts at chunk 0.
-    pub fn dup_iter_default(&mut self) -> BackedEntryDupIter<T, Disk> {
-        self.dup_iter(0)
+    pub fn dup_iter(
+        &mut self,
+        offset: usize,
+    ) -> impl Iterator<Item = bincode::Result<Vec<T>>> + '_ {
+        self.entries.iter_mut().skip(offset).map(|entry| {
+            let val = entry.load()?.to_owned();
+            entry.unload();
+            Ok(val)
+        })
     }
 }
 
@@ -751,10 +561,7 @@ mod tests {
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append(INPUT_1, back_vector_1).unwrap();
 
-        let collected = backed
-            .chunk_iter_default()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let collected = backed.chunk_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(collected[0], INPUT_0);
         assert_eq!(collected[1], INPUT_1);
         assert_eq!(collected.len(), 2);
@@ -775,10 +582,7 @@ mod tests {
         let mut backed = BackedArray::new();
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append(INPUT_1, back_vector_1).unwrap();
-        let collected = backed
-            .item_iter_default()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let collected = backed.item_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(collected[5], &7);
         assert_eq!(collected[2], &1);
         assert_eq!(collected.len(), 6);
@@ -800,12 +604,9 @@ mod tests {
         backed.append(INPUT_0, back_vector_0).unwrap();
         backed.append(INPUT_1, back_vector_1).unwrap();
 
-        let collected = backed
-            .dup_iter_default()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        assert_eq!(collected[0].as_ref(), INPUT_0);
-        assert_eq!(collected[1].as_ref(), INPUT_1);
+        let collected = backed.dup_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(collected[0], INPUT_0);
+        assert_eq!(collected[1], INPUT_1);
         assert_eq!(collected.len(), 2);
     }
 
@@ -842,7 +643,7 @@ mod tests {
             INPUT_1
         );
 
-        let handle = backed.chunk_mod_iter_default();
+        let handle = backed.chunk_mod_iter(0);
 
         let mut handle_vec = handle.collect::<Result<Vec<_>, _>>().unwrap();
         handle_vec[0][0] = 20;
@@ -865,10 +666,7 @@ mod tests {
 
         drop(handle_vec);
         assert_eq!(
-            backed
-                .item_iter_default()
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap(),
+            backed.item_iter(0).collect::<Result<Vec<_>, _>>().unwrap(),
             [&20, &1, &30, &5, &7, &40, &5, &7]
         );
     }

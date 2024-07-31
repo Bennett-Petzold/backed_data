@@ -129,10 +129,14 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryAsync<T, Disk> {
         let mut bincode_writer = AsyncBincodeWriter::from(&mut write_disk);
         match self.mode {
             BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&new_value).await?;
+                let mut bincode_writer = bincode_writer.for_async();
+                bincode_writer.send(&new_value).await?;
+                bincode_writer.flush().await?;
             }
             BackedEntryWriteMode::Sync => {
                 bincode_writer.send(&new_value).await?;
+                bincode_writer.flush().await?;
+                bincode_writer.flush().await?;
             }
         };
 
@@ -147,13 +151,17 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryAsync<T, Disk> {
         let mut bincode_writer = AsyncBincodeWriter::from(&mut write_disk);
         match self.mode {
             BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&self.inner.value).await?;
+                let mut bincode_writer = bincode_writer.for_async();
+                bincode_writer.send(&self.inner.value).await?;
+                bincode_writer.flush().await?;
             }
             BackedEntryWriteMode::Sync => {
                 bincode_writer.send(&self.inner.value).await?;
+                bincode_writer.flush().await?;
             }
         };
 
+        write_disk.flush().await?;
         write_disk.shutdown().await?;
         Ok(())
     }
@@ -173,9 +181,10 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryAsync<T, Disk> {
             self.mode = BackedEntryWriteMode::Sync;
 
             let mut write_disk = pin!(self.inner.disk.write_disk().await?);
-            AsyncBincodeWriter::from(&mut write_disk)
-                .send(&self.inner.value)
-                .await?;
+            let mut bincode_writer = AsyncBincodeWriter::from(&mut write_disk);
+            bincode_writer.send(&self.inner.value).await?;
+            bincode_writer.flush().await?;
+            write_disk.flush().await?;
             write_disk.shutdown().await?;
         }
         Ok(())
@@ -187,10 +196,10 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryAsync<T, Disk> {
             self.mode = BackedEntryWriteMode::Async;
 
             let mut write_disk = pin!(self.inner.disk.write_disk().await?);
-            AsyncBincodeWriter::from(&mut write_disk)
-                .for_async()
-                .send(&self.inner.value)
-                .await?;
+            let mut bincode_writer = AsyncBincodeWriter::from(&mut write_disk).for_async();
+            bincode_writer.send(&self.inner.value).await?;
+            bincode_writer.flush().await?;
+            write_disk.flush().await?;
             write_disk.shutdown().await?;
         }
         Ok(())
@@ -208,13 +217,17 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryArrAsync<T, Disk> {
         let mut bincode_writer = AsyncBincodeWriter::from(&mut write_disk);
         match self.mode {
             BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&new_value).await?;
+                let mut bincode_writer = bincode_writer.for_async();
+                bincode_writer.send(&new_value).await?;
+                bincode_writer.flush().await?;
             }
             BackedEntryWriteMode::Sync => {
                 bincode_writer.send(&new_value).await?;
+                bincode_writer.flush().await?;
             }
         };
 
+        write_disk.flush().await?;
         write_disk.shutdown().await?;
         Ok(())
     }
@@ -231,13 +244,17 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedEntryOptionAsync<T, Disk> {
         let mut bincode_writer = AsyncBincodeWriter::from(&mut write_disk);
         match self.mode {
             BackedEntryWriteMode::Async => {
-                bincode_writer.for_async().send(&new_value).await?;
+                let mut bincode_writer = bincode_writer.for_async();
+                bincode_writer.send(&new_value).await?;
+                bincode_writer.flush().await?;
             }
             BackedEntryWriteMode::Sync => {
                 bincode_writer.send(&new_value).await?;
+                bincode_writer.flush().await?;
             }
         };
 
+        write_disk.flush().await?;
         write_disk.shutdown().await?;
         Ok(())
     }
