@@ -1,5 +1,4 @@
 use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
-use bincode::deserialize_from;
 use futures::{Future, SinkExt, StreamExt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -10,10 +9,7 @@ use std::{
 };
 use tokio::{
     fs::File,
-    io::{
-        AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufReader,
-        BufWriter,
-    },
+    io::{AsyncRead, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter},
 };
 
 use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload, DiskOverwritable};

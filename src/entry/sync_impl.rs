@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use bincode::{deserialize_from, serialize_into, Options};
+use bincode::Options;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload};

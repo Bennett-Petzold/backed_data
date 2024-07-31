@@ -1,11 +1,10 @@
 use core::panic;
 use std::{
-    io::{Cursor, Read, Seek, Write},
+    io::Cursor,
     ops::{Deref, DerefMut},
 };
 
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncSeekExt;
 
 use crate::entry::{
     async_impl::{AsyncReadDisk, AsyncWriteDisk},
