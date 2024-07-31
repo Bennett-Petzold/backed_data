@@ -18,7 +18,7 @@ pub trait Encoder<Target: Write> {
 #[cfg(feature = "async")]
 pub trait AsyncDecoder<Source: AsyncRead> {
     type Error: From<std::io::Error>;
-    fn decode<T: for<'de> Deserialize<'de>>(
+    fn decode<T: for<'de> Deserialize<'de> + Send + Sync>(
         &self,
         source: &mut Source,
     ) -> impl std::future::Future<Output = Result<T, Self::Error>> + Send;
@@ -27,7 +27,7 @@ pub trait AsyncDecoder<Source: AsyncRead> {
 #[cfg(feature = "async")]
 pub trait AsyncEncoder<Target: AsyncWrite>: Unpin {
     type Error: From<std::io::Error>;
-    fn encode<T: Serialize>(
+    fn encode<T: Serialize + Send + Sync>(
         &self,
         data: &T,
         target: &mut Target,
@@ -65,6 +65,50 @@ mod bincode_formats {
                 .with_limit(u32::MAX as u64)
                 .allow_trailing_bytes()
                 .serialize_into(target, data)
+        }
+    }
+}
+
+#[cfg(feature = "async_bincode")]
+pub use bincode_formats_async::*;
+#[cfg(feature = "async_bincode")]
+mod bincode_formats_async {
+    use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
+    use futures::{SinkExt, StreamExt};
+    use tokio::io::AsyncWriteExt;
+
+    use super::*;
+
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct AsyncBincodeCoder {}
+
+    impl<Source: AsyncRead + Send + Sync + Unpin> AsyncDecoder<Source> for AsyncBincodeCoder {
+        type Error = bincode::Error;
+        async fn decode<T: for<'de> Deserialize<'de> + Send + Sync>(
+            &self,
+            source: &mut Source,
+        ) -> Result<T, Self::Error> {
+            AsyncBincodeReader::from(source)
+                .next()
+                .await
+                .ok_or(bincode::ErrorKind::Custom(
+                    "AsyncBincodeReader stream empty".to_string(),
+                ))?
+        }
+    }
+
+    impl<Target: AsyncWrite + Send + Sync + Unpin> AsyncEncoder<Target> for AsyncBincodeCoder {
+        type Error = bincode::Error;
+        async fn encode<T: Serialize + Send + Sync>(
+            &self,
+            data: &T,
+            target: &mut Target,
+        ) -> Result<(), Self::Error> {
+            let mut bincode_writer = AsyncBincodeWriter::from(target).for_async();
+            bincode_writer.send(data).await?;
+            bincode_writer.get_mut().flush().await?;
+            bincode_writer.get_mut().shutdown().await?;
+            Ok(())
         }
     }
 }

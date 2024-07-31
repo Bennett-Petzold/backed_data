@@ -9,22 +9,33 @@ resolver = "2"
 [features]
 default = ["bincode", "array", "zstd"]
 array = ["dep:uuid"]
-async = ["dep:async-bincode", "dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-trait"]
+async = ["dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-trait"]
 
-all_formats = ["bincode", "serde_json", "simd_json", "encrypted", "mmap"]
+# START FORMATS
+all_formats = ["bincode", "serde_json", "simd_json", "encrypted", "async_bincode"]
+
 bincode = ["dep:bincode"]
 serde_json = ["dep:serde_json"]
 simd_json = ["dep:simd-json"]
 encrypted = ["dep:secrets", "dep:pgp"]
+
+async_bincode = ["async", "dep:async-bincode", "dep:bincode"]
+# END FORMATS
+
+# START DISKS
+all_disks = ["mmap", "zstd", "async_zstd"]
+
 mmap = ["dep:mmap"]
 
 # zstd features
 zstd = ["array", "dep:zstd", "dep:num-traits"]
-zstd-thin-lto = ["zstd", "zstd/thin-lto"]
-zstd-fat-lto = ["zstd", "zstd/fat-lto"]
+zstd_thin_lto = ["zstd", "zstd/thin-lto"]
+zstd_fat_lto = ["zstd", "zstd/fat-lto"]
 zstdmt = ["zstd", "zstd/zstdmt", "dep:lazy_static"]
-async-zstd = ["async", "dep:num-traits", "dep:async-compression", "async-compression/zstd"]
-async-zstdmt = ["async-zstd", "async-compression/zstdmt", "dep:lazy_static"]
+async_zstd = ["async", "dep:num-traits", "dep:async-compression", "async-compression/zstd"]
+async_zstdmt = ["async_zstd", "async-compression/zstdmt", "dep:lazy_static"]
+
+# END DISKS
 
 [dependencies]
 # Core dependencies
