@@ -117,9 +117,9 @@ impl AsyncWriteDisk for Plainfile {
     }
 }
 
-#[cfg(any(feature = "zstd", feature = "async-zstd"))]
+#[cfg(any(feature = "zstd", feature = "async_zstd"))]
 pub use zstd_disks::*;
-#[cfg(any(feature = "zstd", feature = "async-zstd"))]
+#[cfg(any(feature = "zstd", feature = "async_zstd"))]
 mod zstd_disks {
     use num_traits::Unsigned;
     use std::{
@@ -130,19 +130,21 @@ mod zstd_disks {
     };
     use zstd::{Decoder, Encoder};
 
-    #[cfg(feature = "async-zstd")]
+    #[cfg(feature = "async_zstd")]
     use {
-        async_compression::zstd::CParameter,
         std::{pin::Pin, task::Context},
         tokio::io::{AsyncBufRead, AsyncRead, AsyncSeek},
     };
 
-    #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
+    #[cfg(feature = "async_zstdmt")]
+    use async_compression::zstd::CParameter;
+
+    #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
     use {lazy_static::lazy_static, std::sync::Mutex};
 
     use super::*;
 
-    #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
+    #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
     lazy_static! {
         static ref ZSTD_MULTITHREAD: Mutex<u32> = Mutex::new(1);
     }
@@ -311,12 +313,12 @@ mod zstd_disks {
         }
     }
 
-    #[cfg(feature = "async-zstd")]
+    #[cfg(feature = "async_zstd")]
     pub struct AsyncZstdDecoderWrapper<B: AsyncBufRead>(
         async_compression::tokio::bufread::ZstdDecoder<B>,
     );
 
-    #[cfg(feature = "async-zstd")]
+    #[cfg(feature = "async_zstd")]
     impl<B: AsyncBufRead + Unpin> AsyncRead for AsyncZstdDecoderWrapper<B> {
         fn poll_read(
             self: Pin<&mut Self>,
@@ -327,7 +329,7 @@ mod zstd_disks {
         }
     }
 
-    #[cfg(feature = "async-zstd")]
+    #[cfg(feature = "async_zstd")]
     impl<B: AsyncBufRead + AsyncSeek + Unpin> AsyncSeek for AsyncZstdDecoderWrapper<B> {
         fn poll_complete(
             self: std::pin::Pin<&mut Self>,
@@ -343,7 +345,7 @@ mod zstd_disks {
         }
     }
 
-    #[cfg(feature = "async-zstd")]
+    #[cfg(feature = "async_zstd")]
     impl<B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send> AsyncReadDisk
         for ZstdDisk<'_, B>
     {
@@ -358,14 +360,14 @@ mod zstd_disks {
         }
     }
 
-    #[cfg(feature = "async-zstd")]
+    #[cfg(feature = "async_zstd")]
     impl<B: AsyncWriteDisk + Send + Sync> AsyncWriteDisk for ZstdDisk<'_, B> {
         type WriteDisk = async_compression::tokio::write::ZstdEncoder<B::WriteDisk>;
 
         async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
             let disk = self.inner.async_write_disk().await?;
 
-            #[cfg(feature = "async-zstdmt")]
+            #[cfg(feature = "async_zstdmt")]
             {
                 Ok(
                     async_compression::tokio::write::ZstdEncoder::with_quality_and_params(
@@ -376,7 +378,7 @@ mod zstd_disks {
                 )
             }
 
-            #[cfg(not(feature = "async-zstdmt"))]
+            #[cfg(not(feature = "async_zstdmt"))]
             {
                 Ok(async_compression::tokio::write::ZstdEncoder::with_quality(
                     disk,
@@ -422,7 +424,7 @@ mod zstd_disks {
             assert_eq!(read, TEST_SEQUENCE);
         }
 
-        #[cfg(feature = "async-zstd")]
+        #[cfg(feature = "async_zstd")]
         #[tokio::test]
         async fn async_zstd() {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
