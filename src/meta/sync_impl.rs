@@ -9,7 +9,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use crate::array::sync_impl::BackedArray;
 
 pub trait BackedArrayWrapper<T>:
-    Sized + Deref<Target = BackedArray<T, Self::Storage>> + DerefMut + Serialize + DeserializeOwned
+    Deref<Target = BackedArray<T, Self::Storage>> + DerefMut + Serialize + DeserializeOwned
 {
     /// Underlying storage struct
     type Storage;

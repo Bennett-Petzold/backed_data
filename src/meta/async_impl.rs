@@ -10,8 +10,7 @@ use crate::array::async_impl::BackedArray;
 
 #[async_trait]
 pub trait BackedArrayWrapper<T>:
-    Sized
-    + Deref<Target = BackedArray<T, Self::Storage>>
+    Deref<Target = BackedArray<T, Self::Storage>>
     + DerefMut
     + Serialize
     + DeserializeOwned
