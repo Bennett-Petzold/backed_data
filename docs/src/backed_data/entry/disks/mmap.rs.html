@@ -829,13 +829,14 @@
 <a href="#829" id="829">829</a>
 <a href="#830" id="830">830</a>
 <a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
     io::{Cursor, ErrorKind, Write},
     mem::transmute,
     ops::Deref,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
@@ -848,6 +849,9 @@
 
 <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
 </span><span class="kw">use </span>memmap2::RemapOptions;
+
+<span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+</span><span class="kw">use </span>std::os::unix::fs::MetadataExt;
 
 <span class="kw">use </span><span class="kw">crate</span>::utils::BorrowExtender;
 
@@ -1201,7 +1205,7 @@
 
         <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
         </span>{
-            len = <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.size() == <span class="number">0 </span>{
+            len = <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.file_size() == <span class="number">0 </span>{
                 <span class="number">0
             </span>} <span class="kw">else </span>{
                 mmap.len()
@@ -1220,7 +1224,7 @@
         <span class="kw">let </span>reserved_len = <span class="self">Self</span>::get_reserved_len(
             <span class="kw-2">&amp;</span>mmap,
             <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
-            </span>open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>,
+            </span><span class="kw-2">&amp;</span>open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>,
         )<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(MmapWriter {
