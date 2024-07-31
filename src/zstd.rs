@@ -15,7 +15,7 @@ pub mod sync_impl {
     use uuid::Uuid;
     use zstd::{Decoder, Encoder};
 
-    use crate::array::sync_impl::BackedArray;
+    use crate::{array::sync_impl::BackedArray, meta::sync_impl::BackedArrayWrapper};
 
     /// File encoded with zstd
     pub struct ZstdFile<'a> {
@@ -163,6 +163,43 @@ pub mod sync_impl {
         }
     }
 
+    impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBackedArray<'a, T> {
+        type Storage = ZstdFile<'a>;
+        type BackingError = std::io::Error;
+
+        fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+            remove_file(self.get_disks()[entry_idx].path.clone())?;
+            self.array.remove(entry_idx);
+            Ok(self)
+        }
+
+        fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+            self.array.append(
+                values,
+                ZstdFile::new(
+                    self.directory_root
+                        .clone()
+                        .join(Uuid::new_v4().to_string() + ".zstd"),
+                    self.zstd_level,
+                )?,
+            )?;
+            Ok(self)
+        }
+
+        fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+            self.array.append_memory(
+                values,
+                ZstdFile::new(
+                    self.directory_root
+                        .clone()
+                        .join(Uuid::new_v4().to_string() + ".zstd"),
+                    self.zstd_level,
+                )?,
+            )?;
+            Ok(self)
+        }
+    }
+
     impl<'a, T> Deref for ZstdDirBackedArray<'a, T> {
         type Target = BackedArray<T, ZstdFile<'a>>;
 
@@ -202,43 +239,6 @@ pub mod sync_impl {
             });
             self.directory_root = new_root;
             self
-        }
-
-        /// Wraps [`BackedArray::remove`] to delete the file
-        pub fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
-            remove_file(self.get_disks()[entry_idx].path.clone())?;
-            self.array.remove(entry_idx);
-            Ok(self)
-        }
-    }
-
-    impl<T: Serialize> ZstdDirBackedArray<'_, T> {
-        /// Wraps [`BackedArray::append`]
-        pub fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
-            self.array.append(
-                values,
-                ZstdFile::new(
-                    self.directory_root
-                        .clone()
-                        .join(Uuid::new_v4().to_string() + ".zstd"),
-                    self.zstd_level,
-                )?,
-            )?;
-            Ok(self)
-        }
-
-        /// Wraps [`BackedArray::append_memory`]
-        pub fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
-            self.array.append_memory(
-                values,
-                ZstdFile::new(
-                    self.directory_root
-                        .clone()
-                        .join(Uuid::new_v4().to_string() + ".zstd"),
-                    self.zstd_level,
-                )?,
-            )?;
-            Ok(self)
         }
     }
 
@@ -318,6 +318,7 @@ pub mod async_impl {
     use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
     use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
 
+    use async_trait::async_trait;
     use derive_getters::Getters;
     use futures::{executor::block_on, SinkExt, StreamExt};
     use serde::{
@@ -330,7 +331,7 @@ pub mod async_impl {
     };
     use uuid::Uuid;
 
-    use crate::array::async_impl::BackedArray;
+    use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
 
     /// File encoded with zstd
     pub struct ZstdFile {
@@ -489,6 +490,53 @@ pub mod async_impl {
         zstd_level: Option<i32>,
     }
 
+    #[async_trait]
+    impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
+        for ZstdDirBackedArray<T>
+    {
+        type Storage = ZstdFile;
+        type BackingError = std::io::Error;
+
+        /// Wraps [`BackedArray::remove`] to delete the file
+        async fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+            remove_file(self.get_disks()[entry_idx].path.clone()).await?;
+            self.array.remove(entry_idx);
+            Ok(self)
+        }
+
+        async fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+            self.array
+                .append(
+                    values,
+                    ZstdFile::new(
+                        self.directory_root
+                            .clone()
+                            .join(Uuid::new_v4().to_string() + ".zstd"),
+                        self.zstd_level,
+                    )
+                    .await?,
+                )
+                .await?;
+            Ok(self)
+        }
+
+        async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+            self.array
+                .append_memory(
+                    values,
+                    ZstdFile::new(
+                        self.directory_root
+                            .clone()
+                            .join(Uuid::new_v4().to_string() + ".zstd"),
+                        self.zstd_level,
+                    )
+                    .await?,
+                )
+                .await?;
+            Ok(self)
+        }
+    }
+
     impl<T> ZstdDirBackedArray<T> {
         /// Creates a new array backed by zstd compressed files in a directory
         ///
@@ -564,49 +612,6 @@ pub mod async_impl {
             });
             self.directory_root = new_root;
             self
-        }
-
-        /// Wraps [`BackedArray::remove`] to delete the file
-        pub async fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
-            remove_file(self.get_disks()[entry_idx].path.clone()).await?;
-            self.array.remove(entry_idx);
-            Ok(self)
-        }
-    }
-
-    impl<T: Serialize> ZstdDirBackedArray<T> {
-        /// Wraps [`BackedArray::append`]
-        pub async fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
-            self.array
-                .append(
-                    values,
-                    ZstdFile::new(
-                        self.directory_root
-                            .clone()
-                            .join(Uuid::new_v4().to_string() + ".zstd"),
-                        self.zstd_level,
-                    )
-                    .await?,
-                )
-                .await?;
-            Ok(self)
-        }
-
-        /// Wraps [`BackedArray::append_memory`]
-        pub async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
-            self.array
-                .append_memory(
-                    values,
-                    ZstdFile::new(
-                        self.directory_root
-                            .clone()
-                            .join(Uuid::new_v4().to_string() + ".zstd"),
-                        self.zstd_level,
-                    )
-                    .await?,
-                )
-                .await?;
-            Ok(self)
         }
     }
 

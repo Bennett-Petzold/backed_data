@@ -6,14 +6,13 @@ pub mod sync_impl {
         path::PathBuf,
     };
 
-    use bincode::{deserialize_from, serialize_into};
     use serde::{
         de::{DeserializeOwned, Error, Visitor},
         Deserialize, Serialize,
     };
     use uuid::Uuid;
 
-    use crate::array::sync_impl::BackedArray;
+    use crate::{array::sync_impl::BackedArray, meta::sync_impl::BackedArrayWrapper};
 
     /// File, but serializes based on path string
     #[derive(Debug)]
@@ -126,13 +125,26 @@ pub mod sync_impl {
         directory_root: PathBuf,
     }
 
-    impl<T> DirectoryBackedArray<T> {
-        pub fn new(directory_root: PathBuf) -> std::io::Result<Self> {
-            create_dir_all(directory_root.clone())?;
-            Ok(DirectoryBackedArray {
-                array: BackedArray::default(),
-                directory_root,
-            })
+    impl<T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for DirectoryBackedArray<T> {
+        type Storage = SerialFile;
+        type BackingError = std::io::Error;
+
+        fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+            remove_file(self.get_disks()[entry_idx].path.clone())?;
+            self.array.remove(entry_idx);
+            Ok(self)
+        }
+
+        fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+            let next_target = self.next_target().map_err(bincode::Error::custom)?;
+            self.array.append(values, next_target)?;
+            Ok(self)
+        }
+
+        fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+            let next_target = self.next_target().map_err(bincode::Error::custom)?;
+            self.array.append_memory(values, next_target)?;
+            Ok(self)
         }
     }
 
@@ -150,22 +162,18 @@ pub mod sync_impl {
         }
     }
 
-    impl<T: Serialize> DirectoryBackedArray<T> {
-        /// Wraps [`BackedArray::save_to_disk`] to include its own metadata
-        pub fn save_to_disk<W: Write>(&mut self, writer: W) -> bincode::Result<()> {
-            self.array.clear_memory();
-            serialize_into(writer, self)
-        }
-    }
-
-    impl<T: DeserializeOwned> DirectoryBackedArray<T> {
-        /// Wraps [`BackedArray::load`] to include its own metadata
-        pub fn load<W: Read>(writer: W) -> bincode::Result<Self> {
-            deserialize_from(writer)
-        }
-    }
-
     impl<T> DirectoryBackedArray<T> {
+        /// Creates a new directory at `directory_root`.
+        ///
+        /// * `directory_root`: Valid read/write directory on system
+        pub fn new(directory_root: PathBuf) -> std::io::Result<Self> {
+            create_dir_all(directory_root.clone())?;
+            Ok(DirectoryBackedArray {
+                array: BackedArray::default(),
+                directory_root,
+            })
+        }
+
         /// Updates the root of the directory backed array.
         ///
         /// Does not move any files or directories, just changes pointers.
@@ -176,32 +184,11 @@ pub mod sync_impl {
             self.directory_root = new_root;
             self
         }
-
-        /// Wraps [`BackedArray::remove`] to delete the file
-        pub fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
-            remove_file(self.get_disks()[entry_idx].path.clone())?;
-            self.array.remove(entry_idx);
-            Ok(self)
-        }
     }
 
     impl<T: Serialize> DirectoryBackedArray<T> {
         fn next_target(&self) -> std::io::Result<SerialFile> {
             SerialFile::new(self.directory_root.join(Uuid::new_v4().to_string()))
-        }
-
-        /// Wraps [`BackedArray::append`]
-        pub fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
-            let next_target = self.next_target().map_err(bincode::Error::custom)?;
-            self.array.append(values, next_target)?;
-            Ok(self)
-        }
-
-        /// Wraps [`BackedArray::append_memory`]
-        pub fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
-            let next_target = self.next_target().map_err(bincode::Error::custom)?;
-            self.array.append_memory(values, next_target)?;
-            Ok(self)
         }
     }
 
@@ -277,22 +264,21 @@ pub mod async_impl {
         pin::Pin,
     };
 
-    use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
+    use async_trait::async_trait;
     use futures::executor::block_on;
-    use futures::SinkExt;
-    use futures::StreamExt;
+
     use serde::{
         de::{DeserializeOwned, Error},
         Deserialize, Serialize,
     };
-    use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+    use tokio::io::{AsyncRead, AsyncWrite};
     use tokio::{
         fs::{create_dir_all, remove_file, File},
         io::AsyncSeek,
     };
     use uuid::Uuid;
 
-    use crate::array::async_impl::BackedArray;
+    use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
 
     use super::sync_impl::PathBufVisitor;
 
@@ -421,13 +407,29 @@ pub mod async_impl {
         directory_root: PathBuf,
     }
 
-    impl<T> DirectoryBackedArray<T> {
-        pub async fn new(directory_root: PathBuf) -> std::io::Result<Self> {
-            create_dir_all(directory_root.clone()).await?;
-            Ok(DirectoryBackedArray {
-                array: BackedArray::default(),
-                directory_root,
-            })
+    #[async_trait]
+    impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
+        for DirectoryBackedArray<T>
+    {
+        type Storage = SerialFile;
+        type BackingError = std::io::Error;
+
+        async fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+            remove_file(self.get_disks()[entry_idx].path.clone()).await?;
+            self.array.remove(entry_idx);
+            Ok(self)
+        }
+
+        async fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+            let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
+            self.array.append(values, next_target).await?;
+            Ok(self)
+        }
+
+        async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+            let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
+            self.array.append_memory(values, next_target).await?;
+            Ok(self)
         }
     }
 
@@ -445,33 +447,18 @@ pub mod async_impl {
         }
     }
 
-    impl<T: Serialize> DirectoryBackedArray<T> {
-        /// Wraps [`BackedArray::save_to_disk`] to include its own metadata
-        pub async fn save_to_disk<W: AsyncWrite + Unpin>(
-            &mut self,
-            writer: &mut W,
-        ) -> bincode::Result<()> {
-            self.clear_memory();
-            let mut bincode_writer = AsyncBincodeWriter::from(writer).for_async();
-            bincode_writer.send(&self).await?;
-            bincode_writer.get_mut().flush().await?;
-            Ok(())
-        }
-    }
-
-    impl<T: DeserializeOwned> DirectoryBackedArray<T> {
-        /// Wraps [`BackedArray::load_from_disk`] to include its own metadata
-        pub async fn load<R: AsyncRead + Unpin>(writer: &mut R) -> bincode::Result<Self> {
-            AsyncBincodeReader::from(writer)
-                .next()
-                .await
-                .ok_or(bincode::ErrorKind::Custom(
-                    "AsyncBincodeReader stream empty".to_string(),
-                ))?
-        }
-    }
-
     impl<T> DirectoryBackedArray<T> {
+        /// Creates a new directory at `directory_root`.
+        ///
+        /// * `directory_root`: Valid read/write directory on system
+        pub async fn new(directory_root: PathBuf) -> std::io::Result<Self> {
+            create_dir_all(directory_root.clone()).await?;
+            Ok(DirectoryBackedArray {
+                array: BackedArray::default(),
+                directory_root,
+            })
+        }
+
         /// Updates the root of the directory backed array.
         ///
         /// Does not move any files or directories, just changes pointers.
@@ -482,32 +469,11 @@ pub mod async_impl {
             self.directory_root = new_root;
             self
         }
-
-        /// Wraps [`BackedArray::remove`] to delete the file
-        pub async fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
-            remove_file(self.get_disks()[entry_idx].path.clone()).await?;
-            self.array.remove(entry_idx);
-            Ok(self)
-        }
     }
 
     impl<T: Serialize> DirectoryBackedArray<T> {
         async fn next_target(&self) -> std::io::Result<SerialFile> {
             SerialFile::new(self.directory_root.join(Uuid::new_v4().to_string())).await
-        }
-
-        /// Wraps [`BackedArray::append`]
-        pub async fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
-            let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
-            self.array.append(values, next_target).await?;
-            Ok(self)
-        }
-
-        /// Wraps [`BackedArray::append_memory`]
-        pub async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
-            let next_target = self.next_target().await.map_err(bincode::Error::custom)?;
-            self.array.append_memory(values, next_target).await?;
-            Ok(self)
         }
     }
 
