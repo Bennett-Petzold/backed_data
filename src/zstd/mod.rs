@@ -1,5 +1,6 @@
 #[cfg(feature = "async-zstd")]
 pub mod async_impl;
+#[cfg(feature = "zstd")]
 pub mod sync_impl;
 
 #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
