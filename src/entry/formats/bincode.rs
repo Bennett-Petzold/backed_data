@@ -1,19 +1,30 @@
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    marker::PhantomData,
+};
 
 use bincode::Options;
 use serde::{Deserialize, Serialize};
 
 use super::{Decoder, Encoder};
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
-pub struct BincodeCoder {}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct BincodeCoder<T: ?Sized> {
+    pub _phantom_data: PhantomData<T>,
+}
 
-impl<Source: Read> Decoder<Source> for BincodeCoder {
+impl<T: ?Sized> Default for BincodeCoder<T> {
+    fn default() -> Self {
+        Self {
+            _phantom_data: PhantomData,
+        }
+    }
+}
+
+impl<T: ?Sized + for<'de> Deserialize<'de>, Source: Read> Decoder<Source> for BincodeCoder<T> {
     type Error = bincode::Error;
-    fn decode<T: for<'de> serde::Deserialize<'de>>(
-        &self,
-        source: &mut Source,
-    ) -> Result<T, Self::Error> {
+    type T = T;
+    fn decode(&self, source: &mut Source) -> Result<Self::T, Self::Error> {
         bincode::options()
             .with_limit(u32::MAX as u64)
             .allow_trailing_bytes()
@@ -21,9 +32,10 @@ impl<Source: Read> Decoder<Source> for BincodeCoder {
     }
 }
 
-impl<Target: Write> Encoder<Target> for BincodeCoder {
+impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for BincodeCoder<T> {
     type Error = bincode::Error;
-    fn encode<T: Serialize>(&self, data: &T, target: &mut Target) -> Result<(), Self::Error> {
+    type T = T;
+    fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
         bincode::options()
             .with_limit(u32::MAX as u64)
             .allow_trailing_bytes()

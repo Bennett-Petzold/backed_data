@@ -2,7 +2,10 @@
 
 use std::{path::Path, time::Duration};
 
-use backed_data::{directory::StdDirBackedArray, entry::formats::BincodeCoder};
+use backed_data::{
+    directory::StdDirBackedArray,
+    entry::formats::{BincodeCoder, CsvCoder},
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 
@@ -24,11 +27,18 @@ use {
 mod io_bench_util;
 use io_bench_util::*;
 
-create_fn!(create_plainfiles, StdDirBackedArray<u8, BincodeCoder>,);
-create_fn!(parallel create_plainfiles_par, StdDirBackedArray<u8, BincodeCoder>,);
+create_fn!(create_plainfiles, StdDirBackedArray<u8, BincodeCoder<Box<[u8]>>>,);
+create_fn!(parallel create_plainfiles_par, StdDirBackedArray<u8, BincodeCoder<Box<[u8]>>>,);
+
 #[cfg(feature = "zstd")]
-create_fn!(create_zstdfiles, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder>, 'a, const LEVEL: u8,);
-create_fn!(parallel create_zstdfiles_par, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder>, 'a, const LEVEL: u8,);
+create_fn!(create_zstdfiles, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder<Box<[u8]>>>, 'a, const LEVEL: u8,);
+#[cfg(feature = "zstd")]
+create_fn!(parallel create_zstdfiles_par, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder<Box<[u8]>>>, 'a, const LEVEL: u8,);
+
+#[cfg(feature = "csv")]
+create_fn!(create_csv, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
+#[cfg(feature = "csv")]
+create_fn!(parallel create_csv_par, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
 
 #[cfg(feature = "async_bincode")]
 create_fn!(async create_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
@@ -44,10 +54,13 @@ create_fn!(async concurrent create_zstdfiles_async_con, AsyncZstdDirBackedArray<
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 create_fn!(async parallel create_zstdfiles_async_par, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
 
-read_dir!(read_plainfiles, StdDirBackedArray<u8, BincodeCoder>);
-read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder>);
+read_dir!(read_plainfiles, StdDirBackedArray<u8, BincodeCoder<_>>);
+read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder<_>>);
+
 #[cfg(feature = "zstd")]
-read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder>);
+read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder<_>>);
+#[cfg(feature = "csv")]
+read_dir!(read_csv, StdDirBackedArray<u8, CsvCoder<_, _>>);
 
 #[cfg(feature = "async_bincode")]
 read_dir!(async read_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>);
@@ -62,8 +75,6 @@ read_dir!(async read_zstdfiles_async, AsyncZstdDirBackedArray<0, u8, AsyncBincod
 read_dir!(async concurrent read_zstdfiles_async_con, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 read_dir!(async parallel read_zstdfiles_async_par, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
-
-const SIX_MIB: usize = 6 * 1024 * 1024;
 
 fn file_creation_benches(c: &mut Criterion) {
     let data = complete_works();
@@ -107,6 +118,26 @@ fn file_creation_benches(c: &mut Criterion) {
         )
     });
     log_created_size(&mut path_cell, "Parallel zstdfiles");
+
+    #[cfg(feature = "csv")]
+    group.bench_function("create_csv", |b| {
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_csv(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    log_created_size(&mut path_cell, "CSV");
+
+    #[cfg(feature = "csv")]
+    group.bench_function("create_csv_parallel", |b| {
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_csv_par(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    log_created_size(&mut path_cell, "Parallel CSV");
 
     #[cfg(feature = "async")]
     {
@@ -204,6 +235,14 @@ fn file_load_benches(c: &mut Criterion) {
             group.bench_function("load_zstdfiles", |b| {
                 b.iter(|| black_box(read_zstdfiles(&path)))
             });
+        }
+    }
+
+    #[cfg(feature = "csv")]
+    {
+        {
+            let path = create_files(create_csv);
+            group.bench_function("load_csv", |b| b.iter(|| black_box(read_csv(&path))));
         }
     }
 

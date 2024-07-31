@@ -225,18 +225,18 @@ where
     K: Serialize,
     E: Serialize,
     E::Disk: From<PathBuf>,
-    E::Coder: Default,
-    E::WriteError: From<std::io::Error>,
 {
     /// Save [`self`] at `DIRECTORY_ROOT/meta.dat`.
     ///
     /// As [`self`] implements serialize and deserialize, it does not need to
     /// be saved with this method. However, this provides a standard location
     /// and format for [`Self::load`] to utilize.
-    pub fn save(&self) -> Result<&Self, E::WriteError> {
+    pub fn save<C>(&self, coder: &C) -> Result<&Self, C::Error>
+    where
+        C: Encoder<<E::Disk as WriteDisk>::WriteDisk, Error: From<std::io::Error>, T = Self>,
+    {
         let disk: E::Disk = self.directory_root.join(META_FILE).into();
         let mut disk = disk.write_disk()?;
-        let coder = E::Coder::default();
         coder.encode(self, &mut disk)?;
         disk.flush()?;
         Ok(self)
@@ -248,18 +248,18 @@ where
     K: for<'de> Deserialize<'de>,
     E: for<'de> Deserialize<'de>,
     E::Disk: From<PathBuf>,
-    E::Coder: Default,
-    E::ReadError: From<std::io::Error>,
 {
     /// Load [`self`] from `DIRECTORY_ROOT/meta.dat`.
     ///
     /// As [`self`] implements serialize and deserialize, it does not need to
     /// be loaded with this method. However, this uses a standard location and
     /// format from a [`Self::save`] call.
-    pub fn load<P: AsRef<Path>>(root: P) -> Result<Self, E::ReadError> {
+    pub fn load<P: AsRef<Path>, C>(root: P, coder: &C) -> Result<Self, C::Error>
+    where
+        C: Decoder<<E::Disk as ReadDisk>::ReadDisk, Error: From<std::io::Error>, T = Self>,
+    {
         let disk: E::Disk = root.as_ref().join(META_FILE).into();
         let mut disk = disk.read_disk()?;
-        let coder = E::Coder::default();
         coder.decode(&mut disk)
     }
 }
@@ -298,7 +298,7 @@ mod tests {
     fn write() {
         let directory = temp_dir().join("directory_write");
         let _ = remove_dir_all(directory.clone());
-        let mut arr = StdDirBackedArray::<String, BincodeCoder>::new(directory.clone()).unwrap();
+        let mut arr = StdDirBackedArray::<String, BincodeCoder<_>>::new(directory.clone()).unwrap();
         let (values, second_values) = values();
 
         arr.append_memory(values).unwrap();
@@ -313,7 +313,7 @@ mod tests {
     fn write_and_read() {
         let directory = temp_dir().join("directory_write_and_read");
         let _ = remove_dir_all(directory.clone());
-        let mut arr = StdDirBackedArray::<_, BincodeCoder>::new(directory.clone()).unwrap();
+        let mut arr = StdDirBackedArray::<String, BincodeCoder<_>>::new(directory.clone()).unwrap();
         let (values, second_values) = values();
 
         arr.append(values).unwrap();
@@ -323,7 +323,7 @@ mod tests {
             .unwrap();
         drop(arr);
 
-        let arr: StdDirBackedArray<String, BincodeCoder> = BincodeCoder::default()
+        let arr: StdDirBackedArray<String, BincodeCoder<_>> = BincodeCoder::default()
             .decode(&mut File::open(directory.join(META_FILE)).unwrap())
             .unwrap();
         assert_eq!(*arr.get(10).unwrap(), "TEST STRING");

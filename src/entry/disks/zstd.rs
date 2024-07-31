@@ -356,7 +356,7 @@ mod tests {
 
         let zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.write_disk().unwrap();
-        BincodeCoder::default()
+        BincodeCoder::<&[u8]>::default()
             .encode(&TEST_SEQUENCE, &mut write)
             .unwrap();
         write.flush().unwrap();

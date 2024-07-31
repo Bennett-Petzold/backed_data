@@ -265,6 +265,7 @@ where
 #[cfg(feature = "async")]
 pub struct CustomFull<R, W, AR, AW>(pub CustomSync<R, W>, pub CustomAsync<AR, AW>);
 
+#[cfg(feature = "async")]
 impl<R, W, AR, AW, O> ReadDisk for CustomFull<R, W, AR, AW>
 where
     R: Fn() -> std::io::Result<O>,
@@ -277,6 +278,7 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 impl<R, W, AR, AW, O> WriteDisk for CustomFull<R, W, AR, AW>
 where
     W: Fn() -> std::io::Result<O>,

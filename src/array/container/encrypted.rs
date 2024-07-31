@@ -254,7 +254,11 @@ mod tests {
         let mut array = SecretBackedArray::new();
 
         array
-            .append_memory(INPUT_1, Encrypted::new_random(backing), BincodeCoder {})
+            .append_memory(
+                INPUT_1,
+                Encrypted::new_random(backing),
+                BincodeCoder::default(),
+            )
             .unwrap();
 
         let val = array.generic_get(0).unwrap();
@@ -283,7 +287,7 @@ mod tests {
         let mut array = VecBackedArray::new();
 
         array
-            .append_memory(INPUT_1, backing, BincodeCoder {})
+            .append_memory(INPUT_1, backing, BincodeCoder::default())
             .unwrap();
 
         let val = array.generic_get(0).unwrap();
@@ -308,14 +312,14 @@ mod tests {
             .append_memory(
                 INPUT_1,
                 Encrypted::new_random(OwnedCursorVec::default()),
-                BincodeCoder {},
+                BincodeCoder::default(),
             )
             .unwrap();
         array
             .append_memory(
                 INPUT_2,
                 Encrypted::new_random(OwnedCursorVec::default()),
-                BincodeCoder {},
+                BincodeCoder::default(),
             )
             .unwrap();
 

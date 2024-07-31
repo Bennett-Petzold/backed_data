@@ -140,7 +140,11 @@ pub trait BackedEntryContainerNestedRead:
     BackedEntryContainerNested<
     Unwrapped: for<'de> Deserialize<'de>,
     Disk: ReadDisk,
-    Coder: Decoder<<Self::Disk as ReadDisk>::ReadDisk, Error = Self::ReadError>,
+    Coder: Decoder<
+        <Self::Disk as ReadDisk>::ReadDisk,
+        T = Self::Unwrapped,
+        Error = Self::ReadError,
+    >,
 >
 {
     type ReadError;
@@ -151,7 +155,7 @@ where
     T: BackedEntryContainerNested<
         Unwrapped: for<'de> Deserialize<'de>,
         Disk: ReadDisk,
-        Coder: Decoder<<Self::Disk as ReadDisk>::ReadDisk>,
+        Coder: Decoder<<Self::Disk as ReadDisk>::ReadDisk, T = Self::Unwrapped>,
     >,
 {
     type ReadError = <Self::Coder as Decoder<<Self::Disk as ReadDisk>::ReadDisk>>::Error;
@@ -164,7 +168,11 @@ pub trait BackedEntryContainerNestedWrite:
     BackedEntryContainerNested<
     Unwrapped: Serialize,
     Disk: WriteDisk,
-    Coder: Encoder<<Self::Disk as WriteDisk>::WriteDisk, Error = Self::WriteError>,
+    Coder: Encoder<
+        <Self::Disk as WriteDisk>::WriteDisk,
+        T = Self::Unwrapped,
+        Error = Self::WriteError,
+    >,
 >
 {
     type WriteError;
@@ -175,7 +183,7 @@ where
     T: BackedEntryContainerNested<
         Unwrapped: Serialize,
         Disk: WriteDisk,
-        Coder: Encoder<<Self::Disk as WriteDisk>::WriteDisk>,
+        Coder: Encoder<<Self::Disk as WriteDisk>::WriteDisk, T = Self::Unwrapped>,
     >,
 {
     type WriteError = <Self::Coder as Encoder<<Self::Disk as WriteDisk>::WriteDisk>>::Error;

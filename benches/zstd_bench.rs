@@ -28,12 +28,12 @@ use {
 mod io_bench_util;
 use io_bench_util::*;
 
-create_fn!(create_zstdfiles, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder>, 'a, const LEVEL: u8,);
+create_fn!(create_zstdfiles, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder<Box<[u8]>>>, 'a, const LEVEL: u8,);
 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 create_fn!(async create_zstdfiles_async, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
 
-read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder>);
+read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder<_>>);
 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
 read_dir!(async read_zstdfiles_async, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
