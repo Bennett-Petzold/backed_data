@@ -63,12 +63,12 @@ impl<'de> Deserialize<'de> for &mut CursorVec<'_> {
 
 /// This is deliberately breaking mutability
 impl<'a> ReadDisk for CursorVec<'a> {
-    type ReadDisk = &'a mut Cursor<Vec<u8>>;
+    type ReadDisk = Cursor<Vec<u8>>;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.lock().unwrap().rewind()?;
-        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
-        Ok(unsafe { &mut *this })
+        let mut this = self.inner.lock().unwrap().clone();
+        this.rewind()?;
+        Ok(this)
     }
 }
 
@@ -109,12 +109,12 @@ impl<'a> AsyncWriteDisk for CursorVec<'a> {
 }
 
 impl<'a> ReadDisk for &'a mut CursorVec<'a> {
-    type ReadDisk = &'a mut Cursor<Vec<u8>>;
+    type ReadDisk = Cursor<Vec<u8>>;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.lock().unwrap().rewind()?;
-        let this: *mut _ = self.inner.lock().unwrap().deref_mut();
-        Ok(unsafe { &mut *this })
+        let mut this = self.inner.lock().unwrap().clone();
+        this.rewind()?;
+        Ok(this)
     }
 }
 

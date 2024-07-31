@@ -7,4 +7,6 @@ Cargo, rustdoc, and external lto do not all mix properly.
 
 Run tests including doc tests with `cargo test --features zstdmt,async-zstdmt`.
 
-Test coverage with `cargo tarpaulin --features zstdmt,async-zstdmt --exclude-files '*/lib/*' build.rs`
+Test coverage with `cargo tarpaulin --features zstdmt,async-zstdmt --exclude-files '*/lib/*' build.rs`.
+
+When testing with Miri, use 'MIRIFLAGS="-Zmiri-disable-isolation"'.
