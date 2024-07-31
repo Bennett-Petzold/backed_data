@@ -35,6 +35,19 @@ jobs:
       with:
         packages: libsodium-dev
 
+    - name: Install libsodium (MacOS)
+      if: ${{ matrix.os == 'macos' }}
+      run: brew install libsodium
+
+    - name: Install libsodium (Windows)
+      if: ${{ matrix.os == 'macos' }}
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git
+        cd vcpkg
+        ./bootstrap-vcpkg.bat
+        ./vcpkg install libsodium
+        ./vcpkg integrate install
+
     - uses: Swatinem/rust-cache@v2
 
     - run: cargo test --verbose --all-features
