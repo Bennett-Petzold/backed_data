@@ -8,7 +8,7 @@ use derive_getters::Getters;
 use itertools::Itertools;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::backed_entry::BackedEntryArr;
+use crate::entry::BackedEntryArr;
 
 #[derive(Debug)]
 pub enum BackedArrayError {
@@ -27,7 +27,7 @@ pub enum BackedArrayError {
 /// entries to prevent data duplication on disk.
 ///
 /// Modifications beyond appending and removal are not supported, due to
-/// complexity
+/// complexity.
 #[derive(Debug, Serialize, Deserialize, Getters)]
 pub struct BackedArray<T, Disk> {
     // keys and entries must always have the same length
@@ -195,10 +195,10 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     ///
     /// # Example
     /// ```rust
-    /// use backed_array::backed_array::BackedArray;
+    /// use backed_array::array::BackedArray;
     /// use std::fs::{File, create_dir_all, remove_dir_all, OpenOptions};
     ///
-    /// let FILENAME_BASE = std::env::temp_dir().join("example_backed_array_append");
+    /// let FILENAME_BASE = std::env::temp_dir().join("example_array_append");
     /// let values = ([0, 1, 1],
     ///     [2, 3, 5]);
     ///
@@ -226,10 +226,10 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     ///
     /// # Example
     /// ```rust
-    /// use backed_array::backed_array::BackedArray;
+    /// use backed_array::array::BackedArray;
     /// use std::fs::{File, remove_file, OpenOptions};
     ///
-    /// let FILENAME = std::env::temp_dir().join("example_backed_array_append_memory");
+    /// let FILENAME = std::env::temp_dir().join("example_array_append_memory");
     /// let values = ([0, 1, 1],
     ///     [2, 3, 5]);
     ///
@@ -275,6 +275,20 @@ impl<T, Disk> BackedArray<T, Disk> {
         });
 
         self
+    }
+
+    pub fn get_disks(&self) -> Vec<&Disk> {
+        self.entries.iter().map(|entry| entry.get_disk()).collect()
+    }
+
+    /// Get a mutable handle to disks.
+    ///
+    /// Used primarily to update paths, when old values are out of date.
+    pub fn get_disks_mut(&mut self) -> Vec<&mut Disk> {
+        self.entries
+            .iter_mut()
+            .map(|entry| entry.get_disk_mut())
+            .collect()
     }
 }
 

@@ -43,13 +43,23 @@ impl<T: Clone, Disk: Clone> Clone for BackedEntry<T, Disk> {
     }
 }
 
+impl<T, Disk> BackedEntry<T, Disk> {
+    pub fn get_disk(&self) -> &Disk {
+        &self.disk_entry
+    }
+
+    pub fn get_disk_mut(&mut self) -> &mut Disk {
+        &mut self.disk_entry
+    }
+}
+
 /// Typedef of [`BackedEntry`].
 ///
 /// # Example
 ///
 /// ```rust
 /// use std::fs::{File, remove_file};
-/// use backed_array::backed_entry::BackedEntryArr;
+/// use backed_array::entry::BackedEntryArr;
 ///
 /// let FILENAME = std::env::temp_dir().join("example_array");
 ///
@@ -76,7 +86,7 @@ pub type BackedEntryArr<T, Disk> = BackedEntry<Box<[T]>, Disk>;
 /// ```rust
 /// use std::fs::{File, remove_file};
 /// use std::env::temp_dir;
-/// use backed_array::backed_entry::BackedEntryOption;
+/// use backed_array::entry::BackedEntryOption;
 ///
 /// let FILENAME = std::env::temp_dir().join("example_option");
 ///
@@ -155,6 +165,7 @@ impl<T: Serialize, Disk: Write> BackedEntryArr<T, Disk> {
     /// See [`Self::write_unload`] to skip the memory write.
     pub fn write(&mut self, new_value: Box<[T]>) -> bincode::Result<()> {
         serialize_into(&mut self.disk_entry, &new_value)?;
+        self.disk_entry.flush()?; // Make sure buffer is emptied
         self.value = new_value;
         Ok(())
     }
@@ -164,7 +175,9 @@ impl<T: Serialize, Disk: Write> BackedEntryArr<T, Disk> {
     /// See [`Self::write`] to keep the value in memory.
     pub fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
         self.unload();
-        serialize_into(&mut self.disk_entry, new_value)
+        serialize_into(&mut self.disk_entry, new_value)?;
+        self.disk_entry.flush()?; // Make sure buffer is emptied
+        Ok(())
     }
 }
 
