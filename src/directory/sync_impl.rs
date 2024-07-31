@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::array::{
     container::{
-        open_mut, open_ref, BackedEntryContainer, BackedEntryContainerNested,
-        BackedEntryContainerNestedAll, BackedEntryContainerNestedWrite, ResizingContainer,
+        open_mut, BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
+        BackedEntryContainerNestedWrite, ResizingContainer,
     },
     sync_impl::BackedArray,
 };
@@ -24,7 +24,7 @@ where
 {
     pub fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, std::io::Error> {
         if let Some(chunk) = self.entries().c_get(entry_idx) {
-            remove_file(open_ref!(chunk).get_disk())?;
+            remove_file(chunk.as_ref().get_ref().get_disk())?;
         }
         self.array.remove(entry_idx);
         Ok(self)
@@ -75,7 +75,7 @@ where
             rhs.entries()
                 .ref_iter()
                 .map(|chunk| {
-                    let disk = open_ref!(chunk).get_disk().as_ref();
+                    let disk = chunk.as_ref().get_ref().get_disk().as_ref();
                     let new_loc = self.directory_root.join(disk.file_name().unwrap());
                     if disk != new_loc {
                         match rename(disk, &new_loc) {
@@ -155,7 +155,7 @@ where
                 .entries()
                 .ref_iter()
                 .map(|chunk| {
-                    let disk = open_ref!(chunk).get_disk().as_ref();
+                    let disk = chunk.as_ref().get_ref().get_disk().as_ref();
                     copy(disk, new_root.join(disk.file_name().unwrap()))?;
                     remove_file(disk)
                 })

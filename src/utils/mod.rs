@@ -5,6 +5,7 @@
 use std::{
     cell::{OnceCell, UnsafeCell},
     ops::{Deref, DerefMut},
+    pin::Pin,
     sync::{Mutex, MutexGuard, OnceLock},
 };
 
@@ -228,12 +229,13 @@ impl<T> ProtectedAccess for UnsafeCell<T> {
 /// from its reference with the same lifetime. Unsafe
 #[derive(Debug)]
 pub struct BorrowExtender<T, U> {
-    _parent: T,
+    _parent: Pin<Box<T>>,
     child: U,
 }
 
 impl<T, U> BorrowExtender<T, U> {
     pub fn new<V: FnOnce(&T) -> U>(parent: T, child: V) -> Self {
+        let parent = Box::pin(parent);
         let parent_ptr: *const _ = &parent;
         let child = (child)(unsafe { &*parent_ptr });
         Self {
@@ -246,6 +248,7 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
+        let parent = Box::pin(parent);
         let parent_ptr: *const _ = &parent;
         let child = (child)(unsafe { &*parent_ptr })?;
         Ok(Self {
@@ -258,6 +261,7 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
+        let parent = Box::pin(parent);
         let parent_ptr: *const _ = &parent;
         let child = (child)(unsafe { &*parent_ptr })?;
         Some(Self {
@@ -267,7 +271,8 @@ impl<T, U> BorrowExtender<T, U> {
     }
 
     pub fn new_mut<V: FnOnce(&mut T) -> U>(mut parent: T, child: V) -> Self {
-        let parent_ptr: *mut _ = &mut parent;
+        let mut parent = Box::pin(parent);
+        let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr });
         Self {
             _parent: parent,
@@ -282,7 +287,8 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
-        let parent_ptr: *mut _ = &mut parent;
+        let mut parent = Box::pin(parent);
+        let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr })?;
         Ok(Self {
             _parent: parent,
@@ -297,7 +303,8 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
-        let parent_ptr: *mut _ = &mut parent;
+        let mut parent = Box::pin(parent);
+        let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr })?;
         Some(Self {
             _parent: parent,
@@ -309,6 +316,7 @@ impl<T, U> BorrowExtender<T, U> {
 #[cfg(feature = "async")]
 impl<T, U> BorrowExtender<T, U> {
     pub async fn a_new<F: Future<Output = U>, V: FnOnce(&T) -> F>(parent: T, child: V) -> Self {
+        let parent = Box::pin(parent);
         let parent_ptr: *const _ = &parent;
         let child = (child)(unsafe { &*parent_ptr }).await;
         Self {
@@ -324,6 +332,7 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
+        let parent = Box::pin(parent);
         let parent_ptr: *const _ = &parent;
         let child = (child)(unsafe { &*parent_ptr }).await?;
         Ok(Self {
@@ -339,6 +348,7 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
+        let parent = Box::pin(parent);
         let parent_ptr: *const _ = &parent;
         let child = (child)(unsafe { &*parent_ptr }).await?;
         Some(Self {
@@ -351,7 +361,8 @@ impl<T, U> BorrowExtender<T, U> {
         mut parent: T,
         child: V,
     ) -> Self {
-        let parent_ptr: *mut _ = &mut parent;
+        let mut parent = Box::pin(parent);
+        let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr }).await;
         Self {
             _parent: parent,
@@ -366,7 +377,8 @@ impl<T, U> BorrowExtender<T, U> {
     where
         T: 'a,
     {
-        let parent_ptr: *mut _ = &mut parent;
+        let mut parent = Box::pin(parent);
+        let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr }).await?;
         Ok(Self {
             _parent: parent,
@@ -375,13 +387,14 @@ impl<T, U> BorrowExtender<T, U> {
     }
 
     pub async fn a_maybe_new_mut<'a, F: Future<Output = Option<U>>, V: FnOnce(&'a mut T) -> F>(
-        mut parent: T,
+        parent: T,
         child: V,
     ) -> Option<Self>
     where
         T: 'a,
     {
-        let parent_ptr: *mut _ = &mut parent;
+        let mut parent = Box::pin(parent);
+        let parent_ptr: *mut _ = unsafe { parent.as_mut().get_unchecked_mut() };
         let child = (child)(unsafe { &mut *parent_ptr }).await?;
         Some(Self {
             _parent: parent,
@@ -400,5 +413,35 @@ impl<T, U> Deref for BorrowExtender<T, U> {
 impl<T, U> DerefMut for BorrowExtender<T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.child
+    }
+}
+
+impl<T, U> AsRef<U> for BorrowExtender<T, U> {
+    fn as_ref(&self) -> &U {
+        &self.child
+    }
+}
+
+impl<T, U> AsMut<U> for BorrowExtender<T, U> {
+    fn as_mut(&mut self) -> &mut U {
+        &mut self.child
+    }
+}
+
+impl<T, V, F> BorrowExtender<T, Result<V, F>> {
+    pub fn open_result(self) -> Result<BorrowExtender<T, V>, F> {
+        Ok(BorrowExtender::<T, V> {
+            _parent: self._parent,
+            child: self.child?,
+        })
+    }
+}
+
+impl<T, V> BorrowExtender<T, Option<V>> {
+    pub fn open_option(self) -> Option<BorrowExtender<T, V>> {
+        Some(BorrowExtender::<T, V> {
+            _parent: self._parent,
+            child: self.child?,
+        })
     }
 }

@@ -142,7 +142,7 @@ impl<T> BackedEntryContainerNestedAsyncAll for T where
 /// Immutable open for a reference to a [`BackedEntryContainer`].
 macro_rules! a_open_ref {
     ($x:expr) => {
-        $x.as_ref().as_ref()
+        $x.as_ref().as_ref().as_ref()
     };
 }
 
@@ -158,7 +158,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
         &self,
         idx: usize,
     ) -> Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::AsyncReadError>> {
-        let loc = internal_idx(self.keys.as_ref(), idx)
+        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
             .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
         let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
@@ -186,7 +186,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     where
         I: IntoIterator<Item = usize> + 'a,
     {
-        stream::iter(multiple_internal_idx(self.keys.as_ref(), idxs)).filter_map(
+        stream::iter(multiple_internal_idx(self.keys.c_ref(), idxs)).filter_map(
             move |loc| async move {
                 let entry_container = BorrowExtender::maybe_new(&self.entries, |entries| {
                     entries.c_get(loc.entry_idx)
@@ -213,7 +213,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     where
         I: IntoIterator<Item = usize> + Clone + 'a,
     {
-        stream::iter(multiple_internal_idx_strict(self.keys.as_ref(), idxs.clone()).zip(idxs)).then(
+        stream::iter(multiple_internal_idx_strict(self.keys.c_ref(), idxs.clone()).zip(idxs)).then(
             move |(loc, idx)| async move {
                 let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
                 let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
@@ -288,6 +288,7 @@ impl<
         // End of a range is exclusive
         let start_idx = self
             .keys
+            .c_ref()
             .as_ref()
             .last()
             .map(|key_range| key_range.end)
@@ -317,17 +318,17 @@ impl<
     ///     use tokio::runtime::Builder;
     ///
     ///     let rt = Builder::new_current_thread().build().unwrap();
-    ///    
+    ///
     ///     let FILENAME = std::env::temp_dir().join("example_async_array_append_memory");
     ///     let values = ([0, 1, 1],
     ///         [2, 3, 5]);
-    ///    
+    ///
     ///     let mut array: AsyncVecBackedArray<u32, Plainfile, _> = AsyncVecBackedArray::default();
     ///     rt.block_on(array.a_append_memory(values.0, FILENAME.clone().into(), AsyncBincodeCoder {}));
-    ///    
+    ///
     ///     // Overwrite file, making disk pointer for first array invalid
     ///     rt.block_on(array.a_append_memory(values.1, FILENAME.clone().into(), AsyncBincodeCoder {}));
-    ///    
+    ///
     ///     assert_eq!(rt.block_on(array.a_get(0)).unwrap().as_ref(), &0);
     ///     remove_file(FILENAME).unwrap();
     /// }
@@ -343,6 +344,7 @@ impl<
         // End of a range is exclusive
         let start_idx = self
             .keys
+            .c_ref()
             .as_ref()
             .last()
             .map(|key_range| key_range.end)
@@ -368,11 +370,21 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     where
         E: 'a,
     {
-        stream::iter(self.entries.as_ref())
-            .then(|ent| async { a_open_ref!(ent).a_load().await })
+        stream::iter(self.entries.ref_iter())
+            .then(|ent| {
+                let ent = BorrowExtender::new(ent, |ent| {
+                    let ent_ptr: *const _ = ent;
+                    let ent = unsafe { &*ent_ptr }.as_ref();
+                    BorrowExtender::new(ent, |ent| {
+                        let ent_ptr: *const _ = ent;
+                        unsafe { &*ent_ptr }.as_ref()
+                    })
+                });
+                ent.a_load()
+            })
             .flat_map(|ent| match ent {
                 Ok(loaded) => stream::iter(0..loaded.c_len())
-                    .map(|idx| Ok(loaded.c_get(idx).unwrap()))
+                    .map(move |idx| Ok(loaded.c_get(idx).unwrap()))
                     .left_stream(),
                 Err(e) => stream::iter([Err(e)]).right_stream(),
             })
@@ -380,7 +392,17 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
 
     /// Async version of [`Self::chunk_iter`].
     pub fn chunk_stream(&mut self) -> impl Stream<Item = Result<&E::Unwrapped, E::AsyncReadError>> {
-        stream::iter(self.entries.as_ref()).then(|arr| a_open_ref!(arr).a_load())
+        stream::iter(self.entries.ref_iter()).then(|ent| {
+            let ent = BorrowExtender::new(ent, |ent| {
+                let ent_ptr: *const _ = ent;
+                let ent = unsafe { &*ent_ptr }.as_ref();
+                BorrowExtender::new(ent, |ent| {
+                    let ent_ptr: *const _ = ent;
+                    unsafe { &*ent_ptr }.as_ref()
+                })
+            });
+            ent.a_load()
+        })
     }
 }
 
