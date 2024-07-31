@@ -19,10 +19,14 @@ pub mod sync_impl;
 
 const META_FILE: &str = "meta.dat";
 
-/// [`BackedArray`] that uses a directory of plain files
+/// [`BackedArray`] wrapper for automatically creating new entries in a
+/// directory.
+///
+/// The array can be accessed directly when the wrapper methods are
+/// insufficient. The wrapper methods are sufficient for most operations.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DirectoryBackedArray<K, E> {
-    array: BackedArray<K, E>,
+    pub array: BackedArray<K, E>,
     directory_root: PathBuf,
 }
 

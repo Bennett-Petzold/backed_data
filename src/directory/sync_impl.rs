@@ -25,6 +25,12 @@ use crate::{
 
 use super::{DirectoryBackedArray, META_FILE};
 
+impl<K, E> DirectoryBackedArray<K, E> {
+    pub fn get_directory_root(&self) -> &PathBuf {
+        &self.directory_root
+    }
+}
+
 impl<K, E> DirectoryBackedArray<K, E>
 where
     K: ResizingContainer<Data = Range<usize>>,
