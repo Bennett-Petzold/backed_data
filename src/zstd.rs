@@ -680,7 +680,7 @@ pub mod async_impl {
     }
 
     impl<T: DeserializeOwned> ZstdDirBackedArray<T> {
-        /// Wraps [`BackedArray::load_from_disk`] to include its own metadata
+        /// Wraps [`BackedArray::load`] to include its own metadata
         pub async fn load<R: AsyncRead + Unpin>(writer: &mut R) -> bincode::Result<Self> {
             AsyncBincodeReader::from(writer)
                 .next()

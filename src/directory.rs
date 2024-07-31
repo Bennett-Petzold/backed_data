@@ -1,3 +1,24 @@
+use std::path::PathBuf;
+
+use serde::de::Visitor;
+
+struct PathBufVisitor;
+
+impl<'de> Visitor<'de> for PathBufVisitor {
+    type Value = PathBuf;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("A valid path to a file")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(PathBuf::from(v))
+    }
+}
+
 pub mod sync_impl {
     use std::{
         fs::{copy, create_dir_all, remove_file, rename, File},
@@ -7,12 +28,14 @@ pub mod sync_impl {
     };
 
     use serde::{
-        de::{DeserializeOwned, Error, Visitor},
+        de::{DeserializeOwned, Error},
         Deserialize, Serialize,
     };
     use uuid::Uuid;
 
     use crate::{array::sync_impl::BackedArray, meta::sync_impl::BackedArrayWrapper};
+
+    use super::PathBufVisitor;
 
     /// File, but serializes based on path string
     #[derive(Debug)]
@@ -83,23 +106,6 @@ pub mod sync_impl {
             S: serde::Serializer,
         {
             serializer.serialize_str(self.path.to_str().unwrap())
-        }
-    }
-
-    pub struct PathBufVisitor;
-
-    impl<'de> Visitor<'de> for PathBufVisitor {
-        type Value = PathBuf;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("A valid path to a file")
-        }
-
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            Ok(PathBuf::from(v))
         }
     }
 
@@ -309,7 +315,7 @@ pub mod async_impl {
 
     use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
 
-    use super::sync_impl::PathBufVisitor;
+    use super::PathBufVisitor;
 
     /// File, but serializes based on path string
     #[derive(Debug)]
