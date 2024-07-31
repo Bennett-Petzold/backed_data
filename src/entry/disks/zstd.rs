@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt::{Debug, Display},
-    io::BufRead,
+    io::{BufRead, Write},
     marker::PhantomData,
     ops::Deref,
     path::{Path, PathBuf},
@@ -171,9 +171,27 @@ impl<'a, const ZSTD_LEVEL: u8, B: ReadDisk<ReadDisk: BufRead>> ReadDisk
     }
 }
 
+pub struct ZstdEncoderWrapper<'a, T: Write> {
+    encoder: Encoder<'a, T>,
+}
+
+impl<T: Write> Write for ZstdEncoderWrapper<'_, T> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.encoder.write(buf)
+    }
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        self.encoder.write_vectored(bufs)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.encoder.do_finish()?;
+        self.encoder.flush()?;
+        self.encoder.get_mut().flush()
+    }
+}
+
 #[cfg(feature = "zstd")]
 impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEVEL, B> {
-    type WriteDisk = Encoder<'a, B::WriteDisk>;
+    type WriteDisk = ZstdEncoderWrapper<'a, B::WriteDisk>;
 
     fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
         #[allow(unused_mut)]
@@ -187,7 +205,7 @@ impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEV
             .multithread(*ZSTD_MULTITHREAD.lock().unwrap())
             .unwrap();
 
-        Ok(encoder)
+        Ok(ZstdEncoderWrapper { encoder })
     }
 }
 
@@ -313,5 +331,38 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(read, TEST_SEQUENCE);
+    }
+
+    #[cfg(feature = "bincode")]
+    #[test]
+    fn encoded_zstd() {
+        use std::io::Write;
+
+        use crate::{
+            entry::formats::{BincodeCoder, Decoder, Encoder},
+            test_utils::OwnedCursorVec,
+        };
+
+        const TEST_SEQUENCE: &[u8] = &[39, 3, 6, 7, 5];
+        let backing = OwnedCursorVec::new(Cursor::default());
+
+        let zstd = ZstdDisk::<0, _>::new(backing);
+        let mut write = zstd.write_disk().unwrap();
+        BincodeCoder::default()
+            .encode(&TEST_SEQUENCE, &mut write)
+            .unwrap();
+        write.flush().unwrap();
+
+        // Reading from same struct
+        let mut read = zstd.read_disk().unwrap();
+        let bytes: Box<[u8]> = BincodeCoder::default().decode(&mut read).unwrap();
+        assert_eq!(&*bytes, TEST_SEQUENCE);
+
+        // Reading after drop and rebuild at a different compression
+        let mut read = ZstdDisk::<18, _>::new(zstd.into_inner())
+            .read_disk()
+            .unwrap();
+        let bytes: Box<[u8]> = BincodeCoder::default().decode(&mut read).unwrap();
+        assert_eq!(&*bytes, TEST_SEQUENCE);
     }
 }
