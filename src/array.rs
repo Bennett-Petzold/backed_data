@@ -302,6 +302,54 @@ pub mod sync_impl {
         }
     }
 
+    impl<T: Clone, Disk: Clone> BackedArray<T, Disk> {
+        /// Combine `self` and `rhs` into a new [`Self`]
+        ///
+        /// Appends entries of `self` and `rhs`
+        pub fn join(&self, rhs: &Self) -> Self {
+            let offset = self.keys.last().unwrap_or(&(0..0)).end;
+            let other_keys = rhs
+                .keys
+                .iter()
+                .map(|range| (range.start + offset)..(range.end + offset));
+            Self {
+                keys: self.keys.iter().cloned().chain(other_keys).collect(),
+                entries: self
+                    .entries
+                    .iter()
+                    .chain(rhs.entries.iter())
+                    .cloned()
+                    .collect(),
+            }
+        }
+
+        /// Copy entries in `rhs` to `self`
+        pub fn merge(&mut self, rhs: &Self) -> &Self {
+            let offset = self.keys.last().unwrap_or(&(0..0)).end;
+            self.keys.extend(
+                rhs.keys
+                    .iter()
+                    .map(|range| (range.start + offset)..(range.end + offset)),
+            );
+            self.entries.extend_from_slice(&rhs.entries);
+            self
+        }
+    }
+
+    impl<T, Disk> BackedArray<T, Disk> {
+        /// Moves all entries of `rhs` into `self`
+        pub fn append_array(&mut self, mut rhs: Self) -> &Self {
+            let offset = self.keys.last().unwrap_or(&(0..0)).end;
+            rhs.keys.iter_mut().for_each(|range| {
+                range.start += offset;
+                range.end += offset;
+            });
+            self.keys.append(&mut rhs.keys);
+            self.entries.append(&mut rhs.entries);
+            self
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use std::io::Cursor;
@@ -595,6 +643,54 @@ pub mod async_impl {
                 .ok_or(bincode::ErrorKind::Custom(
                     "AsyncBincodeReader stream empty".to_string(),
                 ))?
+        }
+    }
+
+    impl<T: Clone, Disk: Clone> BackedArray<T, Disk> {
+        /// Combine `self` and `rhs` into a new [`Self`]
+        ///
+        /// Appends entries of `self` and `rhs`
+        pub fn join(&self, rhs: &Self) -> Self {
+            let offset = self.keys.last().unwrap_or(&(0..0)).end;
+            let other_keys = rhs
+                .keys
+                .iter()
+                .map(|range| (range.start + offset)..(range.end + offset));
+            Self {
+                keys: self.keys.iter().cloned().chain(other_keys).collect(),
+                entries: self
+                    .entries
+                    .iter()
+                    .chain(rhs.entries.iter())
+                    .cloned()
+                    .collect(),
+            }
+        }
+
+        /// Copy entries in `rhs` to `self`
+        pub fn merge(&mut self, rhs: &Self) -> &Self {
+            let offset = self.keys.last().unwrap_or(&(0..0)).end;
+            self.keys.extend(
+                rhs.keys
+                    .iter()
+                    .map(|range| (range.start + offset)..(range.end + offset)),
+            );
+            self.entries.extend_from_slice(&rhs.entries);
+            self
+        }
+    }
+
+    impl<T, Disk> BackedArray<T, Disk> {
+        /// Moves all entries of `rhs` into `self`
+        pub fn append_array(&mut self, mut rhs: Self) -> &Self {
+            let offset = self.keys.last().unwrap_or(&(0..0)).end;
+            rhs.keys.iter_mut().for_each(|range| {
+                range.start += offset;
+                range.end += offset;
+            });
+            self.keys.append(&mut rhs.keys);
+            self.entries.append(&mut rhs.entries);
+            self
         }
     }
 
