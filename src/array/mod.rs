@@ -51,18 +51,6 @@ fn internal_idx<'a, K: IntoIterator<Item = &'a Range<usize>>>(
         })
 }
 
-/// Returns the entry location for multiple accesses, or None if idx invalid.
-fn multiple_internal_idx_strict<'a, I, K: AsRef<[Range<usize>]> + 'a>(
-    keys: K,
-    idxs: I,
-) -> impl Iterator<Item = Option<ArrayLoc>> + 'a
-where
-    I: IntoIterator<Item = usize> + 'a,
-{
-    idxs.into_iter()
-        .map(move |idx| internal_idx(keys.as_ref(), idx))
-}
-
 /// Array stored as multiple arrays on disk.
 ///
 /// Associates each access with the appropriate disk storage, loading it into

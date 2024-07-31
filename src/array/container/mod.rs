@@ -78,6 +78,22 @@ pub trait BackedEntryContainer {
     fn get(self) -> BackedEntry<Self::Container, Self::Disk, Self::Coder>;
 }
 
+impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc> {
+    type Container = C;
+    type Disk = D;
+    type Coder = Enc;
+
+    fn get(self) -> BackedEntry<Self::Container, Self::Disk, Self::Coder> {
+        self
+    }
+    fn get_ref(&self) -> &BackedEntry<Self::Container, Self::Disk, Self::Coder> {
+        self
+    }
+    fn get_mut(&mut self) -> &mut BackedEntry<Self::Container, Self::Disk, Self::Coder> {
+        self
+    }
+}
+
 /// A [`BackedEntryContainer`] inside a [`Container`].
 ///
 /// For internal use, reduces size of generics boilerplate.
@@ -100,7 +116,7 @@ pub trait BackedEntryContainerNested:
 /// Auto-implement trait to wrap intended generics.
 impl<T> BackedEntryContainerNested for T
 where
-    T: Container<Data: BackedEntryContainer>,
+    for<'a> T: Container<Data: BackedEntryContainer>,
     <<T as Container>::Data as BackedEntryContainer>::Container: Once<Inner: Container>,
     <T as Container>::Data: From<
         BackedEntry<
@@ -179,22 +195,6 @@ impl<T> BackedEntryContainerNestedAll for T where
 {
 }
 
-impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc> {
-    type Container = C;
-    type Disk = D;
-    type Coder = Enc;
-
-    fn get(self) -> BackedEntry<Self::Container, Self::Disk, Self::Coder> {
-        self
-    }
-    fn get_ref(&self) -> &BackedEntry<Self::Container, Self::Disk, Self::Coder> {
-        self
-    }
-    fn get_mut(&mut self) -> &mut BackedEntry<Self::Container, Self::Disk, Self::Coder> {
-        self
-    }
-}
-
 /// Mutable open for a reference to a [`BackedEntryContainer`].
 macro_rules! open_mut {
     ($x:expr) => {
@@ -202,14 +202,6 @@ macro_rules! open_mut {
     };
 }
 pub(crate) use open_mut;
-
-/// Immutable open for a reference to a [`BackedEntryContainer`].
-macro_rules! open_ref {
-    ($x:expr) => {
-        $x.as_ref().as_ref()
-    };
-}
-pub(crate) use open_ref;
 
 mod standard_types;
 #[allow(unused_imports)]

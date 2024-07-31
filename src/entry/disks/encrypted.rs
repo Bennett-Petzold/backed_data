@@ -110,11 +110,11 @@ impl<B: Bytes> Encrypted<'_, B> {
         self
     }
 
-    pub fn get_key(&self) -> impl AsRef<[u8; 32]> + '_ {
+    pub fn get_key(&self) -> impl Deref<Target = [u8; 32]> + '_ {
         BorrowExtender::new(self.secrets.borrow(), |secrets| secrets.key)
     }
 
-    pub fn get_nonce(&self) -> impl AsRef<[u8; 96]> + '_ {
+    pub fn get_nonce(&self) -> impl Deref<Target = [u8; 96]> + '_ {
         BorrowExtender::new(self.secrets.borrow(), |secrets| secrets.nonce)
     }
 }
