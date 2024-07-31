@@ -5,7 +5,7 @@ use std::{
     fmt::Debug,
     fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
     io::Write,
-    ops::{Deref, Range},
+    ops::Deref,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
 };
@@ -91,7 +91,7 @@ pub fn create<K, E, P: AsRef<Path>>(path: P, data: &[String]) -> DirectoryBacked
 where
     K: Default + Serialize + for<'de> Deserialize<'de>,
     E: Default + Serialize + for<'de> Deserialize<'de>,
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf>,
@@ -118,7 +118,7 @@ pub fn create_parallel<K, E, P: AsRef<Path>>(
 where
     K: Default + Serialize + for<'de> Deserialize<'de> + Send + 'static,
     E: Default + Serialize + for<'de> Deserialize<'de> + Send + 'static,
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf> + AsRef<Path>,
@@ -157,7 +157,7 @@ pub async fn a_create<K, E, P: AsRef<Path>>(path: P, data: &[String]) -> Directo
 where
     K: Default + Serialize + Send + Sync + Unpin,
     E: Default + Serialize + Send + Sync + Unpin,
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf>,
@@ -183,7 +183,7 @@ where
     P: AsRef<Path>,
     K: Default + Serialize + Send + Sync + Unpin,
     E: Default + Serialize + Send + Sync + Unpin,
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf> + AsRef<Path>,
@@ -224,7 +224,7 @@ where
     P: AsRef<Path> + Send + Sync + 'static,
     K: Default + Serialize + Send + Sync + Unpin + 'static,
     E: Default + Serialize + Send + Sync + Unpin + 'static,
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default + Send + Sync,
     E::Disk: From<PathBuf> + AsRef<Path> + Send + Sync,

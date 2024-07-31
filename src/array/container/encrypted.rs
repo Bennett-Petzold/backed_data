@@ -1,6 +1,6 @@
 use std::{
     mem::transmute,
-    ops::{Deref, DerefMut, Range},
+    ops::{Deref, DerefMut},
     sync::OnceLock,
 };
 
@@ -197,8 +197,9 @@ impl<T: Bytes> ResizingContainer for SecretVecWrapper<T> {
     /// Very inefficient push approach!
     fn c_push(&mut self, value: Self::Data) {
         self.0 = secrets::SecretVec::new(self.len() + 1, |s| {
-            s[0..].copy_from_slice(&self.borrow());
-            s[s.len() - 1] = value;
+            let last_idx = s.len() - 1;
+            s[0..last_idx].copy_from_slice(&self.borrow());
+            s[last_idx] = value;
         });
     }
 
@@ -222,7 +223,7 @@ impl<T: Bytes> ResizingContainer for SecretVecWrapper<T> {
 
 /// Wraps `T` in [`SecretVecWrapper`] and wraps `Disk` in [`Encrypted`].
 pub type SecretBackedArray<'a, T, Disk, Coder> = BackedArray<
-    Vec<Range<usize>>,
+    SecretVecWrapper<usize>,
     Vec<BackedEntry<OnceLock<SecretVecWrapper<T>>, Encrypted<'a, Disk>, Coder>>,
 >;
 

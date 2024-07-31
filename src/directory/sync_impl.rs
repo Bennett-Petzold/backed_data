@@ -1,7 +1,7 @@
 use std::{
     fs::{copy, create_dir_all, remove_dir, remove_file, rename},
     io::Write,
-    ops::{Deref, DerefMut, Range},
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
 };
 
@@ -33,7 +33,7 @@ impl<K, E> DirectoryBackedArray<K, E> {
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAll + ResizingContainer,
     E::Disk: AsRef<Path>,
 {
@@ -56,7 +56,7 @@ where
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf>,
@@ -81,7 +81,7 @@ where
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Disk: AsRef<Path>,
 {

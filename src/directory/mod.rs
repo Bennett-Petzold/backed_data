@@ -1,4 +1,4 @@
-use std::{ops::Range, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -31,20 +31,20 @@ pub struct DirectoryBackedArray<K, E> {
 }
 
 pub type StdDirBackedArray<T, Coder> =
-    DirectoryBackedArray<Vec<Range<usize>>, Vec<BackedEntryArr<T, Plainfile, Coder>>>;
+    DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<T, Plainfile, Coder>>>;
 
 #[cfg(feature = "async")]
 pub type AsyncStdDirBackedArray<T, Coder> =
-    DirectoryBackedArray<Vec<Range<usize>>, Vec<BackedEntryAsync<Box<[T]>, Plainfile, Coder>>>;
+    DirectoryBackedArray<Vec<usize>, Vec<BackedEntryAsync<Box<[T]>, Plainfile, Coder>>>;
 
 #[cfg(feature = "zstd")]
 pub type ZstdDirBackedArray<'a, const ZSTD_LEVEL: u8, T, Coder> = DirectoryBackedArray<
-    Vec<Range<usize>>,
+    Vec<usize>,
     Vec<BackedEntryArr<T, ZstdDisk<'a, ZSTD_LEVEL, WriteUnbuffered>, Coder>>,
 >;
 
 #[cfg(feature = "async_zstd")]
 pub type AsyncZstdDirBackedArray<'a, const ZSTD_LEVEL: u8, T, Coder> = DirectoryBackedArray<
-    Vec<Range<usize>>,
+    Vec<usize>,
     Vec<BackedEntryAsync<Box<[T]>, ZstdDisk<'a, ZSTD_LEVEL, Plainfile>, Coder>>,
 >;

@@ -317,10 +317,13 @@ mod tests {
     use std::{collections::HashMap, io::Cursor, sync::Arc, thread::scope};
 
     use crate::{
-        entry::{formats::BincodeCoder, BackedEntryArr, BackedEntryArrLock, BackedEntryCell},
+        entry::{BackedEntryArr, BackedEntryArrLock, BackedEntryCell},
         test_utils::cursor_vec,
         test_utils::CursorVec,
     };
+
+    #[cfg(feature = "bincode")]
+    use crate::entry::formats::BincodeCoder;
 
     use super::*;
 

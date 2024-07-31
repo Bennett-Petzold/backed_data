@@ -1,5 +1,4 @@
 use std::{
-    ops::Range,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -34,7 +33,7 @@ use super::{DirectoryBackedArray, META_FILE};
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAll + ResizingContainer,
     E::Disk: AsRef<Path>,
 {
@@ -57,7 +56,7 @@ where
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf>,
@@ -87,7 +86,7 @@ where
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
-    K: ResizingContainer<Data = Range<usize>>,
+    K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Disk: AsRef<Path>,
 {

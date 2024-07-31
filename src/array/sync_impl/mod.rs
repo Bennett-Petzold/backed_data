@@ -1,5 +1,5 @@
 use std::{
-    ops::{Deref, DerefMut, Range},
+    ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
 
@@ -41,7 +41,7 @@ impl<K, E: BackedEntryContainerNested> BackedArray<K, E> {
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Returns the number of items currently loaded into memory.
     ///
     /// To get memory usage on constant-sized items, multiply this value by
@@ -51,22 +51,29 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArr
             .c_ref()
             .as_ref()
             .iter()
-            .zip(self.keys.c_ref().as_ref())
+            .zip(
+                self.key_starts
+                    .c_ref()
+                    .as_ref()
+                    .iter()
+                    .zip(self.key_ends.c_ref().as_ref()),
+            )
             .filter(|(ent, _)| ent.get_ref().is_loaded())
-            .map(|(_, key)| key.len())
+            .map(|(_, (start, end))| end - start)
             .sum()
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArray<K, E> {
+impl<K: Container<Data = usize>, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Removes all backing stores not needed to hold `idxs` in memory.
     pub fn shrink_to_query(&mut self, idxs: &[usize]) {
-        self.keys
+        self.key_starts
             .c_ref()
             .as_ref()
             .iter()
+            .zip(self.key_ends.c_ref().as_ref())
             .enumerate()
-            .filter(|(_, key)| !idxs.iter().any(|idx| key.contains(idx)))
+            .filter(|(_, (start, end))| !idxs.iter().any(|idx| (**start..**end).contains(idx)))
             .for_each(|(idx, _)| {
                 if let Some(mut v) = self.entries.c_get_mut(idx) {
                     open_mut!(v).unload();
@@ -77,7 +84,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArr
 
 /// Write implementations
 impl<
-        K: ResizingContainer<Data = Range<usize>>,
+        K: ResizingContainer<Data = usize>,
         E: BackedEntryContainerNestedWrite + ResizingContainer,
     > BackedArray<K, E>
 {
@@ -121,14 +128,9 @@ impl<
         let values = values.into();
 
         // End of a range is exclusive
-        let start_idx = self
-            .keys
-            .c_ref()
-            .as_ref()
-            .last()
-            .map(|key_range| key_range.end)
-            .unwrap_or(0);
-        self.keys.c_push(start_idx..(start_idx + values.c_len()));
+        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+        self.key_starts.c_push(start_idx);
+        self.key_ends.c_push(start_idx + values.c_len());
 
         let mut entry = BackedEntry::new(backing_store, coder);
         entry.write_unload(values)?;
@@ -173,14 +175,9 @@ impl<
         let values = values.into();
 
         // End of a range is exclusive
-        let start_idx = self
-            .keys
-            .c_ref()
-            .as_ref()
-            .last()
-            .map(|key_range| key_range.end)
-            .unwrap_or(0);
-        self.keys.c_push(start_idx..(start_idx + values.c_len()));
+        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+        self.key_starts.c_push(start_idx);
+        self.key_ends.c_push(start_idx + values.c_len());
         let mut entry = BackedEntry::new(backing_store, coder);
         entry.write(values)?;
         self.entries.c_push(entry.into());
@@ -188,55 +185,61 @@ impl<
     }
 }
 
-impl<
-        K: ResizingContainer<Data = Range<usize>>,
-        E: BackedEntryContainerNested + ResizingContainer,
-    > BackedArray<K, E>
+impl<K: ResizingContainer<Data = usize>, E: BackedEntryContainerNested + ResizingContainer>
+    BackedArray<K, E>
 {
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to identify the target index.
     pub fn remove(&mut self, entry_idx: usize) -> &mut Self {
-        // This split is necessary to solve lifetimes
-        let width = self.keys.c_get(entry_idx).map(|entry| entry.as_ref().len());
+        // Need a fn for nice ? syntax
+        let width = || {
+            let start = self.key_starts.c_get(entry_idx)?;
+            let start = start.as_ref();
+            let end = self.key_ends.c_get(entry_idx)?;
+            let end = end.as_ref();
+            Some(*end - *start)
+        };
+        let width = width();
 
         if let Some(width) = width {
-            self.keys.c_remove(entry_idx);
             self.entries.c_remove(entry_idx);
 
             // Shift all later ranges downwards
-            self.keys
-                .c_mut()
-                .as_mut()
-                .iter_mut()
-                .skip(entry_idx)
-                .for_each(|key_range| {
-                    key_range.start -= width;
-                    key_range.end -= width
-                });
+            let key_remove = |this: &mut K| {
+                this.c_remove(entry_idx);
+                this.c_mut()
+                    .as_mut()
+                    .iter_mut()
+                    .skip(entry_idx)
+                    .for_each(|key| {
+                        *key -= width;
+                    });
+            };
+            key_remove(&mut self.key_starts);
+            key_remove(&mut self.key_ends);
         }
 
         self
     }
 }
 
-impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArray<K, E> {
+impl<K: ResizingContainer<Data = usize>, E: ResizingContainer> BackedArray<K, E> {
     /// Move entries in `rhs` to [`self`].
     pub fn merge(&mut self, mut rhs: Self) -> &mut Self {
-        let offset = self.keys.c_ref().as_ref().last().unwrap_or(&(0..0)).end;
-        self.keys.extend(
-            rhs.keys
-                .c_ref()
-                .as_ref()
-                .iter()
-                .map(|range| (range.start + offset)..(range.end + offset)),
-        );
+        let offset = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+
+        let key_add =
+            |this: &mut K, rhs: K| this.extend(rhs.c_ref().as_ref().iter().map(|x| x + offset));
+
+        key_add(&mut self.key_starts, rhs.key_starts);
+        key_add(&mut self.key_ends, rhs.key_ends);
         self.entries.c_append(&mut rhs.entries);
         self
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedWrite> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedWrite> BackedArray<K, E>
 where
     K: From<Vec<K::Data>>,
     E: From<Vec<BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>>,
@@ -263,22 +266,24 @@ where
                 let len = x.c_len();
                 let mut entry = BackedEntry::new(disk.clone(), coder.clone());
                 entry.write(x)?;
-                let ret = (start..len, entry);
+                let ret = ((start, start + len), entry);
                 start += len;
                 Ok(ret)
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .unzip();
+        let (key_starts, key_ends): (Vec<_>, Vec<_>) = keys.into_iter().unzip();
 
         Ok(Self {
-            keys: keys.into(),
+            key_starts: key_starts.into(),
+            key_ends: key_ends.into(),
             entries: entries.into(),
         })
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedWrite> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedWrite> BackedArray<K, E>
 where
     K: From<Vec<K::Data>>,
     E: From<Vec<E::Data>>,
@@ -295,11 +300,21 @@ where
     /// incorrectly defined and may crash from an incorrect range address.
     pub unsafe fn from_backing<I>(iter: I) -> Self
     where
-        I: IntoIterator<Item = (Range<usize>, E::Data)>,
+        I: IntoIterator<Item = (usize, E::Data)>,
     {
+        let mut range_start = 0;
         let (keys, entries): (Vec<_>, Vec<_>) = iter.into_iter().unzip();
+        let (key_starts, key_ends): (Vec<_>, Vec<_>) = keys
+            .into_iter()
+            .map(|k| {
+                let prev_start = range_start;
+                range_start += k;
+                (k, prev_start)
+            })
+            .unzip();
         Self {
-            keys: keys.into(),
+            key_starts: key_starts.into(),
+            key_ends: key_ends.into(),
             entries: entries.into(),
         }
     }

@@ -1,4 +1,7 @@
-use std::{fmt::Debug, iter::FusedIterator, ops::Range};
+use std::{
+    fmt::Debug,
+    iter::{FusedIterator, Zip},
+};
 
 #[cfg(feature = "unsafe_array")]
 use std::{
@@ -22,7 +25,7 @@ use super::{
 };
 
 /// Read implementations
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E>
 where
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
@@ -31,8 +34,12 @@ where
     ///
     /// Backing arrays stay in memory until freed by a mutable function.
     pub fn get(&self, idx: usize) -> Result<&E::InnerData, BackedArrayError<E::ReadError>> {
-        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+        let loc = internal_idx(
+            self.key_starts.c_ref().as_ref(),
+            self.key_ends.c_ref().as_ref(),
+            idx,
+        )
+        .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
         let wrapped_container = &self.entries.as_ref()[loc.entry_idx];
         let backed_entry = BackedEntryContainer::get_ref(wrapped_container);
@@ -56,7 +63,7 @@ impl<'a, K, E> BackedArrayIter<'a, K, E> {
     }
 }
 
-impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Iterator
+impl<'a, K: Container<Data = usize>, E: BackedEntryContainerNestedRead> Iterator
     for BackedArrayIter<'a, K, E>
 where
     E: AsRef<[E::Data]>,
@@ -91,7 +98,7 @@ where
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> FusedIterator
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> FusedIterator
     for BackedArrayIter<'_, K, E>
 where
     E: AsRef<[E::Data]>,
@@ -108,7 +115,7 @@ where
 pub struct BackedArrayIterMut<'a, E: BackedEntryContainerNestedAll + 'a> {
     pos: usize,
     len: usize,
-    keys: Peekable<std::slice::Iter<'a, Range<usize>>>,
+    keys: Peekable<Zip<std::slice::Iter<'a, usize>, std::slice::Iter<'a, usize>>>,
     entries: std::slice::IterMut<'a, E::Data>,
     // TODO: Rewrite this to be a box of Once or MaybeUninit type
     // Problem with once types is that either a generic needs to be introduced,
@@ -134,14 +141,19 @@ where
 {
     fn new<K>(backed: &'a mut BackedArray<K, E>) -> Self
     where
-        K: AsRef<[Range<usize>]>,
+        K: AsRef<[usize]>,
     {
-        let keys = backed.keys.as_ref();
-
-        let len = keys.last().unwrap_or(&(0..0)).end;
+        let key_ends = backed.key_ends.as_ref();
+        let len = *key_ends.last().unwrap_or(&0);
         let mut handles = Vec::with_capacity(backed.chunks_len());
 
-        let keys = keys.iter().peekable();
+        let keys = backed
+            .key_starts
+            .as_ref()
+            .iter()
+            .zip(backed.key_ends.as_ref())
+            .peekable();
+
         let mut entries = backed.entries.as_mut().iter_mut();
 
         if let Some(entry) = entries.by_ref().next() {
@@ -213,7 +225,7 @@ where
         // This iterator only goes forward, so keys are not reused once
         // passed.
         while let Some(key) = self.keys.by_ref().peek() {
-            if key.end > self.pos {
+            if *key.1 > self.pos {
                 // Update to latest entry handle
                 break;
             }
@@ -221,7 +233,7 @@ where
             step_count += 1;
         }
 
-        let inner_pos = self.pos - self.keys.peek()?.start;
+        let inner_pos = self.pos - self.keys.peek()?.0;
         self.pos += 1; // Position advances, even on errors
 
         if step_count > 0 {
@@ -267,7 +279,7 @@ where
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E>
 where
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
@@ -278,7 +290,7 @@ where
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E>
 where
     E: AsRef<[E::Data]>,
 {
@@ -292,9 +304,9 @@ where
 }
 
 #[cfg(feature = "unsafe_array")]
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAll> BackedArray<K, E>
 where
-    K: AsRef<[Range<usize>]>,
+    K: AsRef<[usize]>,
     E: AsMut<[E::Data]>,
     E::Unwrapped: AsMut<[E::InnerData]>,
 {
@@ -310,7 +322,7 @@ where
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E>
+impl<K: Container<Data = usize>, E: BackedEntryContainerNestedAll> BackedArray<K, E>
 where
     E: AsMut<[E::Data]>,
 {
