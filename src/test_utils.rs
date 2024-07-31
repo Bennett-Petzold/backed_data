@@ -188,6 +188,12 @@ impl OwnedCursorVec<'_> {
     }
 }
 
+impl Default for OwnedCursorVec<'_> {
+    fn default() -> Self {
+        Self::new(Cursor::default())
+    }
+}
+
 /// This is deliberately breaking mutability
 impl ReadDisk for OwnedCursorVec<'_> {
     type ReadDisk = Cursor<Vec<u8>>;

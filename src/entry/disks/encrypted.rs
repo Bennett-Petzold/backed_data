@@ -13,7 +13,7 @@ use aes_gcm::{
     AeadCore, Aes256Gcm, KeyInit,
 };
 use secrets::{traits::Bytes, SecretBox, SecretVec};
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Serialize};
 use stable_deref_trait::StableDeref;
 
 use crate::utils::BorrowExtender;
@@ -21,13 +21,98 @@ use crate::utils::BorrowExtender;
 #[derive(Debug, Clone, Copy)]
 struct KeyNonce {
     key: [u8; 32],
-    nonce: [u8; 96],
+    nonce: [u8; 12],
 }
 
 unsafe impl Bytes for KeyNonce {}
 
+/// Wraps [`secrets::SecretVec`]. Implements Serialize and Deserialize, but
+/// serialization and deserialization leak information, so be careful. Using
+/// [`Encrypted`] as the backing store can make sure protection is kept during
+/// serialization, and the disk only sees encrypted data.
 #[derive(Debug)]
-struct SecretVecWrapper<T: Bytes>(secrets::SecretVec<T>);
+pub struct SecretVecWrapper<T: Bytes>(pub secrets::SecretVec<T>);
+
+#[derive(Debug)]
+struct SecretVecVisitor<T: Bytes> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T: Bytes> Default for SecretVecVisitor<T> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<'de, T: Bytes + Deserialize<'de>> Visitor<'de> for SecretVecVisitor<T> {
+    type Value = SecretVecWrapper<T>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            formatter,
+            "A sequence of T, representing the [T] wrapped by this type."
+        )
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        // Arbitrary default size to buffer with
+        const SIZE_GUESS: usize = 16;
+
+        let size_hint = seq.size_hint().unwrap_or(SIZE_GUESS);
+        let mut secret_vec = SecretVec::random(size_hint);
+
+        let mut filled_len = 0;
+        while let Some(next) = seq.next_element()? {
+            // Double capacity if it's been filled. Arbitrary growth pattern.
+            if filled_len >= secret_vec.len() {
+                if secret_vec.len() == usize::MAX {
+                    return Err(serde::de::Error::custom(
+                        "sequence length is above usize limit",
+                    ));
+                }
+                secret_vec = SecretVec::new(secret_vec.len().saturating_mul(2), |s| {
+                    s[..secret_vec.len()].copy_from_slice(&secret_vec.borrow())
+                });
+            }
+
+            SecretVec::borrow_mut(&mut secret_vec)[filled_len] = next;
+            filled_len += 1;
+        }
+
+        // Move/shrink to an exact capacity allocation.
+        if secret_vec.len() > filled_len {
+            secret_vec = SecretVec::new(filled_len, |s| {
+                s.copy_from_slice(&secret_vec.borrow()[..filled_len])
+            });
+        }
+
+        Ok(SecretVecWrapper(secret_vec))
+    }
+}
+
+impl<'de, T: Bytes + Deserialize<'de>> Deserialize<'de> for SecretVecWrapper<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(SecretVecVisitor::default())
+    }
+}
+
+impl<T: Bytes + Serialize> Serialize for SecretVecWrapper<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Serializes [T].
+        self.0.borrow().serialize(serializer)
+    }
+}
 
 /// [`secrets::SecretVec::borrow`] is backed by a Box pointer, and meets the
 /// [`StableDeref`] API requirements (all methods rely on this box pointer, or
@@ -41,10 +126,23 @@ impl<T: Bytes> Deref for SecretVecWrapper<T> {
     }
 }
 
+impl<T: Bytes> DerefMut for SecretVecWrapper<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Bytes, U: AsRef<[T]>> From<U> for SecretVecWrapper<T> {
+    fn from(value: U) -> Self {
+        let value = value.as_ref();
+        Self(SecretVec::new(value.len(), |s| s.copy_from_slice(value)))
+    }
+}
+
 #[derive(Debug)]
 struct SecretBoxRef<'a, T: Bytes>(secrets::secret_box::Ref<'a, T>);
 
-/// [`secrets::secret_vec::Ref`] is backed by a Box pointer, and meets the
+/// [`secrets::secret_box::Ref`] is backed by a Box pointer, and meets the
 /// [`StableDeref`] API requirements.
 unsafe impl<T: Bytes> StableDeref for SecretBoxRef<'_, T> {}
 
@@ -94,7 +192,7 @@ impl<B: AsRef<Path>> AsRef<Path> for Encrypted<'_, B> {
 unsafe impl<B: Send> Send for Encrypted<'_, B> {}
 unsafe impl<B: Sync> Sync for Encrypted<'_, B> {}
 
-impl<B: Bytes> Encrypted<'_, B> {
+impl<B> Encrypted<'_, B> {
     /// Create a new [`Encrypted`].
     ///
     /// # Parameters
@@ -104,7 +202,7 @@ impl<B: Bytes> Encrypted<'_, B> {
     pub fn new<K, N>(inner: B, key: Option<K>, nonce: Option<N>) -> Self
     where
         K: AsRef<[u8; 32]>,
-        N: AsRef<[u8; 96]>,
+        N: AsRef<[u8; 12]>,
     {
         Self {
             inner,
@@ -125,6 +223,11 @@ impl<B: Bytes> Encrypted<'_, B> {
         }
     }
 
+    /// To avoid explicit typing every time with [`Self::new`] and `None`s.
+    pub fn new_random(inner: B) -> Self {
+        Self::new::<Box<[u8; 32]>, Box<[u8; 12]>>(inner, None, None)
+    }
+
     pub fn set_key(&mut self, key: &SecretBox<[u8; 32]>) -> &mut Self {
         self.secrets
             .borrow_mut()
@@ -133,7 +236,7 @@ impl<B: Bytes> Encrypted<'_, B> {
         self
     }
 
-    pub fn set_nonce(&mut self, nonce: &SecretBox<[u8; 96]>) -> &mut Self {
+    pub fn set_nonce(&mut self, nonce: &SecretBox<[u8; 12]>) -> &mut Self {
         self.secrets
             .borrow_mut()
             .nonce
@@ -145,8 +248,23 @@ impl<B: Bytes> Encrypted<'_, B> {
         BorrowExtender::new(SecretBoxRef(self.secrets.borrow()), |secrets| secrets.key)
     }
 
-    pub fn get_nonce(&self) -> impl Deref<Target = [u8; 96]> + '_ {
+    pub fn get_nonce(&self) -> impl Deref<Target = [u8; 12]> + '_ {
         BorrowExtender::new(SecretBoxRef(self.secrets.borrow()), |secrets| secrets.nonce)
+    }
+}
+
+/// Beware, this generates a random key and nonce.
+impl From<Plainfile> for Encrypted<'_, Plainfile> {
+    fn from(value: Plainfile) -> Self {
+        Self::new::<Box<[u8; 32]>, Box<[u8; 12]>>(value, None, None)
+    }
+}
+
+/// Beware, this generates a random key and nonce.
+impl From<PathBuf> for Encrypted<'_, Plainfile> {
+    fn from(value: PathBuf) -> Self {
+        let value: Plainfile = value.into();
+        Self::from(value)
     }
 }
 
@@ -258,7 +376,7 @@ impl Buffer for SecretVecBuffer<'_> {
             .checked_add(other.len())
             .ok_or(aes_gcm::aead::Error)?;
         self.inner = SecretVec::new(new_len, |s| {
-            s.copy_from_slice(&self.inner.borrow());
+            s[..prev_len].copy_from_slice(&self.inner.borrow());
             s[prev_len..].copy_from_slice(other);
         });
         Ok(())
@@ -390,7 +508,7 @@ impl<'a, B: WriteDisk> WriteDisk for Encrypted<'a, B> {
 #[cfg(feature = "async")]
 pub use async_impl::*;
 
-use super::{ReadDisk, WriteDisk};
+use super::{Plainfile, ReadDisk, WriteDisk};
 #[cfg(feature = "async")]
 mod async_impl {
 
@@ -427,7 +545,7 @@ mod async_impl {
         ) -> Self
         where
             K: AsRef<[u8; 32]>,
-            N: AsRef<[u8; 96]>,
+            N: AsRef<[u8; 12]>,
         {
             Self {
                 sync: Encrypted::new(inner, key, nonce),
