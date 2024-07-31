@@ -47,12 +47,29 @@ impl<T, Disk> BackedArray<T, Disk> {
     pub fn new() -> Self {
         Self::default()
     }
-}
 
-impl<T, Disk> BackedArray<T, Disk> {
-    /// Move all backing arrays out of memory
+    /// Total size of stored data.
+    pub fn len(&self) -> usize {
+        self.keys.last().unwrap_or(&(0..0)).end
+    }
+
+    /// Number of underlying chunks.
+    pub fn chunks_len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
         self.entries.iter_mut().for_each(|entry| entry.unload());
+    }
+
+    /// Move the chunk at `idx` out of memory.
+    pub fn clear_chunk(&mut self, idx: usize) {
+        self.entries[idx].unload();
     }
 }
 
