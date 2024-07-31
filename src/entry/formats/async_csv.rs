@@ -47,7 +47,8 @@ pub enum QuoteStyleSerial {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuoteStyleWrapper(#[serde(with = "QuoteStyleSerial")] pub QuoteStyle);
 
-/// Unified [`csv_async::ReaderBuilder`] and [`csv_async::WriterBuilder`] configuration.
+/// Unified [`csv_async::AsyncReaderBuilder`] and
+/// [`csv_async::AsyncWriterBuilder`] configuration.
 ///
 /// # Fields
 /// * `comment`..=`trim`: Options from the builders, applied if set.

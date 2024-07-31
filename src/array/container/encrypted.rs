@@ -48,7 +48,7 @@ impl<T: Bytes> RefIter<T> for SecretVecWrapper<T> {
 #[derive(Debug)]
 pub struct SecretVecItemMut<'a, T: Bytes>(secrets::secret_vec::ItemMut<'a, T>);
 
-/// [`secrets::secret_vec::Mut`] is backed by a Box pointer, and meets the
+/// [`secrets::secret_vec::ItemMut`] is backed by a Box pointer, and meets the
 /// [`StableDeref`] API requirements.
 unsafe impl<T: Bytes> StableDeref for SecretVecItemMut<'_, T> {}
 
@@ -80,7 +80,7 @@ impl<T: Bytes> AsMut<T> for SecretVecItemMut<'_, T> {
 #[derive(Debug)]
 pub struct SecretVecRef<'a, T: Bytes>(secrets::secret_vec::Ref<'a, T>);
 
-/// [`secrets::secret_vec::Mut`] is backed by a Box pointer, and meets the
+/// [`secrets::secret_vec::ItemMut`] is backed by a Box pointer, and meets the
 /// [`StableDeref`] API requirements.
 unsafe impl<T: Bytes> StableDeref for SecretVecRef<'_, T> {}
 
@@ -100,7 +100,7 @@ impl<T: Bytes> AsRef<[T]> for SecretVecRef<'_, T> {
 #[derive(Debug)]
 pub struct SecretVecMut<'a, T: Bytes>(secrets::secret_vec::RefMut<'a, T>);
 
-/// [`secrets::secret_vec::Mut`] is backed by a Box pointer, and meets the
+/// [`secrets::secret_vec::RefMut`] is backed by a Box pointer, and meets the
 /// [`StableDeref`] API requirements.
 unsafe impl<T: Bytes> StableDeref for SecretVecMut<'_, T> {}
 

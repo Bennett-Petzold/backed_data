@@ -12,7 +12,7 @@ use super::{ReadDisk, WriteDisk};
 #[cfg(feature = "async")]
 use super::{AsyncReadDisk, AsyncWriteDisk};
 
-/// [`super::Plainfile`], but with no write buffering.
+/// [`Plainfile`](`super::Plainfile`), but with no write buffering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WriteUnbuffered {
     /// File location.

@@ -75,7 +75,7 @@ where
     type Coder = <T::Data as BackedEntryContainer>::Coder;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`](`super::container::BackedEntryContainerNested`) variant.
 ///
 /// For internal use, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedAsyncRead:
@@ -104,8 +104,6 @@ where
         <Self::Coder as AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk>>::Error;
 }
 
-/// [`BackedEntryContainerNested`] variant.
-///
 /// For internal use, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedAsyncWrite:
     BackedEntryContainerNestedAsync<
@@ -133,8 +131,6 @@ where
         <Self::Coder as AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk>>::Error;
 }
 
-/// [`BackedEntryContainerNested`] variant.
-///
 /// For internal use, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedAsyncAll:
     BackedEntryContainerNestedAsyncRead + BackedEntryContainerNestedAsyncWrite
@@ -208,7 +204,7 @@ where
     }
 }
 
-/// Write implementations
+// Write implementations
 impl<
         K: ResizingContainer<Data = usize>,
         E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,

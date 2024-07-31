@@ -41,7 +41,7 @@ where
 
 /// Iterates over a backed array, returning each item future in order.
 ///
-/// See [`BackedArrayFutIterSend`] for the Send + Sync version.
+/// See [`BackedArrayFutIterSend`] for the [`Send`] version.
 ///
 /// To keep an accurate size count, failed reads will not be retried.
 /// This will keep each disk loaded after pulling data from it.
@@ -52,10 +52,10 @@ pub struct BackedArrayFutIter<'a, K, E> {
     pos: usize,
 }
 
-/// [`BackedArrayFutIter`], but returns are `+ Send`.
+/// [`BackedArrayFutIter`], but returns are [`Send`].
 ///
 /// Since closure returns are anonymous, and Iterator requires a concrete type,
-/// the future is returned as a Box<dyn Future>. This strips type information,
+/// the future is returned as a [`Box<dyn Future>`]. This strips type information,
 /// so having a `+ Send` version requires a different return type than a
 /// `Send?` version.
 #[derive(Debug)]
@@ -208,8 +208,8 @@ where
 {
     /// Future iterator over each backed item.
     ///
-    /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
-    /// stream by default because [`Stream`] does not have the iterator methods
+    /// Can be converted to a [`Stream`](`futures::Stream`) with [`futures::stream::iter`]. This is not a
+    /// stream by default because [`Stream`](`futures::Stream`) does not have the iterator methods
     /// that allow efficient implementations.
     ///
     /// Use [`Self::stream_send`] for `+ Send` bounds.
@@ -244,8 +244,8 @@ where
 {
     /// Future iterator over each chunk.
     ///
-    /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
-    /// stream by default because [`Stream`] does not have the iterator methods
+    /// Can be converted to a [`Stream`](`futures::Stream`) with [`futures::stream::iter`]. This is not a
+    /// stream by default because [`Stream`](`futures::Stream`) does not have the iterator methods
     /// that allow efficient implementations.
     pub fn chunk_stream(
         &self,
