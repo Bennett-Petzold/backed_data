@@ -207,13 +207,13 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
     type BackingError = std::io::Error;
 
     /// Wraps [`BackedArray::remove`] to delete the file
-    async fn remove(&mut self, entry_idx: usize) -> Result<&Self, std::io::Error> {
+    async fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, std::io::Error> {
         remove_file(self.get_disks()[entry_idx].path.clone()).await?;
         self.array.remove(entry_idx);
         Ok(self)
     }
 
-    async fn append(&mut self, values: &[T]) -> bincode::Result<&Self> {
+    async fn append(&mut self, values: &[T]) -> bincode::Result<&mut Self> {
         self.array
             .append(
                 values,
@@ -229,7 +229,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
         Ok(self)
     }
 
-    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&Self> {
+    async fn append_memory(&mut self, values: Box<[T]>) -> bincode::Result<&mut Self> {
         self.array
             .append_memory(
                 values,
@@ -245,7 +245,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
         Ok(self)
     }
 
-    async fn append_array(&mut self, mut rhs: Self) -> Result<&Self, Self::BackingError> {
+    async fn append_array(&mut self, mut rhs: Self) -> Result<&mut Self, Self::BackingError> {
         rhs.move_root(self.directory_root.clone()).await?;
         self.array.append_array(rhs.array);
         Ok(self)
