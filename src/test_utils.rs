@@ -29,6 +29,12 @@ impl<'a> CursorVec<'a> {
 /// Creates a default [`CursorVec`] for testing.
 #[macro_export]
 macro_rules! cursor_vec {
+    ($x: ident, $peek: ident) => {
+        let mut inner = std::io::Cursor::default();
+        let $x = std::cell::UnsafeCell::new($crate::test_utils::CursorVec::new(&mut inner));
+        #[cfg(all(test, not(miri)))]
+        let $peek = unsafe { &*$x.get() }.get_ref();
+    };
     ($x: ident) => {
         let mut inner = std::io::Cursor::default();
         let $x = $crate::test_utils::CursorVec::new(&mut inner);
