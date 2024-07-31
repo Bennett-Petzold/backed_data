@@ -182,7 +182,6 @@ dependencies = [
  "futures",
  "humansize",
  "itertools 0.12.1",
- "lazy_static",
  "mmap",
  "num-traits",
  "pprof",

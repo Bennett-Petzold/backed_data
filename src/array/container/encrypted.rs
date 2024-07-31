@@ -229,6 +229,7 @@ pub type SecretBackedArray<'a, T, Disk, Coder> = BackedArray<
 >;
 
 #[cfg(test)]
+#[cfg(not(miri))]
 #[cfg(feature = "bincode")]
 mod tests {
     use std::{io::Cursor, sync::LazyLock};
@@ -301,7 +302,6 @@ mod tests {
     }
 
     // Miri can't handle the FFI calls
-    #[cfg(not(miri))]
     #[test]
     fn multiple_retrieve() {
         let mut array = SecretBackedArray::new();

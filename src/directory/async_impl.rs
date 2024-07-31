@@ -222,8 +222,7 @@ where
     ///
     /// # Return Tuple
     /// * 0: This backing array, wrapped in an Arc.
-    /// * 1: A function that rebuilds [`self`] from the Arc (fails if reference
-    /// is not unique).
+    /// * 1: A function that rebuilds [`self`] from the Arc (fails if reference is not unique).
     pub fn deconstruct(
         self,
     ) -> (
