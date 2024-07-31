@@ -8,7 +8,9 @@ use bincode::{deserialize_from, serialize_into};
 use derive_getters::Getters;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::entry::{BackedEntryArr, BackedEntryUnload};
+use crate::entry::{
+    BackedEntry, BackedEntryArr, BackedEntryMut, BackedEntryUnload, DiskOverwritable,
+};
 
 use super::{internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayError};
 
@@ -122,6 +124,13 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
             })
             .collect()
     }
+
+    /// Returns a reference to a particular underlying chunk.
+    ///
+    /// See [`Self::get_chunk_mut`] for a modifiable handle.
+    pub fn get_chunk(&mut self, idx: usize) -> Option<bincode::Result<&[T]>> {
+        self.entries.get_mut(idx).map(|arr| arr.load())
+    }
 }
 
 /// Write implementations
@@ -193,6 +202,18 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
         entry.write(values)?;
         self.entries.push(entry);
         Ok(self)
+    }
+}
+
+impl<T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritable>
+    BackedArray<T, Disk>
+{
+    /// Returns a mutable handle to a given chunk.
+    pub fn get_chunk_mut(
+        &mut self,
+        idx: usize,
+    ) -> Option<bincode::Result<BackedEntryMut<Box<[T]>, Disk>>> {
+        self.entries.get_mut(idx).map(|arr| arr.mut_handle())
     }
 }
 
@@ -296,16 +317,16 @@ impl<T, Disk> BackedArray<T, Disk> {
     }
 }
 
-/// Iterator over all stored items.
+/// Iterator over all underlying chunks.
 ///
-/// Keeps all loaded values in memory while alive.
+/// Keeps all loaded chunks in memory while alive.
 ///
 /// # Arguments
 /// * `pos`: Current position in chunks
-/// * `backed_entry`: The underlying array
+/// * `backed_array`: The underlying array
 pub struct BackedEntryChunkIter<'a, T, Disk> {
     pos: usize,
-    backed_entry: &'a mut BackedArray<T, Disk>,
+    backed_array: &'a mut BackedArray<T, Disk>,
 }
 
 impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIter<'a, T, Disk> {
@@ -315,12 +336,86 @@ impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIt
         // No GAT support, so we make do with pointers
         // The lifetimes work out, but the compiler doesn't know that
         let val_ptr: bincode::Result<*const [T]> = self
-            .backed_entry
+            .backed_array
             .entries
             .get_mut(self.pos)
             .map(move |x| x.load().map(|y| y as *const [T]))?;
         self.pos += 1;
         Some(val_ptr.map(|x| unsafe { &*x }))
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.pos += n;
+        self.next()
+    }
+}
+
+/// Iterator over that gives modifiable handles to all underlying chunks.
+///
+/// Keeps all loaded chunks in memory while alive.
+///
+/// # Arguments
+/// * `pos`: Current position in chunks
+/// * `backed_array`: The underlying array
+pub struct BackedEntryChunkModIter<'a, T, Disk> {
+    pos: usize,
+    backed_array: &'a mut BackedArray<T, Disk>,
+}
+
+impl<'a, T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritable> Iterator
+    for BackedEntryChunkModIter<'a, T, Disk>
+{
+    type Item = bincode::Result<BackedEntryMut<'a, Box<[T]>, Disk>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // No GAT support, so we make do with pointers
+        // The lifetimes work out, but the compiler doesn't know that
+        let entry_ptr = self
+            .backed_array
+            .entries
+            .get_mut(self.pos)
+            .map(move |x| x as *mut BackedEntry<Box<[T]>, Disk>)?;
+        let val = unsafe { (*entry_ptr).mut_handle() };
+        self.pos += 1;
+        Some(val)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.pos += n;
+        self.next()
+    }
+}
+
+/// Iterator that clones all chunks.
+///
+/// Each chunk is loaded for cloning, then immediately unloaded.
+///
+/// # Arguments
+/// * `pos`: Current position in chunks
+/// * `backed_array`: The underlying array
+pub struct BackedEntryDupIter<'a, T, Disk> {
+    pos: usize,
+    backed_array: &'a mut BackedArray<T, Disk>,
+}
+
+impl<'a, T: DeserializeOwned + Clone, Disk: Read + Seek> Iterator
+    for BackedEntryDupIter<'a, T, Disk>
+{
+    type Item = bincode::Result<Box<[T]>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let chunk = self
+            .backed_array
+            .get_chunk(self.pos)
+            .map(|res| res.map(|val| val.into()));
+
+        if let Some(ref res) = chunk {
+            if res.is_ok() {
+                self.pos += 1;
+            }
+        }
+
+        chunk
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -335,20 +430,20 @@ impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIt
 ///
 /// # Arguments
 /// * `inner_pos`: Current position inside chunk
-/// * `backed_entry`: The underlying array
+/// * `backed_array`: The underlying array
 /// * `chunk_iter`: [`BackedEntryChunkIter`] used to load backing values
 pub struct BackedEntryItemIter<'a, T, Disk> {
     inner_pos: usize,
-    backed_entry: Option<bincode::Result<&'a [T]>>,
+    backed_array: Option<bincode::Result<&'a [T]>>,
     chunk_iter: BackedEntryChunkIter<'a, T, Disk>,
 }
 
 impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> BackedEntryItemIter<'a, T, Disk> {
     fn new(inner_pos: usize, mut chunk_iter: BackedEntryChunkIter<'a, T, Disk>) -> Self {
-        let backed_entry = chunk_iter.next();
+        let backed_array = chunk_iter.next();
         Self {
             inner_pos,
-            backed_entry,
+            backed_array,
             chunk_iter,
         }
     }
@@ -365,7 +460,7 @@ impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
         // Also need to perform a secondary borrows inside a map
         let self_ptr: *mut Self = self;
         let val_ptr = self
-            .backed_entry
+            .backed_array
             .as_ref()
             .map(|entry| {
                 entry.as_ref().map(|loaded_entry| {
@@ -381,7 +476,7 @@ impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
                             // Mutating the backed entry,
                             // but the borrowed value is being discarded
                             unsafe {
-                                (*self_ptr).backed_entry = self.chunk_iter.next();
+                                (*self_ptr).backed_array = self.chunk_iter.next();
                             };
 
                             // Mutating self to call method again
@@ -407,7 +502,7 @@ impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
 
 // Iterator returns
 impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
-    /// Return a [`BackedEntryItemIter`] that returns items in order.
+    /// Return a [`BackedEntryItemIter`] that outputs items in order.
     ///
     /// # Arguments
     /// * `offset`: Starting position
@@ -424,12 +519,14 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
         BackedEntryItemIter::new(inner_pos, self.chunk_iter(outer_pos))
     }
 
-    /// Default for [`BackedEntryItemIter`]
+    /// Default for [`BackedEntryItemIter`].
+    ///
+    /// Starts at entry 0.
     pub fn item_iter_default(&mut self) -> BackedEntryItemIter<T, Disk> {
         self.item_iter(0)
     }
 
-    /// Return a [`BackedEntryChunkIter`] that returns underlying chunks
+    /// Return a [`BackedEntryChunkIter`] that outputs underlying chunks
     /// in order.
     ///
     /// # Arguments
@@ -437,19 +534,64 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
     pub fn chunk_iter(&mut self, offset: usize) -> BackedEntryChunkIter<T, Disk> {
         BackedEntryChunkIter {
             pos: offset,
-            backed_entry: self,
+            backed_array: self,
         }
     }
 
-    /// Default for [`BackedEntryChunkIter`]
+    /// Default for [`BackedEntryChunkIter`].
+    ///
+    /// Starts at chunk 0.
     pub fn chunk_iter_default(&mut self) -> BackedEntryChunkIter<T, Disk> {
         self.chunk_iter(0)
+    }
+}
+
+impl<T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritable>
+    BackedArray<T, Disk>
+{
+    /// Return a [`BackedEntryChunkModIter`] that provides mutable handles to
+    /// underlying chunks, using [`BackedEntryMut`].
+    ///
+    /// See [`Self::chunk_iter`] for the immutable iterator.
+    pub fn chunk_mod_iter(&mut self, offset: usize) -> BackedEntryChunkModIter<T, Disk> {
+        BackedEntryChunkModIter {
+            pos: offset,
+            backed_array: self,
+        }
+    }
+
+    /// Default for [`BackedEntryChunkModIter`].
+    ///
+    /// Starts at chunk 0.
+    pub fn chunk_mod_iter_default(&mut self) -> BackedEntryChunkModIter<T, Disk> {
+        self.chunk_mod_iter(0)
+    }
+}
+
+impl<T: DeserializeOwned + Clone, Disk: Read + Seek> BackedArray<T, Disk> {
+    /// Returns a [`BackedEntryDupIter`] that outputs clones of chunk data.
+    ///
+    /// See [`Self::chunk_iter`] for a version that produces references.
+    pub fn dup_iter(&mut self, offset: usize) -> BackedEntryDupIter<T, Disk> {
+        BackedEntryDupIter {
+            pos: offset,
+            backed_array: self,
+        }
+    }
+
+    /// Default for [`BackedEntryDupIter`].
+    ///
+    /// Starts at chunk 0.
+    pub fn dup_iter_default(&mut self) -> BackedEntryDupIter<T, Disk> {
+        self.dup_iter(0)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+
+    use crate::test_utils::CursorVec;
 
     use super::*;
 
@@ -567,5 +709,86 @@ mod tests {
         assert_eq!(collected[5], &7);
         assert_eq!(collected[2], &1);
         assert_eq!(collected.len(), 6);
+    }
+
+    #[test]
+    fn dup_iteration() {
+        let back_vector_0 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+
+        const INPUT_0: &[u8] = &[0, 1, 1];
+        const INPUT_1: &[u8] = &[2, 5, 7];
+
+        let mut backed = BackedArray::new();
+        backed.append(INPUT_0, back_vector_0).unwrap();
+        backed.append(INPUT_1, back_vector_1).unwrap();
+
+        let collected = backed
+            .dup_iter_default()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(collected[0].as_ref(), INPUT_0);
+        assert_eq!(collected[1].as_ref(), INPUT_1);
+        assert_eq!(collected.len(), 2);
+    }
+
+    #[test]
+    fn mod_iteration() {
+        const FIB: &[u8] = &[0, 1, 1, 5, 7];
+        const INPUT_1: &[u8] = &[2, 5, 7];
+
+        let mut back_vec_0 = CursorVec(Cursor::new(Vec::with_capacity(10)));
+        let back_vec_ptr_0: *mut CursorVec = &mut back_vec_0;
+        let mut back_vec_1 = CursorVec(Cursor::new(Vec::with_capacity(10)));
+        let back_vec_ptr_1: *mut CursorVec = &mut back_vec_1;
+
+        let backing_store_0 = back_vec_0.0.get_ref();
+        let backing_store_1 = back_vec_1.0.get_ref();
+
+        // Intentional unsafe access to later peek underlying storage
+        let mut backed = BackedArray::new();
+        unsafe {
+            backed.append(FIB, &mut *back_vec_ptr_0).unwrap();
+        }
+        assert_eq!(&backing_store_0[backing_store_0.len() - FIB.len()..], FIB);
+
+        // Intentional unsafe access to later peek underlying storage
+        unsafe {
+            backed.append(INPUT_1, &mut *back_vec_ptr_1).unwrap();
+        }
+        assert_eq!(
+            &backing_store_1[backing_store_1.len() - INPUT_1.len()..],
+            INPUT_1
+        );
+
+        let handle = backed.chunk_mod_iter_default();
+
+        let mut handle_vec = handle.collect::<Result<Vec<_>, _>>().unwrap();
+        handle_vec[0][0] = 20;
+        handle_vec[0][2] = 30;
+        handle_vec[1][0] = 40;
+
+        handle_vec[0].flush().unwrap();
+        handle_vec[1].flush().unwrap();
+        assert_eq!(backing_store_0[backing_store_0.len() - FIB.len()], 20);
+        assert_eq!(backing_store_0[backing_store_0.len() - FIB.len() + 2], 30);
+        assert_eq!(
+            backing_store_0[backing_store_0.len() - FIB.len() + 1],
+            FIB[1]
+        );
+        assert_eq!(backing_store_1[backing_store_1.len() - INPUT_1.len()], 40);
+        assert_eq!(
+            backing_store_1[backing_store_1.len() - INPUT_1.len() + 1],
+            INPUT_1[1]
+        );
+
+        drop(handle_vec);
+        assert_eq!(
+            backed
+                .item_iter_default()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            [&20, &1, &30, &5, &7, &40, &5, &7]
+        );
     }
 }
