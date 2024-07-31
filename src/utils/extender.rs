@@ -192,7 +192,7 @@ impl<T: StableDeref, V> BorrowExtender<T, Option<V>> {
 }
 
 #[derive(Debug)]
-pub(crate) struct NestDeref<A: StableDeref, B: StableDeref, C>(BorrowNest<A, B, C>);
+pub struct NestDeref<A: StableDeref, B: StableDeref, C>(BorrowNest<A, B, C>);
 
 impl<A: StableDeref, B: StableDeref, C> From<BorrowNest<A, B, C>> for NestDeref<A, B, C> {
     fn from(value: BorrowNest<A, B, C>) -> Self {

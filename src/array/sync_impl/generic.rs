@@ -107,7 +107,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> I
     for BackedArrayGenericIter<'a, K, E>
 {
     type Item = Result<
-        BorrowNest<E::Ref<'a>, &'a E::Unwrapped, <E::Unwrapped as Container>::Ref<'a>>,
+        NestDeref<E::Ref<'a>, &'a E::Unwrapped, <E::Unwrapped as Container>::Ref<'a>>,
         E::ReadError,
     >;
 
@@ -120,7 +120,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> I
         match self.backed.internal_get(self.pos) {
             Ok(val) => {
                 self.pos += 1;
-                Some(Ok(val))
+                Some(Ok(NestDeref::from(val)))
             }
             Err(e) => match e {
                 BackedArrayError::OutsideEntryBounds(_) => None,
@@ -493,8 +493,8 @@ mod tests {
             .generic_iter()
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        assert_eq!(**collected[5], 7);
-        assert_eq!(**collected[2], 1);
+        assert_eq!(*collected[5], 7);
+        assert_eq!(*collected[2], 1);
         assert_eq!(collected.len(), 6);
     }
 
@@ -556,7 +556,7 @@ mod tests {
         backed
             .generic_iter()
             .zip([20, 1, 30, 5, 7, 40, 5, 7])
-            .for_each(|(back, x)| assert_eq!(**back.unwrap(), x));
+            .for_each(|(back, x)| assert_eq!(*back.unwrap(), x));
     }
 
     #[test]

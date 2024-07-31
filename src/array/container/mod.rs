@@ -57,11 +57,7 @@ pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
 
 /// A [`Container`] that supports resizing operations.
 pub trait ResizingContainer:
-    Container
-    + Default
-    + FromIterator<Self::Data>
-    + IntoIterator<Item = Self::Data>
-    + Extend<Self::Data>
+    Container + Default + FromIterator<Self::Data> + Extend<Self::Data>
 {
     fn c_push(&mut self, value: Self::Data);
     fn c_remove(&mut self, index: usize);
