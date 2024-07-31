@@ -30,12 +30,23 @@ pub enum SwitchingMmap {
 }
 
 fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
-    File::options()
+    let f = File::options()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(path.as_ref())
+        .open(path.as_ref())?;
+
+    // Windows cannot handle an mmap of length zero, if the file is empty we
+    // need to give it some garbage to work with.
+    #[cfg(target_os = "windows")]
+    {
+        if f.metadata()?.len() == 0 {
+            f.set_len(1)?;
+        }
+    }
+
+    Ok(f)
 }
 
 impl SwitchingMmap {
