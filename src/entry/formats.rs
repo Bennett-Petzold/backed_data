@@ -1,8 +1,16 @@
 use std::io::{Read, Write};
 
-use super::sync_impl::{Decoder, Encoder};
+use serde::{Deserialize, Serialize};
 
-use serde::Serialize;
+pub trait Decoder<Source: Read> {
+    type Error: From<std::io::Error>;
+    fn decode<T: for<'de> Deserialize<'de>>(&self, source: &mut Source) -> Result<T, Self::Error>;
+}
+
+pub trait Encoder<Target: Write> {
+    type Error: From<std::io::Error>;
+    fn encode<T: Serialize>(&self, data: &T, target: &mut Target) -> Result<(), Self::Error>;
+}
 
 #[cfg(feature = "bincode")]
 pub use bincode_formats::*;

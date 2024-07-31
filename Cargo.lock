@@ -193,6 +193,7 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "mmap",
+ "num-traits",
  "pgp",
  "secrets",
  "serde",

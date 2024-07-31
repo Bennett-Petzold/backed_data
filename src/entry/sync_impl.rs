@@ -11,49 +11,11 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::utils::{Once, ToMut};
 
-use super::{BackedEntry, BackedEntryUnload};
-
-pub trait ReadDisk: Serialize + for<'de> Deserialize<'de> {
-    type ReadDisk: Read;
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk>;
-}
-
-pub trait WriteDisk: Serialize + for<'de> Deserialize<'de> {
-    type WriteDisk: Write;
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk>;
-}
-
-pub trait Decoder<Source: Read> {
-    type Error: From<std::io::Error>;
-    fn decode<T: for<'de> Deserialize<'de>>(&self, source: &mut Source) -> Result<T, Self::Error>;
-}
-
-pub trait Encoder<Target: Write> {
-    type Error: From<std::io::Error>;
-    fn encode<T: Serialize>(&self, data: &T, target: &mut Target) -> Result<(), Self::Error>;
-}
-
-impl ReadDisk for PathBuf {
-    type ReadDisk = BufReader<File>;
-
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(BufReader::new(File::open(self.clone())?))
-    }
-}
-
-impl WriteDisk for PathBuf {
-    type WriteDisk = BufWriter<File>;
-
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        Ok(BufWriter::new(
-            File::options()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(self.clone())?,
-        ))
-    }
-}
+use super::{
+    disks::{ReadDisk, WriteDisk},
+    formats::{Decoder, Encoder},
+    BackedEntry, BackedEntryUnload,
+};
 
 impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>>
     BackedEntry<T, Disk, Coder>
