@@ -14,7 +14,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::{
     internal_idx, multiple_internal_idx, sync_impl::BackedArray as SyncBackedArray,
-    BackedArrayError,
+    BackedArrayEntry, BackedArrayError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
@@ -39,12 +39,69 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     pub fn new() -> Self {
         Self::default()
     }
-}
 
-impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+    /// Total size of stored data.
+    pub fn len(&self) -> usize {
+        self.keys.last().unwrap_or(&(0..0)).end
+    }
+
+    /// Number of underlying chunks.
+    pub fn chunks_len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     /// Move all backing arrays out of memory
     pub fn clear_memory(&mut self) {
         self.entries.iter_mut().for_each(|entry| entry.unload());
+    }
+
+    /// Move the chunk at `idx` out of memory.
+    pub fn clear_chunk(&mut self, idx: usize) {
+        self.entries[idx].unload();
+    }
+
+    /// Returns all backing entries and the range they cover.
+    pub fn backed_array_entries(
+        &self,
+    ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntryAsync<Box<[T]>, Disk>>> {
+        self.keys
+            .iter()
+            .zip(self.entries.iter())
+            .map(BackedArrayEntry::from)
+    }
+
+    /// Returns all currently loaded backing entries and the range they cover.
+    pub fn loaded_array_entries(
+        &self,
+    ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntryAsync<Box<[T]>, Disk>>> {
+        self.backed_array_entries().filter(
+            |backed: &BackedArrayEntry<'_, BackedEntryAsync<Box<[T]>, Disk>>| {
+                backed.entry.is_loaded()
+            },
+        )
+    }
+
+    /// Returns the number of items currently loaded into memory.
+    ///
+    /// To get memory usage on constant-sized items, multiply this value by
+    /// the per-item size.
+    pub fn loaded_len(&self) -> usize {
+        self.loaded_array_entries()
+            .map(|backed| backed.range.len())
+            .sum()
+    }
+
+    /// Removes all backing stores not needed to hold `idxs` in memory.
+    pub fn shrink_to_query(&mut self, idxs: &[usize]) {
+        self.keys
+            .iter()
+            .enumerate()
+            .filter(|(_, key)| !idxs.iter().any(|idx| key.contains(idx)))
+            .for_each(|(idx, _)| self.entries[idx].unload());
     }
 }
 
