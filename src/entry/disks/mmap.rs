@@ -544,7 +544,11 @@ impl MmapWriter {
     /// Extend the underlying file to fit `buf_len` new bytes.
     fn reserve_for(&mut self, buf_len: usize) -> std::io::Result<()> {
         // 8 KiB, matching capacity for `std::io::BufWriter` as of 1.8.0.
+        #[cfg(not(target_os = "windows"))]
         const MIN_RESERVE_LEN: usize = 8 * 1024;
+
+        #[cfg(target_os = "windows")]
+        const MIN_RESERVE_LEN: usize = 1;
 
         let remaining_len = self.reserved_len - self.written_len;
         if buf_len > remaining_len {
