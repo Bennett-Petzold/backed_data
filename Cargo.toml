@@ -40,6 +40,12 @@ async-trait = { version = "0.1.79", optional = true }
 [dev-dependencies]
 # Add macros for [tokio::test]
 tokio = { version = "1.37.0", features = ["rt", "io-util", "fs", "macros"] }
+criterion = { version = "0.4", features = ["html_reports"] }
+rand = "0.8.5"
+
+[[bench]]
+name = "io_bench"
+harness = false
 
 # Profile to use for squeezing max performance
 [profile.full-perf]
