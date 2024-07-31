@@ -97,7 +97,7 @@ impl<K, E: Container> BackedArray<K, E> {
     }
 }
 
-impl<K, E: for<'c> BackedEntryContainerNested<'c>> BackedArray<K, E> {
+impl<K, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
         self.entries.as_mut().iter_mut().for_each(|entry| {
@@ -115,10 +115,7 @@ impl<K, E: for<'c> BackedEntryContainerNested<'c>> BackedArray<K, E> {
     }
 }
 
-/*
-impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNested<'c>>
-    BackedArray<K, E>
-{
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Returns the number of items currently loaded into memory.
     ///
     /// To get memory usage on constant-sized items, multiply this value by
@@ -134,9 +131,7 @@ impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNested<'c
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNested<'c>>
-    BackedArray<K, E>
-{
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArray<K, E> {
     /// Removes all backing stores not needed to hold `idxs` in memory.
     pub fn shrink_to_query(&mut self, idxs: &[usize]) {
         self.keys
@@ -153,13 +148,14 @@ impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNested<'c
 }
 
 /// Read implementations
-impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNestedRead<'c>>
-    BackedArray<K, E>
-{
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
     /// Return a value (potentially loading its backing array).
     ///
     /// Backing arrays stay in memory until freed.
-    pub fn get<'a>(&'a self, idx: usize) -> Result<E::DataRef<'a>, BackedArrayError<E::ReadError>> {
+    pub fn get(
+        &self,
+        idx: usize,
+    ) -> Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::ReadError>> {
         let loc = internal_idx(self.keys.as_ref(), idx)
             .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
@@ -187,7 +183,7 @@ impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNestedRea
     pub fn get_multiple<'a, I>(
         &'a self,
         idxs: I,
-    ) -> impl Iterator<Item = impl AsRef<E::InnerData> + '_>
+    ) -> impl Iterator<Item = <E::Unwrapped as Container>::Ref<'_>>
     where
         I: IntoIterator<Item = usize> + 'a,
     {
@@ -206,7 +202,7 @@ impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNestedRea
     pub fn get_multiple_strict<'a, I>(
         &'a self,
         idxs: I,
-    ) -> impl Iterator<Item = Result<impl AsRef<E::InnerData> + '_, BackedArrayError<E::ReadError>>>
+    ) -> impl Iterator<Item = Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::ReadError>>>
     where
         I: IntoIterator<Item = usize> + Clone + 'a,
     {
@@ -372,7 +368,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Backed
 
 impl<
         K: ResizingContainer<Data = Range<usize>>,
-        E: for<'c> BackedEntryContainerNested<'c> + ResizingContainer,
+        E: BackedEntryContainerNested + ResizingContainer,
     > BackedArray<K, E>
 {
     /// Removes an entry with the internal index, shifting ranges.
@@ -401,7 +397,7 @@ impl<
     }
 }
 
-impl<K: Serialize, E: BackedEntryContainerNested<'_> + Serialize> BackedArray<K, E> {
+impl<K: Serialize, E: BackedEntryContainerNested + Serialize> BackedArray<K, E> {
     /// Serializes this to disk after clearing all entries from memory to disk.
     ///
     /// Writing directly from serialize wastes disk space and increases load
@@ -439,7 +435,7 @@ impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArra
 
 /// Returns the next valid location, if any.
 ///
-/// Result::Err on a load violation, None when past all entries
+/// Result::Err on a load violation, None when past all entries.
 fn step_loc<E: BackedEntryContainerNestedRead>(
     entries: &E,
     mut loc: ArrayLoc, // position inside entries
@@ -467,6 +463,11 @@ fn step_loc<E: BackedEntryContainerNestedRead>(
     }
 }
 
+/// Iterates over a backed array, returning each item in order.
+///
+/// To keep an accurate size count, failed reads will not be retried.
+/// This will keep each disk loaded after pulling data from it.
+/// Stepping by > 1 with `nth` implementation may skip loading a disk.
 #[derive(Debug)]
 pub struct BackedArrayIter<'a, K, E> {
     backed: &'a BackedArray<K, E>,
@@ -485,6 +486,11 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> I
     type Item = Result<<E::Unwrapped as Container>::Ref<'a>, E::ReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.nth(0)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.pos += n;
         match self.backed.get(self.pos) {
             Ok(val) => {
                 self.pos += 1;
@@ -501,17 +507,8 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> I
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        /*
-        let remaining = if let Some(entry_loc) = &self.entry_loc {
-            let cur_pos =
-                entry_loc.inside_entry_idx + self.backed.keys.as_ref()[entry_loc.entry_idx].start;
-            self.backed.len() - cur_pos
-        } else {
-            0
-        };
+        let remaining = self.backed.len() - self.pos;
         (remaining, Some(remaining))
-        */
-        (0, None)
     }
 }
 
@@ -520,195 +517,110 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Fused
 {
 }
 
-impl<K: Container<Data = Range<usize>>, E: for<'c> BackedEntryContainerNested<'c>>
-    BackedArray<K, E>
-{
-    /// Provides a [`BackedArrayIter`] over backed data.
-    ///
-    /// # Arguments
-    /// * `offset`: Starting position
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
+    /// Provides a [`BackedArrayIter`] over each backed item.
     pub fn item_iter(&self) -> BackedArrayIter<'_, K, E> {
         BackedArrayIter::new(self)
     }
 
-    /*
     /// Returns underlying chunks in order.
     ///
     /// All chunks loaded earlier in the iteration will remain loaded.
-    ///
-    /// # Arguments
-    /// * `offset`: Starting chunk (skips loading offset - 1 chunks)
-    pub fn chunk_iter(
-        &mut self,
-        offset: usize,
-    ) -> impl Iterator<Item = bincode::Result<impl AsRef<[T]> + '_>> {
-        self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
-            let entry: *mut _ = entry.get_mut().as_mut();
-            unsafe { &mut *entry }.load().map(|entry| entry)
-        })
+    pub fn chunk_iter(&mut self) -> impl Iterator<Item = Result<&E::Unwrapped, E::ReadError>> {
+        self.entries.as_ref().iter().map(|arr| arr.get_ref().load())
     }
-    */
 }
-*/
 
-/*
-impl<
-        T: Serialize + DeserializeOwned,
-        Disk: ReadDisk + WriteDisk,
-        Coder,
-        K: Container<Data = Range<usize>>,
-        E: Container<Data = BackedEntryArr<Coder>>,
-    > BackedArray<K, E>
-{
+impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E> {
     /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
     ///
     /// See [`Self::chunk_iter`] for the immutable iterator.
-    pub fn chunk_mod_iter(
+    pub fn chunk_mut_iter(
         &mut self,
-        offset: usize,
     ) -> impl Iterator<
-        Item = bincode::Result<
-            BackedEntryMut<Box<[T]>, Disk, impl AsRefMut<BackedEntry<Box<[T]>, Disk>> + '_>,
+        Item = Result<
+            BackedEntryMut<'_, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>,
+            E::ReadError,
         >,
     > {
-        self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
-            let entry: *mut _ = entry.get_mut().as_mut();
-            unsafe { &mut *entry }.mut_handle()
-        })
+        self.entries
+            .as_mut()
+            .iter_mut()
+            .map(|arr| arr.get_mut().mut_handle())
     }
 }
 
-impl<
-        T: DeserializeOwned + Clone,
-        Disk: ReadDisk,
-        Coder,
-        K: Container<Data = Range<usize>>,
-        E: Container<Data = BackedEntryArr<Coder>>,
-    > BackedArray<K, E>
-{
-    /// Returns an iterator that outputs clones of chunk data.
-    ///
-    /// See [`Self::chunk_iter`] for a version that produces references.
-    pub fn dup_iter(
-        &mut self,
-        offset: usize,
-    ) -> impl Iterator<Item = bincode::Result<Vec<T>>> + '_ {
-        self.entries.as_mut().iter_mut().skip(offset).map(|entry| {
-            let mut entry = entry.get_mut();
-            let entry = entry.as_mut();
-            let val = entry.load()?.to_vec();
-            entry.unload();
-            Ok(val)
-        })
-    }
-}
-
-impl<
-
-        Coder,
-        K: ResizingContainer<Data = Range<usize>>,
-        E: ResizingContainer<Data = BackedEntryArr<Coder>>,
-    > BackedArray<K, E>
-{
+impl<K: ResizingContainer<Data = Range<usize>>, E: ResizingContainer> BackedArray<K, E> {
     /// Construct a backed array from entry range, backing storage pairs.
     ///
-    /// Not recommended for use outside of VecBackedArray wrappers.
     /// If ranges do not correspond to the entry arrays, the resulting
-    /// [`VecBackedArray`] will be invalid.
-    pub fn from_pairs<I>(pairs: I) -> Self
+    /// [`BackedArray`] will be invalid.
+    pub fn from_pairs<I, U>(pairs: I) -> Self
     where
-        I: IntoIterator<Item = (Range<usize>, BackedEntry<Box<[T]>, Disk>)>,
+        I: IntoIterator<Item = (Range<usize>, U)>,
+        U: Into<E::Data>,
     {
         let (keys, entries): (_, Vec<_>) = pairs.into_iter().unzip();
-        let entries = entries.into_iter().map(|ent| E::Data::wrap(ent)).collect();
-        Self {
-            keys,
-            entries,
-            _phantom: (PhantomData, PhantomData),
-        }
+        let entries = entries.into_iter().map(U::into).collect();
+        Self { keys, entries }
     }
 }
 
-impl<
-
-        Coder,
-        K: Container<Data = Range<usize>>,
-        E: ResizingContainer<Data = BackedEntryArr<Coder>>,
-    > BackedArray<K, E>
-{
-    /// Replaces the underlying entry disk.
-    ///
-    /// Not recommended for use outside of VecBackedArray wrappers.
-    /// If ranges do not correspond to the entry arrays, the resulting
-    /// [`VecBackedArray`] will be invalid.
-    pub fn replace_disk<OtherDisk>(self) -> BackedArray< OtherDisk, K, E>
-    where
-        OtherDisk: for<'de> Deserialize<'de>,
-        Disk: Into<OtherDisk>,
-        BackedEntryArr< OtherDisk>: Into<BackedEntryArr< Disk>>,
-    {
-        BackedArray::< OtherDisk, K, E> {
-            keys: self.keys,
-            entries: self
-                .entries
-                .into_iter()
-                .map(|x| E::Data::wrap(x.inner().replace_disk().into()))
-                .collect(),
-            _phantom: (PhantomData, PhantomData),
-        }
-    }
-}
-*/
-
-/*
 #[cfg(test)]
+#[cfg(feature = "bincode")]
 mod tests {
     use std::io::Cursor;
 
-    use crate::test_utils::CursorVec;
+    use itertools::Itertools;
+
+    use crate::{entry::formats::BincodeCoder, test_utils::CursorVec};
 
     use super::*;
 
     #[test]
     fn multiple_retrieve() {
+        let mut back_vector_0 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_0 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_0),
         };
+        let mut back_vector_1 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_1 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_1),
         };
 
         const INPUT_0: [u8; 3] = [0, 1, 1];
         const INPUT_1: [u8; 3] = [2, 3, 5];
 
         let mut backed = VecBackedArray::new();
-        backed.append(INPUT_0, back_vector_0).unwrap();
-        backed.append_memory(INPUT_1, back_vector_1).unwrap();
+        backed
+            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .unwrap();
+        backed
+            .append_memory(INPUT_1, back_vector_1, BincodeCoder {})
+            .unwrap();
 
-        assert_eq!(backed.get(0).unwrap(), &0);
-        assert_eq!(backed.get(4).unwrap(), &3);
-        assert_eq!((backed.get(0).unwrap(), backed.get(4).unwrap()), (&0, &3));
+        assert_eq!(backed.get(0).unwrap().as_ref(), &0);
+        assert_eq!(backed.get(4).unwrap().as_ref(), &3);
         assert_eq!(
-            backed
-                .get_multiple([0, 2, 4, 5])
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap(),
+            (
+                backed.get(0).unwrap().as_ref(),
+                backed.get(4).unwrap().as_ref()
+            ),
+            (&0, &3)
+        );
+
+        assert_eq!(
+            backed.get_multiple([0, 2, 4, 5]).collect_vec(),
             [&0, &1, &3, &5]
         );
         assert_eq!(
-            backed
-                .get_multiple([5, 2, 0, 5])
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap(),
+            backed.get_multiple([5, 2, 0, 5]).collect_vec(),
             [&5, &1, &0, &5]
         );
         assert_eq!(
             backed
                 .get_multiple_strict([5, 2, 0, 5])
-                .into_iter()
-                .collect::<Result<Vec<_>, BackedArrayError>>()
+                .collect::<Result<Vec<_>, _>>()
                 .unwrap(),
             [&5, &1, &0, &5]
         );
@@ -716,56 +628,49 @@ mod tests {
 
     #[test]
     fn out_of_bounds_access() {
+        let mut back_vector = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector),
         };
 
         const INPUT: &[u8] = &[0, 1, 1];
 
         let mut backed = VecBackedArray::new();
-        backed.append(INPU back_vector).unwrap();
+        backed.append(INPUT, back_vector, BincodeCoder {}).unwrap();
 
         assert!(backed.get(0).is_ok());
         assert!(backed.get(10).is_err());
         assert!(backed
             .get_multiple_strict([0, 10])
-            .into_iter()
-            .collect::<Result<Vec<_>, BackedArrayError>>()
+            .collect::<Result<Vec<_>, _>>()
             .is_err());
-        assert_eq!(
-            backed
-                .get_multiple([0, 10])
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(backed
-            .get_multiple([20, 10])
-            .into_iter()
-            .collect::<bincode::Result<Vec<_>>>()
-            .unwrap()
-            .is_empty());
+        assert_eq!(backed.get_multiple([0, 10]).count(), 1);
+        assert!(backed.get_multiple([20, 10]).next().is_none());
     }
 
     #[test]
     fn chunk_iteration() {
+        let mut back_vector_0 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_0 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_0),
         };
+        let mut back_vector_1 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_1 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_1),
         };
 
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
         let mut backed = VecBackedArray::new();
-        backed.append(INPUT_0, back_vector_0).unwrap();
-        backed.append(INPUT_1, back_vector_1).unwrap();
+        backed
+            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .unwrap();
+        backed
+            .append(INPUT_1, back_vector_1, BincodeCoder {})
+            .unwrap();
 
-        let collected = backed.chunk_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
+        let collected = backed.chunk_iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(collected[0].as_ref(), INPUT_0);
         assert_eq!(collected[1].as_ref(), INPUT_1);
         assert_eq!(collected.len(), 2);
@@ -773,45 +678,29 @@ mod tests {
 
     #[test]
     fn item_iteration() {
+        let mut back_vector_0 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_0 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_0),
         };
+        let mut back_vector_1 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_1 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_1),
         };
 
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
         let mut backed = VecBackedArray::new();
-        backed.append(INPUT_0, back_vector_0).unwrap();
-        backed.append(INPUT_1, back_vector_1).unwrap();
-        let collected = backed.item_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
+        backed
+            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .unwrap();
+        backed
+            .append(INPUT_1, back_vector_1, BincodeCoder {})
+            .unwrap();
+        let collected = backed.item_iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(collected[5], &7);
         assert_eq!(collected[2], &1);
         assert_eq!(collected.len(), 6);
-    }
-
-    #[test]
-    fn dup_iteration() {
-        let back_vector_0 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
-        };
-        let back_vector_1 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
-        };
-
-        const INPUT_0: &[u8] = &[0, 1, 1];
-        const INPUT_1: &[u8] = &[2, 5, 7];
-
-        let mut backed = VecBackedArray::new();
-        backed.append(INPUT_0, back_vector_0).unwrap();
-        backed.append(INPUT_1, back_vector_1).unwrap();
-
-        let collected = backed.dup_iter(0).collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(collected[0], INPUT_0);
-        assert_eq!(collected[1], INPUT_1);
-        assert_eq!(collected.len(), 2);
     }
 
     #[test]
@@ -819,35 +708,41 @@ mod tests {
         const FIB: &[u8] = &[0, 1, 1, 5, 7];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
+        let mut back_vec_0 = Cursor::new(Vec::new());
         let mut back_vec_0 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(10)),
+            inner: Mutex::new(&mut back_vec_0),
         };
         let back_vec_ptr_0: *mut CursorVec = &mut back_vec_0;
+        let mut back_vec_1 = Cursor::new(Vec::new());
         let mut back_vec_1 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(10)),
+            inner: Mutex::new(&mut back_vec_1),
         };
         let back_vec_ptr_1: *mut CursorVec = &mut back_vec_1;
 
-        let backing_store_0 = back_vec_0.inner.get_ref();
-        let backing_store_1 = back_vec_1.inner.get_ref();
+        let backing_store_0 = back_vec_0.get_ref();
+        let backing_store_1 = back_vec_1.get_ref();
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed = VecBackedArray::new();
         unsafe {
-            backed.append(FIB, &mut *back_vec_ptr_0).unwrap();
+            backed
+                .append(FIB, &mut *back_vec_ptr_0, BincodeCoder {})
+                .unwrap();
         }
         assert_eq!(&backing_store_0[backing_store_0.len() - FIB.len()..], FIB);
 
         // Intentional unsafe access to later peek underlying storage
         unsafe {
-            backed.append(INPUT_1, &mut *back_vec_ptr_1).unwrap();
+            backed
+                .append(INPUT_1, &mut *back_vec_ptr_1, BincodeCoder {})
+                .unwrap();
         }
         assert_eq!(
             &backing_store_1[backing_store_1.len() - INPUT_1.len()..],
             INPUT_1
         );
 
-        let handle = backed.chunk_mod_iter(0);
+        let handle = backed.chunk_mut_iter();
 
         let mut handle_vec = handle.collect::<Result<Vec<_>, _>>().unwrap();
         handle_vec[0][0] = 20;
@@ -870,26 +765,32 @@ mod tests {
 
         drop(handle_vec);
         assert_eq!(
-            backed.item_iter(0).collect::<Result<Vec<_>, _>>().unwrap(),
+            backed.item_iter().collect::<Result<Vec<_>, _>>().unwrap(),
             [&20, &1, &30, &5, &7, &40, &5, &7]
         );
     }
 
     #[test]
     fn length_checking() {
+        let mut back_vector_0 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_0 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_0),
         };
+        let mut back_vector_1 = &mut Cursor::new(Vec::with_capacity(3));
         let back_vector_1 = CursorVec {
-            inner: &mut Cursor::new(Vec::with_capacity(3)),
+            inner: Mutex::new(&mut back_vector_1),
         };
 
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
         let mut backed = VecBackedArray::new();
-        backed.append(INPUT_0, back_vector_0).unwrap();
-        backed.append_memory(INPUT_1, back_vector_1).unwrap();
+        backed
+            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .unwrap();
+        backed
+            .append_memory(INPUT_1, back_vector_1, BincodeCoder {})
+            .unwrap();
 
         assert_eq!(backed.len(), 6);
         assert_eq!(backed.loaded_len(), 3);
@@ -901,11 +802,7 @@ mod tests {
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_chunk(0);
         assert_eq!(backed.loaded_len(), 0);
-        backed
-            .get_multiple([0, 4])
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        backed.get_multiple([0, 4]).collect_vec();
         assert_eq!(backed.loaded_len(), 6);
         backed.shrink_to_query(&[4]);
         assert_eq!(backed.loaded_len(), 3);
@@ -913,4 +810,3 @@ mod tests {
         assert_eq!(backed.loaded_len(), 0);
     }
 }
-*/
