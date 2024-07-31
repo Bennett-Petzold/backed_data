@@ -3,14 +3,20 @@
 use std::{path::Path, time::Duration};
 
 use backed_data::{
-    directory::StdDirBackedArray,
-    entry::formats::{BincodeCoder, CsvCoder},
+    directory::{DirectoryBackedArray, StdDirBackedArray},
+    entry::{formats::BincodeCoder, BackedEntryArr},
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 
 #[cfg(feature = "zstd")]
 use backed_data::directory::ZstdDirBackedArray;
+
+#[cfg(feature = "csv")]
+use backed_data::entry::formats::CsvCoder;
+
+#[cfg(feature = "mmap")]
+use backed_data::entry::disks::Mmap;
 
 #[cfg(feature = "async")]
 use backed_data::directory::AsyncStdDirBackedArray;
@@ -89,6 +95,17 @@ async fn a_create_csv_with_header<P: AsRef<Path>>(
 #[cfg(feature = "csv")]
 create_fn!(parallel create_csv_par, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
 
+#[cfg(feature = "mmap")]
+create_fn!(
+    create_mmap,
+    DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>>,
+);
+#[cfg(feature = "mmap")]
+create_fn!(
+    parallel create_mmap_par,
+    DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>>,
+);
+
 #[cfg(feature = "async_bincode")]
 create_fn!(async create_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<Box<[u8]>>>,);
 #[cfg(feature = "async_bincode")]
@@ -113,6 +130,11 @@ read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder<_>
 read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder<_>>);
 #[cfg(feature = "csv")]
 read_dir!(read_csv, StdDirBackedArray<U8Wrapper, CsvCoder<_, _>>);
+#[cfg(feature = "mmap")]
+read_dir!(
+    read_mmap,
+    DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>>
+);
 
 #[cfg(feature = "async_bincode")]
 read_dir!(async read_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<_>>);
@@ -193,6 +215,26 @@ fn file_creation_benches(c: &mut Criterion) {
         )
     });
     log_created_size(&mut path_cell, "Parallel CSV");
+
+    #[cfg(feature = "mmap")]
+    group.bench_function("create_mmap", |b| {
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_mmap(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    log_created_size(&mut path_cell, "mmap");
+
+    #[cfg(feature = "mmap")]
+    group.bench_function("create_mmap_parallel", |b| {
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_mmap_par(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    log_created_size(&mut path_cell, "Parallel mmap");
 
     #[cfg(feature = "async")]
     {
@@ -307,6 +349,14 @@ fn file_load_benches(c: &mut Criterion) {
         {
             let path = create_files(create_csv_with_header);
             group.bench_function("load_csv", |b| b.iter(|| black_box(read_csv(&path))));
+        }
+    }
+
+    #[cfg(feature = "mmap")]
+    {
+        {
+            let path = create_files(create_mmap);
+            group.bench_function("load_mmap", |b| b.iter(|| black_box(read_mmap(&path))));
         }
     }
 

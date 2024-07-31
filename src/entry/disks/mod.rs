@@ -58,6 +58,11 @@ mod network;
 #[cfg(feature = "network")]
 pub use network::{default_client, Network};
 
+#[cfg(feature = "mmap")]
+mod mmap;
+#[cfg(feature = "mmap")]
+pub use mmap::Mmap;
+
 #[cfg(runtime)]
 mod async_file;
 #[cfg(runtime)]

@@ -13,8 +13,10 @@ use stable_deref_trait::StableDeref;
 /// referenced value from a function.
 #[derive(Debug)]
 pub struct BorrowExtender<T: StableDeref, U> {
-    _parent: T,
+    // This drops first (Rust RFC #1857)
     child: U,
+    // This drops second (Rust RFC #1857)
+    _parent: T,
 }
 
 unsafe impl<T: StableDeref, U: StableDeref> StableDeref for BorrowExtender<T, U> {}
