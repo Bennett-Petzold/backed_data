@@ -11,9 +11,6 @@ use super::{ReadDisk, WriteDisk};
 #[cfg(feature = "async")]
 use super::{AsyncReadDisk, AsyncWriteDisk};
 
-#[cfg(feature = "async")]
-use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-
 /// A regular file entry.
 ///
 /// This is used to open a [`File`] on demand, but drop the handle when unused.

@@ -3,20 +3,23 @@ use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt::{Debug, Display},
-    io::{BufRead, Write},
     marker::PhantomData,
     ops::Deref,
     path::{Path, PathBuf},
 };
-use zstd::{Decoder, Encoder};
+
+#[cfg(feature = "zstd")]
+use {
+    super::{ReadDisk, WriteDisk},
+    std::io::{BufRead, Write},
+    zstd::{Decoder, Encoder},
+};
 
 #[cfg(feature = "async_zstd")]
-use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
-
-use super::{ReadDisk, WriteDisk};
-
-#[cfg(feature = "async_zstd")]
-use futures::io::AsyncBufRead;
+use {
+    crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk},
+    futures::io::AsyncBufRead,
+};
 
 #[cfg(feature = "async_zstdmt")]
 use async_compression::zstd::CParameter;
@@ -169,10 +172,12 @@ impl<'a, const ZSTD_LEVEL: u8, B: ReadDisk<ReadDisk: BufRead>> ReadDisk
     }
 }
 
+#[cfg(feature = "zstd")]
 pub struct ZstdEncoderWrapper<'a, T: Write> {
     encoder: Encoder<'a, T>,
 }
 
+#[cfg(feature = "zstd")]
 impl<T: Write> Write for ZstdEncoderWrapper<'_, T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.encoder.write(buf)
@@ -275,6 +280,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "zstd")]
     #[test]
     fn sync_zstd() {
         const TEST_SEQUENCE: &[u8] = &[39, 3, 6, 7, 5];
@@ -343,7 +349,7 @@ mod tests {
         assert_eq!(read, TEST_SEQUENCE);
     }
 
-    #[cfg(feature = "bincode")]
+    #[cfg(all(feature = "bincode", feature = "zstd"))]
     #[test]
     fn encoded_zstd() {
         use std::io::Write;

@@ -1,7 +1,7 @@
-use std::{
-    fmt::Debug,
-    iter::{FusedIterator, Zip},
-};
+use std::{fmt::Debug, iter::FusedIterator};
+
+#[cfg(feature = "unsafe_array")]
+use std::iter::Zip;
 
 #[cfg(feature = "unsafe_array")]
 use std::{
@@ -13,16 +13,16 @@ use std::{
 
 use crate::entry::{sync_impl::BackedEntryMut, BackedEntry};
 
-use super::{
-    super::{
-        container::{
-            BackedEntryContainer, BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
-            Container,
-        },
-        internal_idx, BackedArray, BackedArrayError,
+use super::super::{
+    container::{
+        BackedEntryContainer, BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
+        Container,
     },
-    CountedHandle,
+    internal_idx, BackedArray, BackedArrayError,
 };
+
+#[cfg(feature = "unsafe_array")]
+use super::CountedHandle;
 
 /// Read implementations
 impl<K: Container<Data = usize>, E: BackedEntryContainerNestedRead> BackedArray<K, E>

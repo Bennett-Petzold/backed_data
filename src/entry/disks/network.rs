@@ -11,7 +11,6 @@ use std::{
 use bytes::Bytes;
 use futures::io::AsyncRead;
 use reqwest::{header::HeaderMap, Client, Method, Request, Response, Url, Version};
-use secrets::traits::AsContiguousBytes;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "async")]
@@ -174,7 +173,6 @@ impl AsyncRead for ReqwestRead {
                 *chunk.get_mut() = new_chunk;
 
                 // Get current chunk metadata
-                let x = x.as_bytes();
                 let buf_len = buf.len();
                 let num_bytes = min(x.len(), buf_len);
 
@@ -185,7 +183,7 @@ impl AsyncRead for ReqwestRead {
                     self_mut.leftover_slice = Some(x[buf_len..].to_vec());
                 } else {
                     // Write full, no need to create leftovers
-                    buf[..x.len()].copy_from_slice(x);
+                    buf[..x.len()].copy_from_slice(&x);
                 };
                 Poll::Ready(Ok(num_bytes))
             }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Decoder, Encoder};
 
-#[cfg(feature = "simd_json")]
+#[cfg(feature = "serde_json")]
 use super::SerdeJsonCoder;
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
