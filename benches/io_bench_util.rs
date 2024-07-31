@@ -83,6 +83,47 @@ where
     arr
 }
 
+pub fn create_parallel<K, E, P: AsRef<Path>>(
+    path: P,
+    data: &'static [String],
+) -> DirectoryBackedArray<K, E>
+where
+    K: Default + Serialize + for<'de> Deserialize<'de> + Send + 'static,
+    E: Default + Serialize + for<'de> Deserialize<'de> + Send + 'static,
+    K: ResizingContainer<Data = Range<usize>>,
+    E: BackedEntryContainerNestedWrite + ResizingContainer,
+    E::Coder: Default,
+    E::Disk: From<PathBuf> + AsRef<Path>,
+    E::WriteError: From<std::io::Error> + Debug,
+    E::Unwrapped: for<'a> From<&'a [u8]>,
+{
+    use std::sync::mpsc::sync_channel;
+
+    let path = path.as_ref().to_path_buf();
+    let (tx, rx) = sync_channel(data.len());
+
+    for inner_data in data {
+        let path = path.clone();
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let mut arr: DirectoryBackedArray<K, E> = DirectoryBackedArray::new(path).unwrap();
+            arr.append(inner_data.as_ref()).unwrap();
+            tx.send(arr)
+        });
+    }
+    drop(tx);
+
+    let mut arr = rx.recv().unwrap();
+    while let Ok(next) = rx.recv() {
+        arr.append_dir(next).unwrap();
+    }
+
+    if arr.save().is_err() {
+        panic!()
+    };
+    arr
+}
+
 #[cfg(feature = "async")]
 pub async fn a_create<K, E, P: AsRef<Path>>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
 where
@@ -205,6 +246,14 @@ macro_rules! create_fn {
             data: &[String]
         ) -> $output_type {
             a_create(path, data).await
+        }
+    };
+    (parallel $fn_name: ident, $output_type: ty, $( $extra_generics: tt )*) => {
+        fn $fn_name<$($extra_generics)* P: AsRef<Path> + Send + 'static>(
+            path: P,
+            data: &'static [String]
+        ) -> $output_type {
+            create_parallel(path, data)
         }
     };
     ($fn_name: ident, $output_type: ty, $( $extra_generics: tt )*) => {

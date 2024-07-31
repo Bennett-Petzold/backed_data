@@ -25,8 +25,10 @@ mod io_bench_util;
 use io_bench_util::*;
 
 create_fn!(create_plainfiles, StdDirBackedArray<u8, BincodeCoder>,);
+create_fn!(parallel create_plainfiles_par, StdDirBackedArray<u8, BincodeCoder>,);
 #[cfg(feature = "zstd")]
 create_fn!(create_zstdfiles, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder>, 'a, const LEVEL: u8,);
+create_fn!(parallel create_zstdfiles_par, ZstdDirBackedArray<'a, LEVEL, u8, BincodeCoder>, 'a, const LEVEL: u8,);
 
 #[cfg(feature = "async_bincode")]
 create_fn!(async create_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
@@ -74,6 +76,15 @@ fn file_creation_benches(c: &mut Criterion) {
     });
     log_created_size(&mut path_cell, "Plainfiles");
 
+    group.bench_function("create_plainfiles_parallel", |b| {
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_plainfiles_par(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    log_created_size(&mut path_cell, "Parallel plainfiles");
+
     #[cfg(feature = "zstd")]
     group.bench_function("create_zstdfiles", |b| {
         b.iter_batched(
@@ -83,6 +94,16 @@ fn file_creation_benches(c: &mut Criterion) {
         )
     });
     log_created_size(&mut path_cell, "Zstdfiles");
+
+    #[cfg(feature = "zstd")]
+    group.bench_function("create_zstdfiles_parallel", |b| {
+        b.iter_batched(
+            || create_path(&mut path_cell).clone(),
+            |path| create_zstdfiles_par::<0, _>(black_box(path.clone()), black_box(data)),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+    log_created_size(&mut path_cell, "Parallel zstdfiles");
 
     #[cfg(feature = "async")]
     {
