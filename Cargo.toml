@@ -19,6 +19,7 @@ resolver = "2"
 [features]
 default = ["bincode", "directory", "zstd"]
 array = ["dep:stable_deref_trait"]
+unsafe_array = ["array"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
 async = ["dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-scoped"]
 

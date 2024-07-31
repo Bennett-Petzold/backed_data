@@ -14,6 +14,7 @@ use super::{
     BackedArray,
 };
 
+#[cfg(feature = "unsafe_array")]
 pub mod generic;
 pub mod slice;
 

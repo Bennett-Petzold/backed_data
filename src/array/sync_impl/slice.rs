@@ -102,6 +102,7 @@ where
 /// To keep an accurate size count, failed reads will not be retried.
 /// This will keep each disk loaded after pulling data from it.
 /// Stepping by > 1 with `nth` implementation may skip loading a disk.
+#[cfg(feature = "unsafe_array")]
 pub struct BackedArrayIterMut<'a, E: BackedEntryContainerNestedAll + 'a> {
     pos: usize,
     len: usize,
@@ -123,6 +124,7 @@ pub struct BackedArrayIterMut<'a, E: BackedEntryContainerNestedAll + 'a> {
     >,
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<'a, E: BackedEntryContainerNestedAll> BackedArrayIterMut<'a, E>
 where
     E: AsMut<[E::Data]>,
@@ -165,6 +167,7 @@ where
     }
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<E: BackedEntryContainerNestedAll> Drop for BackedArrayIterMut<'_, E> {
     fn drop(&mut self) {
         for h in self.handles.iter_mut() {
@@ -180,6 +183,7 @@ impl<E: BackedEntryContainerNestedAll> Drop for BackedArrayIterMut<'_, E> {
     }
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<'a, E: BackedEntryContainerNestedAll + 'a> Iterator for BackedArrayIterMut<'a, E>
 where
     E::Unwrapped: 'a,
@@ -250,6 +254,7 @@ where
     }
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<'a, E: BackedEntryContainerNestedAll + 'a> FusedIterator for BackedArrayIterMut<'a, E>
 where
     E::Unwrapped: 'a,
@@ -284,6 +289,7 @@ where
     }
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E>
 where
     K: AsRef<[Range<usize>]>,
