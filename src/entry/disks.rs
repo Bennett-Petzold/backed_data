@@ -387,7 +387,8 @@ mod zstd_disks {
         }
     }
 
-    #[cfg(test)]
+    // Miri does not appreciate FFI calls
+    #[cfg(all(test, not(miri)))]
     mod tests {
         use std::{io::Cursor, sync::Mutex};
 

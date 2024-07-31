@@ -75,29 +75,31 @@ pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<tokio::sync::OnceCell<T>
 /// # Example
 ///
 /// ```rust
-/// use std::fs::{File, remove_file};
-/// use backed_data::entry::{
-///     BackedEntryBox,
-///     formats::BincodeCoder,
-///     disks::Plainfile,
-/// };
+/// #[cfg(feature = "bincode")] {
+///     use std::fs::{File, remove_file};
+///     use backed_data::entry::{
+///         BackedEntryBox,
+///         formats::BincodeCoder,
+///         disks::Plainfile,
+///     };
 ///
-/// let FILENAME = std::env::temp_dir().join("example_box");
-/// let file = Plainfile::new(FILENAME.clone());
+///     let FILENAME = std::env::temp_dir().join("example_box");
+///     let file = Plainfile::new(FILENAME.clone());
 ///
-/// // Write array to file
-/// let mut writer: BackedEntryBox<str, _, _> = BackedEntryBox::new(file.clone(),
-///     BincodeCoder{});
-/// writer.write_unload("HELLO I AM A STRING").unwrap();
-/// drop(writer);
+///     // Write array to file
+///     let mut writer: BackedEntryBox<str, _, BincodeCoder> =
+///         BackedEntryBox::with_disk(file.clone());
+///     writer.write_unload("HELLO I AM A STRING").unwrap();
+///     drop(writer);
 ///
-/// // Read array from file
-/// let mut sparse: BackedEntryBox<str, _, _> = BackedEntryBox::new(file.clone(),
-///     BincodeCoder{});
-/// assert_eq!(sparse.load().unwrap().as_ref(), "HELLO I AM A STRING");
+///     // Read array from file
+///     let mut sparse: BackedEntryBox<str, _, BincodeCoder> =
+///         BackedEntryBox::with_disk(file.clone());
+///     assert_eq!(sparse.load().unwrap().as_ref(), "HELLO I AM A STRING");
 ///
-/// // Cleanup
-/// remove_file(FILENAME).unwrap();
+///     // Cleanup
+///     remove_file(FILENAME).unwrap();
+/// }
 /// ```
 pub type BackedEntryBox<T, Disk, Coder> = BackedEntryCell<Box<T>, Disk, Coder>;
 pub type BackedEntryBoxLock<T, Disk, Coder> = BackedEntryLock<Box<T>, Disk, Coder>;
@@ -107,29 +109,31 @@ pub type BackedEntryBoxLock<T, Disk, Coder> = BackedEntryLock<Box<T>, Disk, Code
 /// # Example
 ///
 /// ```rust
-/// use std::fs::{File, remove_file};
-/// use backed_data::entry::{
-///     BackedEntryArr,
-///     formats::BincodeCoder,
-///     disks::Plainfile,
-/// };
-///
-/// let FILENAME = std::env::temp_dir().join("example_array");
-/// let file = Plainfile::new(FILENAME.clone());
-///
-/// // Write array to file
-/// let mut writer: BackedEntryArr<u8, _, _> = BackedEntryArr::new(file.clone(),
-///     BincodeCoder{});
-/// writer.write_unload([1, 2, 3]).unwrap();
-/// drop(writer);
-///
-/// // Read array from file
-/// let mut sparse: BackedEntryArr<u8, _, _> = BackedEntryArr::new(file.clone(),
-///     BincodeCoder{});
-/// assert_eq!(sparse.load().unwrap().as_ref(), [1, 2, 3]);
-///
-/// // Cleanup
-/// remove_file(FILENAME).unwrap();
+/// #[cfg(feature = "bincode")] {
+///     use std::fs::{File, remove_file};
+///     use backed_data::entry::{
+///         BackedEntryArr,
+///         formats::BincodeCoder,
+///         disks::Plainfile,
+///     };
+///    
+///     let FILENAME = std::env::temp_dir().join("example_array");
+///     let file = Plainfile::new(FILENAME.clone());
+///    
+///     // Write array to file
+///     let mut writer: BackedEntryArr<u8, _, _> = BackedEntryArr::new(file.clone(),
+///         BincodeCoder{});
+///     writer.write_unload([1, 2, 3]).unwrap();
+///     drop(writer);
+///    
+///     // Read array from file
+///     let mut sparse: BackedEntryArr<u8, _, _> = BackedEntryArr::new(file.clone(),
+///         BincodeCoder{});
+///     assert_eq!(sparse.load().unwrap().as_ref(), [1, 2, 3]);
+///    
+///     // Cleanup
+///     remove_file(FILENAME).unwrap();
+/// }
 /// ```
 pub type BackedEntryArr<T, Disk, Coder> = BackedEntryBox<[T], Disk, Coder>;
 pub type BackedEntryArrLock<T, Disk, Coder> = BackedEntryBoxLock<[T], Disk, Coder>;

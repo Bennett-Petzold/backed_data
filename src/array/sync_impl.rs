@@ -280,27 +280,29 @@ impl<
     ///
     /// # Example
     /// ```rust
-    /// use backed_data::{
-    ///     array::sync_impl::VecBackedArray,
-    ///     entry::{
-    ///         disks::Plainfile,
-    ///         formats::BincodeCoder,
-    ///     },
-    /// };
-    /// use std::fs::{File, remove_file, OpenOptions};
-    ///
-    /// let FILENAME = std::env::temp_dir().join("example_array_append_memory");
-    /// let values = ([0, 1, 1],
-    ///     [2, 3, 5]);
-    ///
-    /// let mut array: VecBackedArray<u32, Plainfile, _> = VecBackedArray::default();
-    /// array.append_memory(values.0, FILENAME.clone().into(), BincodeCoder {});
-    ///
-    /// // Overwrite file, making disk pointer for first array invalid
-    /// array.append_memory(values.1, FILENAME.clone().into(), BincodeCoder {});
-    ///
-    /// assert_eq!(array.get(0).unwrap().as_ref(), &0);
-    /// remove_file(FILENAME).unwrap();
+    /// #[cfg(feature = "bincode")] {
+    ///     use backed_data::{
+    ///         array::sync_impl::VecBackedArray,
+    ///         entry::{
+    ///             disks::Plainfile,
+    ///             formats::BincodeCoder,
+    ///         },
+    ///     };
+    ///     use std::fs::{File, remove_file, OpenOptions};
+    ///    
+    ///     let FILENAME = std::env::temp_dir().join("example_array_append_memory");
+    ///     let values = ([0, 1, 1],
+    ///         [2, 3, 5]);
+    ///    
+    ///     let mut array: VecBackedArray<u32, Plainfile, _> = VecBackedArray::default();
+    ///     array.append_memory(values.0, FILENAME.clone().into(), BincodeCoder {});
+    ///    
+    ///     // Overwrite file, making disk pointer for first array invalid
+    ///     array.append_memory(values.1, FILENAME.clone().into(), BincodeCoder {});
+    ///    
+    ///     assert_eq!(array.get(0).unwrap().as_ref(), &0);
+    ///     remove_file(FILENAME).unwrap();
+    /// }
     /// ```
     pub fn append_memory<U: Into<E::Unwrapped>>(
         &mut self,
@@ -519,8 +521,7 @@ where
             self.handles.push(entry.mut_handle());
         }
 
-        // There is always a last value, and it's valid for struct lifetime,
-        // but the compiler doesn't know this.
+        // This actually extends lifetimes too long, beyond lifetime of struct
         let handle_ptr: *mut _ = self.handles.last_mut().unwrap();
         let handle = unsafe { &mut *handle_ptr };
 
@@ -560,7 +561,8 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
 }
 
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E> {
-    pub fn iter_mut<'a>(&'a mut self) -> BackedArrayIterMut<'a, K, E>
+    /// Currently does not work, references live beyond function lifetime
+    fn iter_mut<'a>(&'a mut self) -> BackedArrayIterMut<'a, K, E>
     where
         E::Unwrapped: 'a,
         E::ReadError: 'a,
@@ -744,35 +746,26 @@ mod tests {
         const FIB: &[u8] = &[0, 1, 1, 5, 7];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
-        let mut back_vec_0 = Cursor::new(Vec::new());
-        let mut back_vec_0 = CursorVec {
-            inner: Mutex::new(&mut back_vec_0),
-        };
-        let back_vec_ptr_0: *mut CursorVec = &mut back_vec_0;
-        let mut back_vec_1 = Cursor::new(Vec::new());
-        let mut back_vec_1 = CursorVec {
-            inner: Mutex::new(&mut back_vec_1),
-        };
-        let back_vec_ptr_1: *mut CursorVec = &mut back_vec_1;
-
-        let backing_store_0 = back_vec_0.get_ref();
-        let backing_store_1 = back_vec_1.get_ref();
+        cursor_vec!(back_vec_0, backing_store_0);
+        cursor_vec!(back_vec_1, backing_store_1);
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed = VecBackedArray::new();
         unsafe {
             backed
-                .append(FIB, &mut *back_vec_ptr_0, BincodeCoder {})
+                .append(FIB, &mut *back_vec_0.get(), BincodeCoder {})
                 .unwrap();
         }
+        #[cfg(not(miri))]
         assert_eq!(&backing_store_0[backing_store_0.len() - FIB.len()..], FIB);
 
         // Intentional unsafe access to later peek underlying storage
         unsafe {
             backed
-                .append(INPUT_1, &mut *back_vec_ptr_1, BincodeCoder {})
+                .append(INPUT_1, &mut *back_vec_1.get(), BincodeCoder {})
                 .unwrap();
         }
+        #[cfg(not(miri))]
         assert_eq!(
             &backing_store_1[backing_store_1.len() - INPUT_1.len()..],
             INPUT_1
@@ -787,17 +780,20 @@ mod tests {
 
         handle_vec[0].flush().unwrap();
         handle_vec[1].flush().unwrap();
-        assert_eq!(backing_store_0[backing_store_0.len() - FIB.len()], 20);
-        assert_eq!(backing_store_0[backing_store_0.len() - FIB.len() + 2], 30);
-        assert_eq!(
-            backing_store_0[backing_store_0.len() - FIB.len() + 1],
-            FIB[1]
-        );
-        assert_eq!(backing_store_1[backing_store_1.len() - INPUT_1.len()], 40);
-        assert_eq!(
-            backing_store_1[backing_store_1.len() - INPUT_1.len() + 1],
-            INPUT_1[1]
-        );
+        #[cfg(not(miri))]
+        {
+            assert_eq!(backing_store_0[backing_store_0.len() - FIB.len()], 20);
+            assert_eq!(backing_store_0[backing_store_0.len() - FIB.len() + 2], 30);
+            assert_eq!(
+                backing_store_0[backing_store_0.len() - FIB.len() + 1],
+                FIB[1]
+            );
+            assert_eq!(backing_store_1[backing_store_1.len() - INPUT_1.len()], 40);
+            assert_eq!(
+                backing_store_1[backing_store_1.len() - INPUT_1.len() + 1],
+                INPUT_1[1]
+            );
+        }
 
         drop(handle_vec);
         assert_eq!(
@@ -806,6 +802,7 @@ mod tests {
         );
     }
 
+    #[cfg(False)]
     #[test]
     fn item_mod_iter() {
         const FIB: &[u8] = &[0, 1, 1, 2, 3, 5];
@@ -865,13 +862,18 @@ mod tests {
             *entry = *val;
         }
 
-        // TESTING ONLY
-        // This breaks handle guarantees about flush on drop
-        std::mem::forget(backed_iter);
-
-        // Backed storage is not modified
         #[cfg(not(miri))]
-        assert_eq!(back_peek[back_peek.len() - after_mod.len()..], after_mod);
+        {
+            // USAGE FOR TESTING ONLY
+            // This breaks handle guarantees about flush on drop.
+            // Also leaks memory.
+            std::mem::forget(backed_iter);
+
+            // Backed storage is not modified
+            assert_eq!(back_peek[back_peek.len() - after_mod.len()..], after_mod);
+        }
+        #[cfg(miri)]
+        drop(backed_iter);
 
         // Memory representation is updated
         assert_eq!(

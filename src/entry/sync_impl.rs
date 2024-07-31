@@ -296,7 +296,7 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::UnsafeCell, collections::HashMap, io::Cursor, sync::Arc, thread::scope};
+    use std::{collections::HashMap, io::Cursor, sync::Arc, thread::scope};
 
     use crate::{
         entry::{formats::BincodeCoder, BackedEntryArr, BackedEntryArrLock, BackedEntryCell},
@@ -310,10 +310,7 @@ mod tests {
     #[test]
     fn mutate() {
         const FIB: &[u8] = &[0, 1, 1, 5, 7];
-        let mut binding = Cursor::new(Vec::with_capacity(10));
-        let back_vec = UnsafeCell::new(CursorVec {
-            inner: (&mut binding).into(),
-        });
+        cursor_vec!(back_vec, backing_store);
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
@@ -322,23 +319,27 @@ mod tests {
 
         assert_eq!(backed_entry.load().unwrap().as_ref(), FIB);
 
-        let backing_store = unsafe { &*back_vec.get() }.get_ref();
+        #[cfg(not(miri))]
         assert_eq!(&backing_store[backing_store.len() - FIB.len()..], FIB);
 
         let mut handle = backed_entry.mut_handle().unwrap();
         handle[0] = 20;
         handle[2] = 30;
 
-        let backing_store = unsafe { &*back_vec.get() }.get_ref();
+        #[cfg(not(miri))]
         assert_eq!(backing_store[backing_store.len() - FIB.len()], FIB[0]);
+
         assert_eq!(handle[0], 20);
         assert_eq!(handle[2], 30);
 
         handle.flush().unwrap();
-        let backing_store = unsafe { &*back_vec.get() }.get_ref();
-        assert_eq!(backing_store[backing_store.len() - FIB.len()], 20);
-        assert_eq!(backing_store[backing_store.len() - FIB.len() + 2], 30);
-        assert_eq!(backing_store[backing_store.len() - FIB.len() + 1], FIB[1]);
+
+        #[cfg(not(miri))]
+        {
+            assert_eq!(backing_store[backing_store.len() - FIB.len()], 20);
+            assert_eq!(backing_store[backing_store.len() - FIB.len() + 2], 30);
+            assert_eq!(backing_store[backing_store.len() - FIB.len() + 1], FIB[1]);
+        }
 
         drop(handle);
         assert_eq!(backed_entry.load().unwrap().as_ref(), [20, 1, 30, 5, 7]);
@@ -448,6 +449,7 @@ mod tests {
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
         const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
         cursor_vec!(back_vec, backing_store);
+        cursor_vec!(back_vec_2, backing_store_2);
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
@@ -459,12 +461,12 @@ mod tests {
         assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
 
         let mut backed_entry = backed_entry
-            .change_backing(unsafe { &mut *back_vec.get() }, SerdeJsonCoder {})
+            .change_backing(unsafe { &mut *back_vec_2.get() }, SerdeJsonCoder {})
             .unwrap();
 
         // Check for valid json encoding
         #[cfg(not(miri))]
-        assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
+        assert_eq!(std::str::from_utf8(backing_store_2).unwrap(), VALUES_JSON);
 
         // Check that data is preserved with json backing
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
