@@ -146,6 +146,8 @@ macro_rules! a_open_ref {
     };
 }
 
+pub(crate) use a_open_ref;
+
 pub type AsyncVecBackedArray<T, Disk, Coder> =
     BackedArray<Vec<Range<usize>>, Vec<BackedEntryAsync<Box<[T]>, Disk, Coder>>>;
 

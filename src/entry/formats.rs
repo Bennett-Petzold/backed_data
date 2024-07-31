@@ -79,7 +79,7 @@ mod bincode_formats_async {
 
     use super::*;
 
-    #[derive(Debug, Default, Clone, Copy)]
+    #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
     pub struct AsyncBincodeCoder {}
 
     impl<Source: AsyncRead + Send + Sync + Unpin> AsyncDecoder<Source> for AsyncBincodeCoder {
