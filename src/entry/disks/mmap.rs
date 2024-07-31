@@ -388,7 +388,7 @@ impl MmapWriter {
 
         #[cfg(target_os = "windows")]
         {
-            len = if file.metadata()?.file_size() == 0 {
+            len = if file.metadata()?.len() == 0 {
                 0
             } else {
                 mmap.len()
