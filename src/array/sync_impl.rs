@@ -34,13 +34,10 @@ use super::{
 ///
 /// Associates each access with the appropriate disk storage, loading it into
 /// memory and returning the value. Subsequent accesses will use the in-memory
-/// store. Use [`Self::clear_memory`] to move the cached sub-arrays back out of
-/// memory.
+/// store. Use [`Self::clear_memory`] or [`Self::shrink_to_query`] to move the
+/// cached sub-arrays back out of memory.
 ///
-/// Use [`Self::save_to_disk`] instead of serialization directly. This clears
-/// entries to prevent data duplication on disk.
-///
-/// For repeated modifications, use [`Self::chunk_mod_iter`] to get perform
+/// For repeated modifications, use [`Self::chunk_mut_iter`] to get perform
 /// multiple modifications on a backing block before saving to disk.
 /// Getting and overwriting the entries without these handles will write to
 /// disk on every single change.
@@ -226,16 +223,6 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
                     .ok_or(BackedArrayError::OutsideEntryBounds(idx))
             })
     }
-
-    /// Returns a reference to a particular underlying chunk.
-    ///
-    /// See [`Self::get_chunk_mut`] for a modifiable handle.
-    pub fn get_chunk(&self, idx: usize) -> Option<Result<&E::Unwrapped, E::ReadError>> {
-        self.entries
-            .as_ref()
-            .get(idx)
-            .map(|arr| arr.get_ref().load())
-    }
 }
 
 /// Write implementations
@@ -347,25 +334,6 @@ impl<
     }
 }
 
-impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E> {
-    /// Returns a mutable handle to a given chunk.
-    pub fn get_chunk_mut(
-        &mut self,
-        idx: usize,
-    ) -> Result<
-        BackedEntryMut<'_, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>,
-        BackedArrayError<E::ReadError>,
-    > {
-        let arr = self
-            .entries
-            .as_mut()
-            .get_mut(idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-        let val = arr.get_mut().mut_handle().map_err(BackedArrayError::Coder);
-        val
-    }
-}
-
 impl<
         K: ResizingContainer<Data = Range<usize>>,
         E: BackedEntryContainerNested + ResizingContainer,
@@ -394,25 +362,6 @@ impl<
         }
 
         self
-    }
-}
-
-impl<K: Serialize, E: BackedEntryContainerNested + Serialize> BackedArray<K, E> {
-    /// Serializes this to disk after clearing all entries from memory to disk.
-    ///
-    /// Writing directly from serialize wastes disk space and increases load
-    /// time by writing the backed data with this struct.
-    pub fn save_to_disk<W: Write>(&mut self, writer: W) -> bincode::Result<()> {
-        self.clear_memory();
-        serialize_into(writer, self)
-    }
-}
-
-impl<K: for<'de> Deserialize<'de>, E: for<'df> Deserialize<'df>> BackedArray<K, E> {
-    /// Loads the backed array. Does not load backing arrays, unless this
-    /// was saved with data (was not saved with [`Self::save_to_disk`]).
-    pub fn load<R: Read>(writer: &mut R) -> bincode::Result<Self> {
-        deserialize_from(writer)
     }
 }
 
@@ -525,6 +474,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
 
     /// Returns underlying chunks in order.
     ///
+    /// This will load each chunk before providing it.
     /// All chunks loaded earlier in the iteration will remain loaded.
     pub fn chunk_iter(&mut self) -> impl Iterator<Item = Result<&E::Unwrapped, E::ReadError>> {
         self.entries.as_ref().iter().map(|arr| arr.get_ref().load())
