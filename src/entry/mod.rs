@@ -1,5 +1,7 @@
 use std::{cell::OnceCell, sync::OnceLock};
 
+use serde::{Deserialize, Serialize};
+
 use crate::utils::{InternalUse, Once};
 
 #[cfg(feature = "async")]
@@ -23,8 +25,9 @@ pub mod formats;
 /// * See [`BackedEntryBox`] for a heap-storing version.
 /// * See [`BackedEntryArr`] for an array-specialized version.
 /// * See [`BackedEntryAsync`] with feature [`async`] enabled for async.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BackedEntry<T, Disk, Coder> {
+    #[serde(skip)]
     value: T,
     disk: Disk,
     coder: Coder,

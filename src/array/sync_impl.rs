@@ -84,6 +84,11 @@ impl<K, E: Container> BackedArray<K, E> {
         self.entries.as_ref().len()
     }
 
+    /// Access to the underlying chunks, without loading data.
+    pub fn raw_chunks(&mut self) -> impl Iterator<Item: AsMut<E::Data>> + '_ {
+        self.entries.mut_iter()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.as_ref().is_empty()
     }

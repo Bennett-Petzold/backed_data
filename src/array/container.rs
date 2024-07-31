@@ -13,13 +13,19 @@ pub trait RefIter<T> {
     fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>>;
 }
 
+pub trait MutIter<T> {
+    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>>;
+}
+
 /// Generic wrapper for any container type.
 ///
 /// Methods are prepended with `c_*` to avoid namespace conflicts.
 ///
 /// `&[T]` is insufficiently generic for types that return a ref handle to `T`,
 /// instead of `&T` directly, so this allows for more complex container types.
-pub trait Container: AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::Data> {
+pub trait Container:
+    AsRef<[Self::Data]> + AsMut<[Self::Data]> + RefIter<Self::Data> + MutIter<Self::Data>
+{
     /// The data container entries give references to.
     type Data;
     type Ref<'b>: AsRef<Self::Data>
@@ -201,6 +207,12 @@ impl<T> RefIter<T> for Box<[T]> {
     }
 }
 
+impl<T> MutIter<T> for Box<[T]> {
+    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>> {
+        self.iter_mut().map(|v| ToMut(v))
+    }
+}
+
 impl<T> Container for Box<[T]> {
     type Data = T;
     type Ref<'b> = ToRef<'b, Self::Data> where Self: 'b;
@@ -220,6 +232,12 @@ impl<T> Container for Box<[T]> {
 impl<T> RefIter<T> for Vec<T> {
     fn ref_iter(&self) -> impl Iterator<Item: AsRef<T>> {
         self.iter().map(|v| ToRef(v))
+    }
+}
+
+impl<T> MutIter<T> for Vec<T> {
+    fn mut_iter(&mut self) -> impl Iterator<Item: AsMut<T>> {
+        self.iter_mut().map(|v| ToMut(v))
     }
 }
 
