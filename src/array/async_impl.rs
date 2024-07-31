@@ -17,6 +17,7 @@ use super::{
     BackedArrayEntry, BackedArrayError,
 };
 
+/// Asynchronous version of [`BackedArray`].
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
     // keys and entries must always have the same length
@@ -54,7 +55,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
         self.entries.is_empty()
     }
 
-    /// Move all backing arrays out of memory
+    /// Move all backing arrays out of memory.
     pub fn clear_memory(&mut self) {
         self.entries.iter_mut().for_each(|entry| entry.unload());
     }
@@ -187,7 +188,7 @@ where
 
 #[cfg(feature = "async")]
 impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
-    /// Async version of [`Self::append`]
+    /// Async version of [`super::sync_impl::BackedArray::append`].
     pub async fn append(
         &mut self,
         values: &[T],
@@ -202,7 +203,7 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
         Ok(self)
     }
 
-    /// Async version of [`Self::append_memory`]
+    /// Async version of [`super::sync_impl::append_memory`]
     pub async fn append_memory(
         &mut self,
         values: Box<[T]>,
@@ -252,7 +253,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
 }
 
 impl<T: Serialize, Disk: for<'de> Deserialize<'de> + Serialize> BackedArray<T, Disk> {
-    /// Async version of [`Self::save_to_disk`]
+    /// Async version of [`super::sync_impl::save_to_disk`]
     pub async fn save_to_disk<W: AsyncWrite + Unpin>(
         &mut self,
         writer: &mut W,
@@ -266,7 +267,7 @@ impl<T: Serialize, Disk: for<'de> Deserialize<'de> + Serialize> BackedArray<T, D
 }
 
 impl<T: DeserializeOwned, Disk: for<'de> Deserialize<'de> + Serialize> BackedArray<T, Disk> {
-    /// Async version of [`Self::load`]
+    /// Async version of [`super::sync_impl::load`]
     pub async fn load<R: AsyncRead + Unpin>(writer: &mut R) -> bincode::Result<Self> {
         AsyncBincodeReader::from(writer)
             .next()
@@ -278,7 +279,7 @@ impl<T: DeserializeOwned, Disk: for<'de> Deserialize<'de> + Serialize> BackedArr
 }
 
 impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
-    /// Combine `self` and `rhs` into a new [`Self`]
+    /// Combine `self` and `rhs` into a new [`super::sync_impl`]
     ///
     /// Appends entries of `self` and `rhs`
     pub fn join(&self, rhs: &Self) -> Self {
@@ -361,7 +362,9 @@ impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
             entry_vec.push(entry.into_sync_entry().await?);
         }
 
-        Ok(SyncBackedArray::from_pairs(self.keys, entry_vec))
+        Ok(SyncBackedArray::from_pairs(
+            self.keys.iter().cloned().zip(entry_vec),
+        ))
     }
 }
 
@@ -410,9 +413,9 @@ impl<T: DeserializeOwned, Disk: AsyncReadDisk> BackedArray<T, Disk> {
 impl<T: Serialize + DeserializeOwned, Disk: AsyncReadDisk + AsyncWriteDisk + DiskOverwritable>
     BackedArray<T, Disk>
 {
-    /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
+    /// Provides mutable handles to underlying chunks, using [`BackedEntryMutAsync`].
     ///
-    /// See [`Self::chunk_stream`] for the immutable iterator.
+    /// See [`super::sync_impl::chunk_stream`] for the immutable iterator.
     pub fn chunk_mod_stream(
         &mut self,
         offset: usize,
@@ -425,7 +428,7 @@ impl<T: Serialize + DeserializeOwned, Disk: AsyncReadDisk + AsyncWriteDisk + Dis
 impl<T: DeserializeOwned + Clone, Disk: AsyncReadDisk> BackedArray<T, Disk> {
     /// Returns clones of chunk data.
     ///
-    /// See [`Self::chunk_stream`] for a version that produces references.
+    /// See [`super::sync_impl::chunk_stream`] for a version that produces references.
     pub fn dup_stream(
         &mut self,
         offset: usize,

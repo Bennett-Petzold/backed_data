@@ -106,6 +106,7 @@ impl<T> DirectoryBackedArray<T> {
         Ok(self.update_root(new_root))
     }
 
+    /// Utility method for asynchronous to synchronous conversions.
     pub fn from_existing_array(array: BackedArray<T, PathBuf>, directory_root: PathBuf) -> Self {
         DirectoryBackedArray {
             array,

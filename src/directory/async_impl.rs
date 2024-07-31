@@ -18,7 +18,8 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
-    array::async_impl::BackedArray, directory::sync_impl::DirectoryBackedArray as SyncBackedArray,
+    array::async_impl::BackedArray, array::sync_impl::BackedArray as SyncBackedArray,
+    directory::sync_impl::DirectoryBackedArray as SyncDirBackedArray,
     meta::async_impl::BackedArrayWrapper,
 };
 
@@ -149,11 +150,27 @@ impl<T: Serialize> DirectoryBackedArray<T> {
     }
 
     /// Convert to synchronous version
-    pub async fn conv_to_sync(self) -> bincode::Result<SyncBackedArray<T>> {
-        Ok(SyncBackedArray::from_existing_array(
+    pub async fn conv_to_sync(self) -> bincode::Result<SyncDirBackedArray<T>> {
+        Ok(SyncDirBackedArray::from_existing_array(
             self.array.to_sync_array().await?,
             self.directory_root,
         ))
+    }
+}
+
+impl<T: Serialize + Clone> DirectoryBackedArray<T> {
+    /// Utility method for synchronous to asynchronous conversions.
+    pub async fn from_existing_array(
+        array: SyncBackedArray<T, PathBuf>,
+        directory_root: PathBuf,
+    ) -> bincode::Result<Self> {
+        let mut new_array = BackedArray::new();
+        new_array.append_sync_array(array).await?;
+
+        Ok(DirectoryBackedArray {
+            array: new_array,
+            directory_root,
+        })
     }
 }
 

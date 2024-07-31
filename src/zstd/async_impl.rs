@@ -275,8 +275,8 @@ impl<T: Serialize> ZstdDirBackedArray<T> {
 
 impl<T: DeserializeOwned> ZstdDirBackedArray<T> {
     /// Wraps [`BackedArray::load`] to include its own metadata
-    pub async fn load<R: AsyncRead + Unpin>(writer: &mut R) -> bincode::Result<Self> {
-        AsyncBincodeReader::from(writer)
+    pub async fn load<R: AsyncRead + Unpin>(reader: &mut R) -> bincode::Result<Self> {
+        AsyncBincodeReader::from(reader)
             .next()
             .await
             .ok_or(bincode::ErrorKind::Custom(

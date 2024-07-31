@@ -176,7 +176,7 @@ impl<T: Serialize, Disk: WriteDisk> BackedEntryOption<T, Disk> {
 /// underlying storage on every modification. This allows for multiple values
 /// values to be written before syncing with disk.
 ///
-/// Call [`BackedEntry::flush`] to sync with underlying storage before
+/// Call [`BackedEntryMut::flush`] to sync with underlying storage before
 /// dropping. Otherwise, a panicking drop implementation runs.
 pub struct BackedEntryMut<'a, T: Serialize, Disk: WriteDisk> {
     entry: &'a mut BackedEntry<T, Disk>,

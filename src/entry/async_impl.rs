@@ -86,6 +86,10 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryAsync<T, Disk> {
     pub fn get_disk_mut(&mut self) -> &mut Disk {
         self.inner.get_disk_mut()
     }
+
+    pub fn get_mode(&self) -> &BackedEntryWriteMode {
+        &self.mode
+    }
 }
 
 /// Async version of [`BackedEntryArr`]
@@ -346,13 +350,13 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedEntryOptionAsync<T, Disk> {
     }
 }
 
-/// Async version of [`super::BackedEntryMut`].
+/// Async version of [`super::sync_impl::BackedEntryMut`].
 ///
 /// Modifying by [`BackedEntryAsync::write`] writes the entire value to the
 /// underlying storage on every modification. This allows for multiple values
 /// values to be written before syncing with disk.
 ///
-/// Call [`BackedEntry::flush`] to sync with underlying storage before
+/// Call [`BackedEntryMutAsync::flush`] to sync with underlying storage before
 /// dropping. Otherwise, drop panics.
 pub struct BackedEntryMutAsync<'a, T: Serialize, Disk: AsyncWriteDisk> {
     entry: &'a mut BackedEntryAsync<T, Disk>,

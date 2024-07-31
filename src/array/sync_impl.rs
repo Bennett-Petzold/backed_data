@@ -17,7 +17,7 @@ use super::{
     BackedArrayError,
 };
 
-/// Array stored as multiple arrays on disk
+/// Array stored as multiple arrays on disk.
 ///
 /// Associates each access with the appropriate disk storage, loading it into
 /// memory and returning the value. Subsequent accesses will use the in-memory
@@ -27,8 +27,10 @@ use super::{
 /// Use [`Self::save_to_disk`] instead of serialization directly. This clears
 /// entries to prevent data duplication on disk.
 ///
-/// Modifications beyond appending and removal are not supported, due to
-/// complexity.
+/// For repeated modifications, use [`Self::chunk_mod_iter`] to get perform
+/// multiple modifications on a backing block before saving to disk.
+/// Getting and overwriting the entries without these handles will write to
+/// disk on every single change.
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
     // keys and entries must always have the same length
@@ -38,6 +40,7 @@ pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
     entries: Vec<BackedEntryArr<T, Disk>>,
 }
 
+/// Helper function to make deserialization work.
 fn entries_deserialize<'de, D, Backing: Deserialize<'de>>(
     deserializer: D,
 ) -> Result<Backing, D::Error>
@@ -334,9 +337,9 @@ impl<T: Serialize, Disk: ReadDisk> BackedArray<T, Disk> {
 }
 
 impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
-    /// Combine `self` and `rhs` into a new [`Self`]
+    /// Combine `self` and `rhs` into a new [`Self`].
     ///
-    /// Appends entries of `self` and `rhs`
+    /// Appends entries of `self` and `rhs`.
     pub fn join(&self, rhs: &Self) -> Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
         let other_keys = rhs
@@ -354,7 +357,7 @@ impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
         }
     }
 
-    /// Copy entries in `rhs` to `self`
+    /// Copy entries in `rhs` to `self`.
     pub fn merge(&mut self, rhs: &Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
         self.keys.extend(
@@ -368,7 +371,7 @@ impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
 }
 
 impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
-    /// Moves all entries of `rhs` into `self`
+    /// Moves all entries of `rhs` into `self`.
     pub fn append_array(&mut self, mut rhs: Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
         rhs.keys.iter_mut().for_each(|range| {
@@ -441,7 +444,7 @@ impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> BackedArray<T,
 }
 
 impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
-    /// Returns a [`BackedEntryDupIter`] that outputs clones of chunk data.
+    /// Returns an iterator that outputs clones of chunk data.
     ///
     /// See [`Self::chunk_iter`] for a version that produces references.
     pub fn dup_iter(
@@ -457,19 +460,26 @@ impl<T: DeserializeOwned + Clone, Disk: ReadDisk> BackedArray<T, Disk> {
 }
 
 impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
-    pub fn from_pairs<I, J>(keys: I, disks: J) -> Self
+    /// Construct a backed array from entry range, backing storage pairs.
+    ///
+    /// Not recommended for use outside of BackedArray wrappers.
+    /// If ranges do not correspond to the entry arrays, the resulting
+    /// [`BackedArray`] will be invalid.
+    pub fn from_pairs<I>(pairs: I) -> Self
     where
-        I: IntoIterator<Item = Range<usize>>,
-        J: IntoIterator<Item = BackedEntry<Box<[T]>, Disk>>,
+        I: IntoIterator<Item = (Range<usize>, BackedEntry<Box<[T]>, Disk>)>,
     {
-        Self {
-            keys: keys.into_iter().collect(),
-            entries: disks.into_iter().collect(),
-        }
+        let (keys, entries) = pairs.into_iter().unzip();
+        Self { keys, entries }
     }
 }
 
 impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+    /// Replaces the underlying entry disk.
+    ///
+    /// Not recommended for use outside of BackedArray wrappers.
+    /// If ranges do not correspond to the entry arrays, the resulting
+    /// [`BackedArray`] will be invalid.
     pub fn replace_disk<OtherDisk>(self) -> BackedArray<T, OtherDisk>
     where
         OtherDisk: for<'de> Deserialize<'de>,
