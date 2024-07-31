@@ -13,7 +13,7 @@ zstd-thin-lto = ["zstd", "zstd/thin-lto"]
 zstd-fat-lto = ["zstd", "zstd/fat-lto"]
 zstdmt = ["zstd", "zstd/zstdmt", "dep:lazy_static"]
 async = ["dep:async-bincode", "dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-trait"]
-async-zstd = ["async", "zstd", "dep:async-compression", "async-compression/zstd"]
+async-zstd = ["async", "dep:async-compression", "async-compression/zstd"]
 async-zstdmt = ["async-zstd", "async-compression/zstdmt", "dep:lazy_static"]
 
 [dependencies]
