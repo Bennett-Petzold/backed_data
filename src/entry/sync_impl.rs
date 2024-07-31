@@ -242,9 +242,12 @@ impl<
     /// Converts [`self`] to another disk and encoding representation.
     ///
     /// This loads the value from the original disk in the original format (if necessary),
-    /// and then encodes the value to the target disk. This may produce a disk read,
-    /// and will always produce a disk write. See [`Self::change_encoder`] and
-    /// [`Self::change_disk`] to replace only one backing part.
+    /// and then encodes the value to the target disk. The original disk is not deleted.
+    /// This may produce a disk read, and will always produce a disk write.
+    ///
+    /// If switching between compatible coders (e.g. simd_json -> serde_json)
+    /// without switching the backing disk, use [`Self::encoder_into`] to skip
+    /// the extraneous disk reads/writes.
     pub fn change_backing<OtherDisk, OtherCoder>(
         self,
         disk: OtherDisk,
@@ -258,60 +261,6 @@ impl<
         let mut other = BackedEntry::<T, OtherDisk, OtherCoder> {
             value: self.value,
             disk,
-            coder,
-        };
-        other.update().map_err(Either::Right)?;
-        Ok(other)
-    }
-
-    /// Converts [`self`] to another disk representation.
-    ///
-    /// Specialization of [`Self::change_backing`].
-    pub fn change_disk<OtherDisk>(
-        self,
-        disk: OtherDisk,
-    ) -> Result<
-        BackedEntry<T, OtherDisk, Coder>,
-        Either<
-            <Coder as Decoder<<Disk as ReadDisk>::ReadDisk>>::Error,
-            <Coder as Encoder<<OtherDisk as WriteDisk>::WriteDisk>>::Error,
-        >,
-    >
-    where
-        OtherDisk: WriteDisk,
-        Coder: Encoder<OtherDisk::WriteDisk>,
-    {
-        self.load().map_err(Either::Left)?;
-        let mut other = BackedEntry::<T, OtherDisk, Coder> {
-            value: self.value,
-            disk,
-            coder: self.coder,
-        };
-        other.update().map_err(Either::Right)?;
-        Ok(other)
-    }
-
-    /// Converts [`self`] to another encoder representation.
-    ///
-    /// Specialization of [`Self::change_backing`].
-    pub fn change_encoder<OtherCoder>(
-        self,
-        coder: OtherCoder,
-    ) -> Result<
-        BackedEntry<T, Disk, OtherCoder>,
-        Either<
-            <Coder as Decoder<<Disk as ReadDisk>::ReadDisk>>::Error,
-            <OtherCoder as Encoder<<Disk as WriteDisk>::WriteDisk>>::Error,
-        >,
-    >
-    where
-        Disk: WriteDisk,
-        OtherCoder: Encoder<Disk::WriteDisk>,
-    {
-        self.load().map_err(Either::Left)?;
-        let mut other = BackedEntry::<T, Disk, OtherCoder> {
-            value: self.value,
-            disk: self.disk,
             coder,
         };
         other.update().map_err(Either::Right)?;

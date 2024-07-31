@@ -4,7 +4,7 @@ use std::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
     path::PathBuf,
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 use itertools::Either;
@@ -15,8 +15,8 @@ use crate::utils::{Once, ToMut};
 
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
-    formats::{AsyncDecoder, AsyncEncoder},
-    BackedEntryAsync, BackedEntryTrait,
+    formats::{AsyncDecoder, AsyncEncoder, Decoder, Encoder},
+    BackedEntry, BackedEntryAsync, BackedEntryTrait,
 };
 
 impl<T: Serialize, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
@@ -281,53 +281,73 @@ impl<
         Ok(other)
     }
 
-    /// See [`Self::change_disk`].
-    pub async fn a_change_disk<OtherDisk>(
+    /// Converts [`self`] into a synchronous backing.
+    ///
+    /// Makes a blocking runtime call to update disk after conversion,
+    /// so will crash if not run within a Tokio runtime.
+    pub async fn to_sync<OtherDisk, OtherCoder, U>(
         self,
         disk: OtherDisk,
-    ) -> Result<
-        BackedEntryAsync<T, OtherDisk, Coder>,
-        Either<
-            <Coder as AsyncDecoder<<Disk as AsyncReadDisk>::ReadDisk>>::Error,
-            <Coder as AsyncEncoder<<OtherDisk as AsyncWriteDisk>::WriteDisk>>::Error,
-        >,
-    >
+        coder: OtherCoder,
+    ) -> Result<BackedEntry<U, OtherDisk, OtherCoder>, Either<Coder::Error, OtherCoder::Error>>
     where
-        OtherDisk: AsyncWriteDisk,
-        Coder: AsyncEncoder<OtherDisk::WriteDisk>,
+        <Coder as AsyncDecoder<<Disk as AsyncReadDisk>::ReadDisk>>::Error: Send + Sync,
+        U: Once<Inner = T> + Send + Sync + 'static,
+        OtherDisk: WriteDisk + Send + Sync + 'static,
+        OtherCoder: Encoder<OtherDisk::WriteDisk, Error: Send + Sync> + Send + Sync + 'static,
     {
         self.a_load().await.map_err(Either::Left)?;
-        let mut other = BackedEntryAsync::<T, OtherDisk, Coder> {
-            value: self.value,
-            disk,
-            coder: self.coder,
-        };
-        other.a_update().await.map_err(Either::Right)?;
+
+        let value = U::new();
+        let _ = value.set(self.value.into_inner().unwrap());
+
+        let mut other = BackedEntry::<U, OtherDisk, OtherCoder> { value, disk, coder };
+        let other = tokio::task::spawn_blocking(move || {
+            other.update()?;
+            Ok::<_, OtherCoder::Error>(other)
+        })
+        .await
+        .unwrap()
+        .map_err(Either::Right)?;
         Ok(other)
     }
+}
 
-    /// See [`Self::change_encoder`].
-    pub async fn a_change_encoder<OtherCoder>(
-        self,
-        coder: OtherCoder,
-    ) -> Result<
-        BackedEntryAsync<T, Disk, OtherCoder>,
-        Either<
-            <Coder as AsyncDecoder<<Disk as AsyncReadDisk>::ReadDisk>>::Error,
-            <OtherCoder as AsyncEncoder<<Disk as AsyncWriteDisk>::WriteDisk>>::Error,
-        >,
-    >
-    where
+impl<
+        T: Serialize + for<'de> Deserialize<'de> + Sync + Send + 'static,
         Disk: AsyncWriteDisk,
-        OtherCoder: AsyncEncoder<Disk::WriteDisk>,
+        Coder: AsyncEncoder<Disk::WriteDisk>,
+    > BackedEntryAsync<T, Disk, Coder>
+{
+    /// Converts from a synchronous backing into [`self`].
+    ///
+    /// Makes a blocking runtime call to load from disk before conversion,
+    /// so will crash if not run within a Tokio runtime.
+    pub async fn from_sync<OtherDisk, OtherCoder, U>(
+        other: BackedEntry<U, OtherDisk, OtherCoder>,
+        disk: Disk,
+        coder: Coder,
+    ) -> Result<Self, Either<OtherCoder::Error, Coder::Error>>
+    where
+        U: Once<Inner = T> + Send + Sync + 'static,
+        OtherDisk: ReadDisk + Send + Sync + 'static,
+        OtherCoder: Decoder<OtherDisk::ReadDisk, Error: Send + Sync> + Send + Sync + 'static,
     {
-        self.a_load().await.map_err(Either::Left)?;
-        let mut other = BackedEntryAsync::<T, Disk, OtherCoder> {
-            value: self.value,
-            disk: self.disk,
+        let other = Arc::new(other);
+        let other_clone = other.clone();
+        tokio::task::spawn_blocking(move || other_clone.load().map(|_| ()))
+            .await
+            .unwrap()
+            .map_err(Either::Left)?;
+        let other = Arc::into_inner(other).unwrap();
+
+        let mut this = Self {
+            value: OnceCell::new_with(other.value.into_inner()),
+            disk,
             coder,
         };
-        other.a_update().await.map_err(Either::Right)?;
-        Ok(other)
+
+        this.a_update().await.map_err(Either::Right)?;
+        Ok(this)
     }
 }
