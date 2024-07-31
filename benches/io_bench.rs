@@ -1,5 +1,4 @@
 use std::{
-    array,
     env::temp_dir,
     fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
     io::{Seek, Write},
@@ -71,7 +70,7 @@ fn file_creation_bench(c: &mut Criterion) {
     group.bench_function("create_plainfiles", |b| {
         let _ = remove_dir_all(path.clone());
         create_dir(path.clone()).unwrap();
-        b.iter(|| create_plainfiles(black_box(path.clone()), black_box(&data)))
+        b.iter(|| create_plainfiles(black_box(path.clone()), black_box(data)))
     });
 
     println!(
@@ -89,7 +88,7 @@ fn file_creation_bench(c: &mut Criterion) {
     group.bench_function("create_zstdfiles", |b| {
         let _ = remove_dir_all(path.clone());
         create_dir(path.clone()).unwrap();
-        b.iter(|| create_zstdfiles(black_box(path.clone()), black_box(&data), None))
+        b.iter(|| create_zstdfiles(black_box(path.clone()), black_box(data), None))
     });
 
     println!(
@@ -142,7 +141,7 @@ fn file_load_bench(c: &mut Criterion) {
         .open(path.join("CONFIG"))
         .unwrap();
 
-    let mut arr = create_plainfiles(path.clone(), &data);
+    let mut arr = create_plainfiles(path.clone(), data);
     arr.save_to_disk(file.try_clone().unwrap()).unwrap();
 
     group.bench_function("load_plainfiles", |b| {
@@ -160,7 +159,7 @@ fn file_load_bench(c: &mut Criterion) {
         .open(path.join("CONFIG"))
         .unwrap();
 
-    let mut arr = create_zstdfiles(path.clone(), &data, None);
+    let mut arr = create_zstdfiles(path.clone(), data, None);
     arr.save_to_disk(file.try_clone().unwrap()).unwrap();
 
     #[cfg(feature = "zstd")]
@@ -194,7 +193,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 let _ = remove_dir_all(path.clone());
                 create_dir(path.clone()).unwrap();
                 b.iter(|| {
-                    create_zstdfiles(black_box(path.clone()), black_box(&data), Some(*zstd_level))
+                    create_zstdfiles(black_box(path.clone()), black_box(data), Some(*zstd_level))
                 })
             },
         );
@@ -219,7 +218,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
             .truncate(true)
             .open(path.join("CONFIG"))
             .unwrap();
-        create_zstdfiles(black_box(path.clone()), black_box(&data), Some(zstd_level))
+        create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
             .save_to_disk(file.try_clone().unwrap())
             .unwrap();
         group.bench_with_input(
@@ -243,7 +242,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
                     b.iter(|| {
                         create_zstdfiles(
                             black_box(path.clone()),
-                            black_box(&data),
+                            black_box(data),
                             Some(*zstd_level),
                         )
                     })
@@ -257,7 +256,7 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 .truncate(true)
                 .open(path.join("CONFIG"))
                 .unwrap();
-            create_zstdfiles(black_box(path.clone()), black_box(&data), Some(zstd_level))
+            create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
                 .save_to_disk(file.try_clone().unwrap())
                 .unwrap();
             group.bench_with_input(

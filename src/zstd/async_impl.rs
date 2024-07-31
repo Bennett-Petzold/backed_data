@@ -12,12 +12,9 @@ use async_compression::zstd::CParameter;
 
 use async_trait::async_trait;
 use derive_getters::Getters;
-use futures::{executor::block_on, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use itertools::Itertools;
-use serde::{
-    de::{DeserializeOwned, Error},
-    Deserialize, Serialize,
-};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{
     fs::{copy, create_dir_all, remove_dir_all, remove_file, rename, File},
     io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader},
@@ -26,25 +23,19 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
+use crate::{
+    array::async_impl::BackedArray,
+    entry::async_impl::{AsyncReadDisk, AsyncWriteDisk},
+    meta::async_impl::BackedArrayWrapper,
+};
 
 #[cfg(feature = "async-zstdmt")]
 use super::ZSTD_MULTITHREAD;
 
 /// File encoded with zstd
-pub struct ZstdFile {
-    file: File,
-    path: PathBuf,
-    #[allow(dead_code)]
-    decoder: ZstdDecoder<BufReader<File>>,
-    #[allow(dead_code)]
-    encoder: ZstdEncoder<File>,
-    zstd_level: i32,
-}
-
 #[derive(Serialize, Deserialize)]
-struct ZstdFileSerialized {
-    path: String,
+pub struct ZstdFile {
+    path: PathBuf,
     zstd_level: i32,
 }
 
@@ -61,134 +52,74 @@ impl ZstdFile {
                 format!("zstd_level ({zstd_level}) not [0, 22]"),
             ));
         };
-        let file = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path.clone())
-            .await?;
-        Ok(Self {
-            file: file.try_clone().await?,
-            path,
-            decoder: ZstdDecoder::new(BufReader::new(file.try_clone().await?)),
-            #[cfg(not(feature = "async-zstdmt"))]
-            encoder: ZstdEncoder::with_quality(file, async_compression::Level::Precise(zstd_level)),
-            #[cfg(feature = "async-zstdmt")]
-            encoder: ZstdEncoder::with_quality_and_params(
-                file,
-                async_compression::Level::Precise(zstd_level),
-                &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
-            ),
-            zstd_level,
-        })
+        Ok(Self { path, zstd_level })
     }
 }
 
-impl Serialize for ZstdFile {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let serial_form = ZstdFileSerialized {
-            path: self.path.to_str().unwrap().to_string(),
-            zstd_level: self.zstd_level,
-        };
-        serial_form.serialize(serializer)
-    }
-}
+pub struct ZstdDecoderWrapper(ZstdDecoder<BufReader<File>>);
 
-impl<'de> Deserialize<'de> for ZstdFile {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        block_on(async {
-            let ZstdFileSerialized { path, zstd_level } =
-                ZstdFileSerialized::deserialize(deserializer)?;
-            let file = File::options()
-                .read(true)
-                .write(true)
-                .open(path.clone())
-                .await
-                .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
-            Ok(Self {
-                file: file.try_clone().await.map_err(D::Error::custom)?,
-                path: path.into(),
-                decoder: ZstdDecoder::new(BufReader::new(
-                    file.try_clone().await.map_err(D::Error::custom)?,
-                )),
-                #[cfg(not(feature = "async-zstdmt"))]
-                encoder: ZstdEncoder::with_quality(
-                    file,
-                    async_compression::Level::Precise(zstd_level),
-                ),
-                #[cfg(feature = "async-zstdmt")]
-                encoder: ZstdEncoder::with_quality_and_params(
-                    file,
-                    async_compression::Level::Precise(zstd_level),
-                    &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
-                ),
-                zstd_level,
-            })
-        })
-    }
-}
-
-impl AsyncRead for ZstdFile {
+impl AsyncRead for ZstdDecoderWrapper {
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut (self.get_mut()).file).poll_read(cx, buf)
+        Pin::new(&mut (self.get_mut()).0).poll_read(cx, buf)
     }
 }
 
-impl AsyncWrite for ZstdFile {
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_shutdown(cx)
-    }
-    fn poll_write_vectored(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_write_vectored(cx, bufs)
-    }
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_flush(cx)
-    }
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).file).poll_write(cx, buf)
-    }
-    fn is_write_vectored(&self) -> bool {
-        self.file.is_write_vectored()
-    }
-}
-
-impl AsyncSeek for ZstdFile {
+impl AsyncSeek for ZstdDecoderWrapper {
     fn poll_complete(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<u64>> {
-        Pin::new(&mut (self.get_mut()).file).poll_complete(cx)
+        Pin::new(&mut (self.get_mut()).0.get_mut()).poll_complete(cx)
     }
     fn start_seek(
         self: std::pin::Pin<&mut Self>,
         position: std::io::SeekFrom,
     ) -> std::io::Result<()> {
-        Pin::new(&mut (self.get_mut()).file).start_seek(position)
+        Pin::new(&mut (self.get_mut()).0.get_mut()).start_seek(position)
+    }
+}
+
+impl AsyncReadDisk for ZstdFile {
+    type ReadDisk = ZstdDecoderWrapper;
+
+    async fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
+        Ok(ZstdDecoderWrapper(ZstdDecoder::new(BufReader::new(
+            File::open(self.path.clone()).await?,
+        ))))
+    }
+}
+
+impl AsyncWriteDisk for ZstdFile {
+    type WriteDisk = ZstdEncoder<File>;
+
+    async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        let file = File::options()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(self.path.clone())
+            .await?;
+
+        #[cfg(feature = "async-zstdmt")]
+        {
+            Ok(ZstdEncoder::with_quality_and_params(
+                file,
+                async_compression::Level::Precise(self.zstd_level),
+                &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
+            ))
+        }
+
+        #[cfg(not(feature = "async-zstdmt"))]
+        {
+            Ok(ZstdEncoder::with_quality(
+                file,
+                async_compression::Level::Precise(self.zstd_level),
+            ))
+        }
     }
 }
 

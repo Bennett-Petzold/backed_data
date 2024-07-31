@@ -1,103 +1,127 @@
-use std::io::{Cursor, Read, Seek, Write};
-
-#[cfg(feature = "async")]
-use {
-    std::pin::Pin,
-    tokio::io::{AsyncRead, AsyncSeek, AsyncWrite},
+use core::panic;
+use std::{
+    io::Cursor,
+    ops::{Deref, DerefMut},
 };
 
-use crate::entry::DiskOverwritable;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
-pub struct CursorVec(pub Cursor<Vec<u8>>);
+use crate::entry::{
+    async_impl::{AsyncReadDisk, AsyncWriteDisk},
+    sync_impl::{ReadDisk, WriteDisk},
+    DiskOverwritable,
+};
 
-impl DiskOverwritable for CursorVec {}
-impl DiskOverwritable for &mut CursorVec {}
+#[derive(Debug, Serialize)]
+pub struct CursorVec<'a> {
+    #[serde(skip)]
+    pub inner: &'a mut Cursor<Vec<u8>>,
+}
 
-impl Write for CursorVec {
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.0.get_mut().flush()
-    }
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.get_mut().write(buf)
+impl<'de> Deserialize<'de> for CursorVec<'_> {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        panic!("Don't deserialize CursorVec!")
     }
 }
 
-impl Read for CursorVec {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.0.read(buf)
+impl<'de> Deserialize<'de> for &mut CursorVec<'_> {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        panic!("Don't deserialize CursorVec!")
     }
 }
 
-impl Seek for CursorVec {
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        self.0.seek(pos)
-    }
+impl DiskOverwritable for CursorVec<'_> {}
+impl DiskOverwritable for &mut CursorVec<'_> {}
 
-    fn rewind(&mut self) -> std::io::Result<()> {
-        self.0.rewind()
+impl<'a> ReadDisk for CursorVec<'a> {
+    type ReadDisk = &'a mut Cursor<Vec<u8>>;
+
+    fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
     }
 }
 
-impl Unpin for CursorVec {}
+impl<'a> WriteDisk for CursorVec<'a> {
+    type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-#[cfg(feature = "async")]
-impl AsyncWrite for CursorVec {
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).0.get_mut()).poll_shutdown(cx)
-    }
-    fn poll_write_vectored(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).0.get_mut()).poll_write_vectored(cx, bufs)
-    }
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).0.get_mut()).poll_flush(cx)
-    }
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).0.get_mut()).poll_write(cx, buf)
-    }
-    fn is_write_vectored(&self) -> bool {
-        #[allow(unstable_name_collisions)]
-        self.0.get_ref().is_write_vectored()
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
     }
 }
 
-#[cfg(feature = "async")]
-impl AsyncRead for CursorVec {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut (self.get_mut()).0).poll_read(cx, buf)
+impl<'a> AsyncReadDisk for CursorVec<'a> {
+    type ReadDisk = &'a mut Cursor<Vec<u8>>;
+
+    async fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
     }
 }
 
-#[cfg(feature = "async")]
-impl AsyncSeek for CursorVec {
-    fn poll_complete(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<u64>> {
-        Pin::new(&mut (self.get_mut()).0).poll_complete(cx)
+impl<'a> AsyncWriteDisk for CursorVec<'a> {
+    type WriteDisk = &'a mut Cursor<Vec<u8>>;
+
+    async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
     }
-    fn start_seek(
-        self: std::pin::Pin<&mut Self>,
-        position: std::io::SeekFrom,
-    ) -> std::io::Result<()> {
-        Pin::new(&mut (self.get_mut()).0).start_seek(position)
+}
+
+impl<'a> ReadDisk for &mut CursorVec<'a> {
+    type ReadDisk = &'a mut Cursor<Vec<u8>>;
+
+    fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
+    }
+}
+
+impl<'a> WriteDisk for &mut CursorVec<'a> {
+    type WriteDisk = &'a mut Cursor<Vec<u8>>;
+
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
+    }
+}
+
+impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
+    type ReadDisk = &'a mut Cursor<Vec<u8>>;
+
+    async fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
+    }
+}
+
+impl<'a> AsyncWriteDisk for &mut CursorVec<'a> {
+    type WriteDisk = &'a mut Cursor<Vec<u8>>;
+
+    async fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        let self_inner: *mut Cursor<Vec<u8>> = self.inner;
+        unsafe { Ok(&mut *self_inner) }
+    }
+}
+
+impl Unpin for CursorVec<'_> {}
+
+impl Deref for CursorVec<'_> {
+    type Target = Cursor<Vec<u8>>;
+    fn deref(&self) -> &Self::Target {
+        self.inner.deref()
+    }
+}
+
+impl DerefMut for CursorVec<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner.deref_mut()
     }
 }

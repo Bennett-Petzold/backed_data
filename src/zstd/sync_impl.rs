@@ -1,152 +1,90 @@
 use std::{
     fs::{copy, create_dir_all, remove_dir_all, remove_file, rename, File},
-    io::{BufReader, Read, Seek, Write},
+    io::{BufReader, Read, Seek},
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     path::PathBuf,
 };
 
 use derive_getters::Getters;
-use serde::{
-    de::{DeserializeOwned, Error},
-    Deserialize, Serialize,
-};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 use zstd::{Decoder, Encoder};
 
-use crate::{array::sync_impl::BackedArray, meta::sync_impl::BackedArrayWrapper};
+use crate::{
+    array::sync_impl::BackedArray,
+    entry::sync_impl::{ReadDisk, WriteDisk},
+    meta::sync_impl::BackedArrayWrapper,
+};
 
 #[cfg(feature = "zstdmt")]
 use super::ZSTD_MULTITHREAD;
 
 /// File encoded with zstd
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ZstdFile<'a> {
-    file: File,
     path: PathBuf,
-    #[allow(dead_code)]
-    decoder: Decoder<'a, BufReader<File>>,
-    #[allow(dead_code)]
-    encoder: Encoder<'a, File>,
     zstd_level: i32,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ZstdFileSerialized {
-    path: String,
-    zstd_level: i32,
+    phantom_lifetime: PhantomData<&'a ()>,
 }
 
 impl ZstdFile<'_> {
-    /// Create a new ZstdFile
-    ///
-    /// * `path`: A valid filesystem path
-    /// * `zstd_level`: An optional level bound [0-22]. 0 for library default.
-    pub fn new(path: PathBuf, zstd_level: Option<i32>) -> std::io::Result<Self> {
-        let zstd_level = zstd_level.unwrap_or(0);
-        if !(0..=22).contains(&zstd_level) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("zstd_level ({zstd_level}) not [0, 22]"),
-            ));
-        };
-        let file = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path.clone())?;
-
-        #[allow(unused_mut)]
-        let mut encoder = Encoder::new(file.try_clone()?, zstd_level)?;
-        #[cfg(feature = "zstdmt")]
-        encoder.multithread(*ZSTD_MULTITHREAD.lock().unwrap())?;
-
-        Ok(Self {
-            file: file.try_clone()?,
+    pub fn new(path: PathBuf, zstd_level: i32) -> Self {
+        Self {
             path,
-            decoder: Decoder::new(file)?,
-            encoder,
             zstd_level,
-        })
+            phantom_lifetime: PhantomData,
+        }
     }
 }
 
-impl Serialize for ZstdFile<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let serial_form = ZstdFileSerialized {
-            path: self.path.to_str().unwrap().to_string(),
-            zstd_level: self.zstd_level,
-        };
-        serial_form.serialize(serializer)
+impl<'a> ReadDisk for ZstdFile<'a> {
+    type ReadDisk = ZstdDecoderWrapper<'a>;
+
+    fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk> {
+        Ok(ZstdDecoderWrapper(Decoder::new(File::open(
+            self.path.clone(),
+        )?)?))
     }
 }
 
-impl<'de> Deserialize<'de> for ZstdFile<'_> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let ZstdFileSerialized { path, zstd_level } =
-            ZstdFileSerialized::deserialize(deserializer)?;
-        let file = File::options()
-            .read(true)
-            .write(true)
-            .open(path.clone())
-            .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
+impl<'a> WriteDisk for ZstdFile<'a> {
+    type WriteDisk = Encoder<'a, File>;
 
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         #[allow(unused_mut)]
-        let mut encoder = Encoder::new(file.try_clone().map_err(D::Error::custom)?, zstd_level)
-            .map_err(D::Error::custom)?;
+        let mut encoder = Encoder::new(
+            File::options()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(self.path.clone())?,
+            self.zstd_level,
+        )?;
+
         #[cfg(feature = "zstdmt")]
         encoder
             .multithread(*ZSTD_MULTITHREAD.lock().unwrap())
-            .map_err(D::Error::custom)?;
+            .unwrap();
 
-        Ok(Self {
-            file: file.try_clone().map_err(D::Error::custom)?,
-            path: path.into(),
-            decoder: Decoder::new(file.try_clone().map_err(D::Error::custom)?)
-                .map_err(D::Error::custom)?,
-            encoder,
-            zstd_level,
-        })
+        Ok(encoder)
     }
 }
 
-impl Read for ZstdFile<'_> {
+pub struct ZstdDecoderWrapper<'a>(Decoder<'a, BufReader<File>>);
+
+impl Read for ZstdDecoderWrapper<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.decoder.read(buf)
+        self.0.read(buf)
     }
     fn read_vectored(&mut self, bufs: &mut [std::io::IoSliceMut<'_>]) -> std::io::Result<usize> {
-        self.decoder.read_vectored(bufs)
+        self.0.read_vectored(bufs)
     }
 }
 
-impl Write for ZstdFile<'_> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.encoder.write(buf)
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        // Use the flush call as an opportunity to call finish on encoding
-        // Without calling finish, the metadata won't be complete
-        self.encoder.flush()?;
-        self.encoder.do_finish()?;
-        self.encoder = Encoder::new(self.file.try_clone()?, self.zstd_level)?;
-        #[cfg(feature = "zstdmt")]
-        self.encoder
-            .multithread(*ZSTD_MULTITHREAD.lock().unwrap())?;
-        Ok(())
-    }
-    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
-        self.encoder.write_vectored(bufs)
-    }
-}
-
-impl Seek for ZstdFile<'_> {
+impl Seek for ZstdDecoderWrapper<'_> {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        self.decoder.get_mut().seek(pos)
+        self.0.get_mut().seek(pos)
     }
 }
 
@@ -197,8 +135,8 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
                 self.directory_root
                     .clone()
                     .join(Uuid::new_v4().to_string() + ".zstd"),
-                self.zstd_level,
-            )?,
+                self.zstd_level.unwrap_or(0),
+            ),
         )?;
         Ok(self)
     }
@@ -210,8 +148,8 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
                 self.directory_root
                     .clone()
                     .join(Uuid::new_v4().to_string() + ".zstd"),
-                self.zstd_level,
-            )?,
+                self.zstd_level.unwrap_or(0),
+            ),
         )?;
         Ok(self)
     }

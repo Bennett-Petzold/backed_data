@@ -1,18 +1,22 @@
 use std::{
-    io::{Read, Seek, Write},
+    io::{Read, Write},
     ops::Range,
 };
 
 use anyhow::anyhow;
 use bincode::{deserialize_from, serialize_into};
 use derive_getters::Getters;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 
 use crate::entry::{
-    BackedEntry, BackedEntryArr, BackedEntryMut, BackedEntryUnload, DiskOverwritable,
+    sync_impl::{BackedEntryMut, ReadDisk, WriteDisk},
+    BackedEntry, BackedEntryArr, BackedEntryUnload,
 };
 
-use super::{internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayError};
+use super::{
+    internal_idx, multiple_internal_idx, multiple_internal_idx_strict, BackedArrayEntry,
+    BackedArrayError,
+};
 
 /// Array stored as multiple arrays on disk
 ///
@@ -27,14 +31,24 @@ use super::{internal_idx, multiple_internal_idx, multiple_internal_idx_strict, B
 /// Modifications beyond appending and removal are not supported, due to
 /// complexity.
 #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
-pub struct BackedArray<T, Disk> {
+pub struct BackedArray<T, Disk: for<'df> Deserialize<'df>> {
     // keys and entries must always have the same length
     // keys must always be sorted min-max
     keys: Vec<Range<usize>>,
+    #[serde(deserialize_with = "entries_deserialize")]
     entries: Vec<BackedEntryArr<T, Disk>>,
 }
 
-impl<T, Disk> Default for BackedArray<T, Disk> {
+fn entries_deserialize<'de, D, Backing: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Backing, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer)
+}
+
+impl<T, Disk: for<'de> Deserialize<'de>> Default for BackedArray<T, Disk> {
     fn default() -> Self {
         Self {
             keys: vec![],
@@ -43,7 +57,7 @@ impl<T, Disk> Default for BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -71,9 +85,47 @@ impl<T, Disk> BackedArray<T, Disk> {
     pub fn clear_chunk(&mut self, idx: usize) {
         self.entries[idx].unload();
     }
+
+    /// Returns all backing entries and the range they cover.
+    pub fn backed_array_entries(
+        &self,
+    ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>> {
+        self.keys
+            .iter()
+            .zip(self.entries.iter())
+            .map(BackedArrayEntry::from)
+    }
+
+    /// Returns all currently loaded backing entries and the range they cover.
+    pub fn loaded_array_entries(
+        &self,
+    ) -> impl Iterator<Item = BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>> {
+        self.backed_array_entries().filter(
+            |backed: &BackedArrayEntry<'_, BackedEntry<Box<[T]>, Disk>>| backed.entry.is_loaded(),
+        )
+    }
+
+    /// Returns the number of items currently loaded into memory.
+    ///
+    /// To get memory usage on constant-sized items, multiply this value by
+    /// the per-item size.
+    pub fn loaded_len(&self) -> usize {
+        self.loaded_array_entries()
+            .map(|backed| backed.range.len())
+            .sum()
+    }
+
+    /// Removes all backing stores not needed to hold `idxs` in memory.
+    pub fn shrink_to_query(&mut self, idxs: &[usize]) {
+        self.keys
+            .iter()
+            .enumerate()
+            .filter(|(_, key)| !idxs.iter().any(|idx| key.contains(idx)))
+            .for_each(|(idx, _)| self.entries[idx].unload());
+    }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: Read + Seek> From<BackedArray<T, Disk>>
+impl<T: DeserializeOwned + Clone, Disk: ReadDisk> From<BackedArray<T, Disk>>
     for bincode::Result<Box<[T]>>
 {
     fn from(mut val: BackedArray<T, Disk>) -> Self {
@@ -90,7 +142,7 @@ impl<T: DeserializeOwned + Clone, Disk: Read + Seek> From<BackedArray<T, Disk>>
 }
 
 /// Read implementations
-impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
+impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
     /// Return a value (potentially loading its backing array).
     ///
     /// Backing arrays stay in memory until freed.
@@ -122,7 +174,7 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
             .collect()
     }
 
-    /// [`Self::get_multiple`], but returns Errors for invalid idx
+    /// [`Self::get_multiple`], but returns Errors for invalid idx.
     pub fn get_multiple_strict<'a, I>(&'a mut self, idxs: I) -> Vec<Result<&'a T, BackedArrayError>>
     where
         I: IntoIterator<Item = usize> + 'a,
@@ -151,7 +203,7 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
 }
 
 /// Write implementations
-impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     /// Adds new values by writing them to the backing store.
     ///
     /// Does not keep the values in memory.
@@ -166,8 +218,8 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     ///     [2, 3, 5]);
     ///
     /// create_dir_all(FILENAME_BASE.clone()).unwrap();
-    /// let file_0 = OpenOptions::new().read(true).write(true).create(true).open(FILENAME_BASE.clone().join("_0")).unwrap();
-    /// let file_1 = OpenOptions::new().read(true).write(true).create(true).open(FILENAME_BASE.join("_1")).unwrap();
+    /// let file_0 = FILENAME_BASE.clone().join("_0");
+    /// let file_1 = FILENAME_BASE.join("_1");
     /// let mut array: BackedArray<u32, _> = BackedArray::default();
     /// array.append(&values.0, file_0);
     /// array.append(&values.1, file_1);
@@ -197,12 +249,10 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     ///     [2, 3, 5]);
     ///
     /// let mut array: BackedArray<u32, _> = BackedArray::default();
-    /// let file = OpenOptions::new().read(true).write(true).create(true).open(FILENAME.clone()).unwrap();
-    /// array.append_memory(Box::new(values.0), file);
+    /// array.append_memory(Box::new(values.0), FILENAME.clone());
     ///
     /// // Overwrite file, making disk pointer for first array invalid
-    /// let file = OpenOptions::new().read(true).write(true).create(true).open(FILENAME.clone()).unwrap();
-    /// array.append_memory(Box::new(values.1), file);
+    /// array.append_memory(Box::new(values.1), FILENAME.clone());
     ///
     /// assert_eq!(array.get(0).unwrap(), &0);
     /// remove_file(FILENAME).unwrap();
@@ -222,9 +272,7 @@ impl<T: Serialize, Disk: Write> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritable>
-    BackedArray<T, Disk>
-{
+impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedArray<T, Disk> {
     /// Returns a mutable handle to a given chunk.
     pub fn get_chunk_mut(
         &mut self,
@@ -234,7 +282,7 @@ impl<T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritab
     }
 }
 
-impl<T, Disk> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     /// Removes an entry with the internal index, shifting ranges.
     ///
     /// The getter functions can be used to indentify the target index.
@@ -267,7 +315,7 @@ impl<T, Disk> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: Serialize> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: WriteDisk> BackedArray<T, Disk> {
     /// Serializes this to disk after clearing all entries from memory to disk.
     ///
     /// Writing directly from serialize wastes disk space and increases load
@@ -278,7 +326,7 @@ impl<T: Serialize, Disk: Serialize> BackedArray<T, Disk> {
     }
 }
 
-impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: ReadDisk> BackedArray<T, Disk> {
     /// Loads the backed array. Does not load backing arrays, unless this
     /// was saved with data (was not saved with [`Self::save_to_disk`]).
     pub fn load<R: Read>(writer: &mut R) -> bincode::Result<Self> {
@@ -286,7 +334,7 @@ impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Clone, Disk: Clone> BackedArray<T, Disk> {
+impl<T: Clone, Disk: for<'de> Deserialize<'de> + Clone> BackedArray<T, Disk> {
     /// Combine `self` and `rhs` into a new [`Self`]
     ///
     /// Appends entries of `self` and `rhs`
@@ -320,7 +368,7 @@ impl<T: Clone, Disk: Clone> BackedArray<T, Disk> {
     }
 }
 
-impl<T, Disk> BackedArray<T, Disk> {
+impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     /// Moves all entries of `rhs` into `self`
     pub fn append_array(&mut self, mut rhs: Self) -> &mut Self {
         let offset = self.keys.last().unwrap_or(&(0..0)).end;
@@ -341,12 +389,12 @@ impl<T, Disk> BackedArray<T, Disk> {
 /// # Arguments
 /// * `pos`: Current position in chunks
 /// * `backed_array`: The underlying array
-pub struct BackedEntryChunkIter<'a, T, Disk> {
+pub struct BackedEntryChunkIter<'a, T, Disk: ReadDisk> {
     pos: usize,
     backed_array: &'a mut BackedArray<T, Disk>,
 }
 
-impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIter<'a, T, Disk> {
+impl<'a, T: DeserializeOwned, Disk: ReadDisk> Iterator for BackedEntryChunkIter<'a, T, Disk> {
     type Item = bincode::Result<&'a [T]>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -374,12 +422,12 @@ impl<'a, T: DeserializeOwned, Disk: Read + Seek> Iterator for BackedEntryChunkIt
 /// # Arguments
 /// * `pos`: Current position in chunks
 /// * `backed_array`: The underlying array
-pub struct BackedEntryChunkModIter<'a, T, Disk> {
+pub struct BackedEntryChunkModIter<'a, T, Disk: ReadDisk> {
     pos: usize,
     backed_array: &'a mut BackedArray<T, Disk>,
 }
 
-impl<'a, T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritable> Iterator
+impl<'a, T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> Iterator
     for BackedEntryChunkModIter<'a, T, Disk>
 {
     type Item = bincode::Result<BackedEntryMut<'a, Box<[T]>, Disk>>;
@@ -410,14 +458,12 @@ impl<'a, T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwr
 /// # Arguments
 /// * `pos`: Current position in chunks
 /// * `backed_array`: The underlying array
-pub struct BackedEntryDupIter<'a, T, Disk> {
+pub struct BackedEntryDupIter<'a, T, Disk: for<'de> Deserialize<'de>> {
     pos: usize,
     backed_array: &'a mut BackedArray<T, Disk>,
 }
 
-impl<'a, T: DeserializeOwned + Clone, Disk: Read + Seek> Iterator
-    for BackedEntryDupIter<'a, T, Disk>
-{
+impl<'a, T: DeserializeOwned + Clone, Disk: ReadDisk> Iterator for BackedEntryDupIter<'a, T, Disk> {
     type Item = bincode::Result<Box<[T]>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -449,13 +495,13 @@ impl<'a, T: DeserializeOwned + Clone, Disk: Read + Seek> Iterator
 /// * `inner_pos`: Current position inside chunk
 /// * `backed_array`: The underlying array
 /// * `chunk_iter`: [`BackedEntryChunkIter`] used to load backing values
-pub struct BackedEntryItemIter<'a, T, Disk> {
+pub struct BackedEntryItemIter<'a, T, Disk: ReadDisk> {
     inner_pos: usize,
     backed_array: Option<bincode::Result<&'a [T]>>,
     chunk_iter: BackedEntryChunkIter<'a, T, Disk>,
 }
 
-impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> BackedEntryItemIter<'a, T, Disk> {
+impl<'a, T: DeserializeOwned + 'a, Disk: ReadDisk> BackedEntryItemIter<'a, T, Disk> {
     fn new(inner_pos: usize, mut chunk_iter: BackedEntryChunkIter<'a, T, Disk>) -> Self {
         let backed_array = chunk_iter.next();
         Self {
@@ -466,9 +512,7 @@ impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> BackedEntryItemIter<'a, T,
     }
 }
 
-impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
-    for BackedEntryItemIter<'a, T, Disk>
-{
+impl<'a, T: DeserializeOwned + 'a, Disk: ReadDisk> Iterator for BackedEntryItemIter<'a, T, Disk> {
     type Item = anyhow::Result<&'a T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -518,7 +562,7 @@ impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
 }
 
 // Iterator returns
-impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
+impl<T: DeserializeOwned, Disk: ReadDisk> BackedArray<T, Disk> {
     /// Return a [`BackedEntryItemIter`] that outputs items in order.
     ///
     /// # Arguments
@@ -563,9 +607,7 @@ impl<T: DeserializeOwned, Disk: Read + Seek> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritable>
-    BackedArray<T, Disk>
-{
+impl<T: Serialize + DeserializeOwned, Disk: ReadDisk + WriteDisk> BackedArray<T, Disk> {
     /// Return a [`BackedEntryChunkModIter`] that provides mutable handles to
     /// underlying chunks, using [`BackedEntryMut`].
     ///
@@ -585,7 +627,7 @@ impl<T: Serialize + DeserializeOwned, Disk: Write + Read + Seek + DiskOverwritab
     }
 }
 
-impl<T: DeserializeOwned + Clone, Disk: Read + Seek> BackedArray<T, Disk> {
+impl<T: DeserializeOwned + Clone, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     /// Returns a [`BackedEntryDupIter`] that outputs clones of chunk data.
     ///
     /// See [`Self::chunk_iter`] for a version that produces references.
@@ -614,16 +656,20 @@ mod tests {
 
     #[test]
     fn multiple_retrieve() {
-        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
-        let back_vector_2 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_0 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
+        let back_vector_1 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
 
-        const INPUT_1: [u8; 3] = [0, 1, 1];
-        const INPUT_2: [u8; 3] = [2, 3, 5];
+        const INPUT_0: [u8; 3] = [0, 1, 1];
+        const INPUT_1: [u8; 3] = [2, 3, 5];
 
         let mut backed = BackedArray::new();
-        backed.append(&INPUT_1, back_vector_1).unwrap();
+        backed.append(&INPUT_0, back_vector_0).unwrap();
         backed
-            .append_memory(Box::new(INPUT_2), back_vector_2)
+            .append_memory(Box::new(INPUT_1), back_vector_1)
             .unwrap();
 
         assert_eq!(backed.get(0).unwrap(), &0);
@@ -656,7 +702,9 @@ mod tests {
 
     #[test]
     fn out_of_bounds_access() {
-        let back_vector = Cursor::new(Vec::with_capacity(3));
+        let back_vector = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
 
         const INPUT: &[u8] = &[0, 1, 1];
 
@@ -689,8 +737,12 @@ mod tests {
 
     #[test]
     fn chunk_iteration() {
-        let back_vector_0 = Cursor::new(Vec::with_capacity(3));
-        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_0 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
+        let back_vector_1 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
 
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
@@ -710,8 +762,12 @@ mod tests {
 
     #[test]
     fn item_iteration() {
-        let back_vector_0 = Cursor::new(Vec::with_capacity(3));
-        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_0 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
+        let back_vector_1 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
 
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
@@ -730,8 +786,12 @@ mod tests {
 
     #[test]
     fn dup_iteration() {
-        let back_vector_0 = Cursor::new(Vec::with_capacity(3));
-        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+        let back_vector_0 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
+        let back_vector_1 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
 
         const INPUT_0: &[u8] = &[0, 1, 1];
         const INPUT_1: &[u8] = &[2, 5, 7];
@@ -754,13 +814,17 @@ mod tests {
         const FIB: &[u8] = &[0, 1, 1, 5, 7];
         const INPUT_1: &[u8] = &[2, 5, 7];
 
-        let mut back_vec_0 = CursorVec(Cursor::new(Vec::with_capacity(10)));
+        let mut back_vec_0 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(10)),
+        };
         let back_vec_ptr_0: *mut CursorVec = &mut back_vec_0;
-        let mut back_vec_1 = CursorVec(Cursor::new(Vec::with_capacity(10)));
+        let mut back_vec_1 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(10)),
+        };
         let back_vec_ptr_1: *mut CursorVec = &mut back_vec_1;
 
-        let backing_store_0 = back_vec_0.0.get_ref();
-        let backing_store_1 = back_vec_1.0.get_ref();
+        let backing_store_0 = back_vec_0.inner.get_ref();
+        let backing_store_1 = back_vec_1.inner.get_ref();
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed = BackedArray::new();
@@ -807,5 +871,43 @@ mod tests {
                 .unwrap(),
             [&20, &1, &30, &5, &7, &40, &5, &7]
         );
+    }
+
+    #[test]
+    fn length_checking() {
+        let back_vector_0 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
+        let back_vector_1 = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(3)),
+        };
+
+        const INPUT_0: &[u8] = &[0, 1, 1];
+        const INPUT_1: &[u8] = &[2, 5, 7];
+
+        let mut backed = BackedArray::new();
+        backed.append(INPUT_0, back_vector_0).unwrap();
+        backed.append_memory(INPUT_1.into(), back_vector_1).unwrap();
+
+        assert_eq!(backed.len(), 6);
+        assert_eq!(backed.loaded_len(), 3);
+        backed.shrink_to_query(&[0]);
+        assert_eq!(backed.loaded_len(), 0);
+        backed.get(0).unwrap();
+        assert_eq!(backed.loaded_len(), 3);
+        backed.clear_chunk(1);
+        assert_eq!(backed.loaded_len(), 3);
+        backed.clear_chunk(0);
+        assert_eq!(backed.loaded_len(), 0);
+        backed
+            .get_multiple([0, 4])
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(backed.loaded_len(), 6);
+        backed.shrink_to_query(&[4]);
+        assert_eq!(backed.loaded_len(), 3);
+        backed.clear_memory();
+        assert_eq!(backed.loaded_len(), 0);
     }
 }
