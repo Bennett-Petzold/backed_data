@@ -6,6 +6,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "async")]
+use {
+    futures::Future,
+    tokio::io::{AsyncRead, AsyncWrite},
+};
+
 pub trait ReadDisk: Serialize + for<'de> Deserialize<'de> {
     type ReadDisk: Read;
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk>;
@@ -14,6 +20,22 @@ pub trait ReadDisk: Serialize + for<'de> Deserialize<'de> {
 pub trait WriteDisk: Serialize + for<'de> Deserialize<'de> {
     type WriteDisk: Write;
     fn write_disk(&self) -> std::io::Result<Self::WriteDisk>;
+}
+
+#[cfg(feature = "async")]
+pub trait AsyncReadDisk: Unpin + Serialize + for<'de> Deserialize<'de> {
+    type ReadDisk: AsyncRead;
+    fn async_read_disk(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Self::ReadDisk>> + Send + Sync;
+}
+
+#[cfg(feature = "async")]
+pub trait AsyncWriteDisk: Unpin + Serialize + for<'de> Deserialize<'de> {
+    type WriteDisk: AsyncWrite;
+    fn async_write_disk(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Self::WriteDisk>> + Send + Sync;
 }
 
 /// A regular file entry.
@@ -68,6 +90,33 @@ impl WriteDisk for Plainfile {
     }
 }
 
+#[cfg(feature = "async")]
+impl AsyncReadDisk for Plainfile {
+    type ReadDisk = tokio::io::BufReader<tokio::fs::File>;
+
+    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        Ok(tokio::io::BufReader::new(
+            tokio::fs::File::open(self.path.clone()).await?,
+        ))
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncWriteDisk for Plainfile {
+    type WriteDisk = tokio::io::BufWriter<tokio::fs::File>;
+
+    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        Ok(tokio::io::BufWriter::new(
+            tokio::fs::File::options()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(self.path.clone())
+                .await?,
+        ))
+    }
+}
+
 #[cfg(any(feature = "zstd", feature = "async-zstd"))]
 pub use zstd_disks::*;
 #[cfg(any(feature = "zstd", feature = "async-zstd"))]
@@ -80,6 +129,13 @@ mod zstd_disks {
         ops::Deref,
     };
     use zstd::{Decoder, Encoder};
+
+    #[cfg(feature = "async-zstd")]
+    use {
+        async_compression::zstd::CParameter,
+        std::{pin::Pin, task::Context},
+        tokio::io::{AsyncBufRead, AsyncRead, AsyncSeek},
+    };
 
     #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
     use {lazy_static::lazy_static, std::sync::Mutex};
@@ -255,6 +311,81 @@ mod zstd_disks {
         }
     }
 
+    #[cfg(feature = "async-zstd")]
+    pub struct AsyncZstdDecoderWrapper<B: AsyncBufRead>(
+        async_compression::tokio::bufread::ZstdDecoder<B>,
+    );
+
+    #[cfg(feature = "async-zstd")]
+    impl<B: AsyncBufRead + Unpin> AsyncRead for AsyncZstdDecoderWrapper<B> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut tokio::io::ReadBuf,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            Pin::new(&mut (self.get_mut()).0).poll_read(cx, buf)
+        }
+    }
+
+    #[cfg(feature = "async-zstd")]
+    impl<B: AsyncBufRead + AsyncSeek + Unpin> AsyncSeek for AsyncZstdDecoderWrapper<B> {
+        fn poll_complete(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<std::io::Result<u64>> {
+            Pin::new(&mut (self.get_mut()).0.get_mut()).poll_complete(cx)
+        }
+        fn start_seek(
+            self: std::pin::Pin<&mut Self>,
+            position: std::io::SeekFrom,
+        ) -> std::io::Result<()> {
+            Pin::new(&mut (self.get_mut()).0.get_mut()).start_seek(position)
+        }
+    }
+
+    #[cfg(feature = "async-zstd")]
+    impl<B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send> AsyncReadDisk
+        for ZstdDisk<'_, B>
+    {
+        type ReadDisk = AsyncZstdDecoderWrapper<B::ReadDisk>;
+
+        async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+            Ok(AsyncZstdDecoderWrapper(
+                async_compression::tokio::bufread::ZstdDecoder::new(
+                    self.inner.async_read_disk().await?,
+                ),
+            ))
+        }
+    }
+
+    #[cfg(feature = "async-zstd")]
+    impl<B: AsyncWriteDisk + Send + Sync> AsyncWriteDisk for ZstdDisk<'_, B> {
+        type WriteDisk = async_compression::tokio::write::ZstdEncoder<B::WriteDisk>;
+
+        async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+            let disk = self.inner.async_write_disk().await?;
+
+            #[cfg(feature = "async-zstdmt")]
+            {
+                Ok(
+                    async_compression::tokio::write::ZstdEncoder::with_quality_and_params(
+                        disk,
+                        async_compression::Level::Precise(*self.zstd_level),
+                        &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
+                    ),
+                )
+            }
+
+            #[cfg(not(feature = "async-zstdmt"))]
+            {
+                Ok(async_compression::tokio::write::ZstdEncoder::with_quality(
+                    disk,
+                    async_compression::Level::Precise(*self.zstd_level),
+                ))
+            }
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use std::{env::temp_dir, io::Cursor, sync::Mutex};
@@ -274,20 +405,60 @@ mod zstd_disks {
 
             let zstd = ZstdDisk::new(backing, None);
             let mut write = zstd.write_disk().unwrap();
-            write.write_all(TEST_SEQUENCE);
+            write.write_all(TEST_SEQUENCE).unwrap();
             write.flush().unwrap();
 
             // Reading from same struct
             let mut read = Vec::default();
-            zstd.read_disk().unwrap().read_to_end(&mut read);
+            let _ = zstd.read_disk().unwrap().read_to_end(&mut read);
+            assert_eq!(read, TEST_SEQUENCE);
+
+            // Reading after drop and rebuild at a different compression
+            let mut read = Vec::default();
+            let _ = ZstdDisk::new(zstd.into_inner(), Some(ZstdLevel::const_new(18).unwrap()))
+                .read_disk()
+                .unwrap()
+                .read_to_end(&mut read);
+            assert_eq!(read, TEST_SEQUENCE);
+        }
+
+        #[cfg(feature = "async-zstd")]
+        #[tokio::test]
+        async fn async_zstd() {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+            const TEST_SEQUENCE: &[u8] = &[39, 3, 6, 7, 5];
+            let mut cursor = Cursor::default();
+            let backing = CursorVec {
+                inner: Mutex::new(&mut cursor),
+            };
+            assert!(backing.get_ref().is_empty());
+
+            let zstd = ZstdDisk::new(backing, None);
+            let mut write = zstd.async_write_disk().await.unwrap();
+            write.write_all(TEST_SEQUENCE).await.unwrap();
+            write.flush().await.unwrap();
+            write.shutdown().await.unwrap();
+
+            // Reading from same struct
+            let mut read = Vec::default();
+            zstd.async_read_disk()
+                .await
+                .unwrap()
+                .read_to_end(&mut read)
+                .await
+                .unwrap();
             assert_eq!(read, TEST_SEQUENCE);
 
             // Reading after drop and rebuild at a different compression
             let mut read = Vec::default();
             ZstdDisk::new(zstd.into_inner(), Some(ZstdLevel::const_new(18).unwrap()))
-                .read_disk()
+                .async_read_disk()
+                .await
                 .unwrap()
-                .read_to_end(&mut read);
+                .read_to_end(&mut read)
+                .await
+                .unwrap();
             assert_eq!(read, TEST_SEQUENCE);
         }
     }
