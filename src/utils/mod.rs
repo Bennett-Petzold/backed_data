@@ -11,6 +11,8 @@ use std::{
 #[cfg(feature = "async")]
 use futures::Future;
 
+pub mod blocking;
+
 /// Used to constrain a trait to internal use only.
 ///
 /// `Internal` marks the only types the trait is implemented for.
