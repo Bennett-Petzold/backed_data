@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{Decoder, Encoder};
 
+#[cfg(feature = "csv")]
+use super::AsyncCsvCoder;
+
 #[derive(Deserialize, Serialize)]
 #[serde(remote = "csv::Trim")]
 #[non_exhaustive]
@@ -19,7 +22,7 @@ pub enum TrimSerial {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TrimWrapper(#[serde(with = "TrimSerial")] Trim);
+pub struct TrimWrapper(#[serde(with = "TrimSerial")] pub Trim);
 
 #[derive(Deserialize, Serialize)]
 #[serde(remote = "csv::Terminator")]
@@ -30,7 +33,7 @@ pub enum TerminatorSerial {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TerminatorWrapper(#[serde(with = "TerminatorSerial")] Terminator);
+pub struct TerminatorWrapper(#[serde(with = "TerminatorSerial")] pub Terminator);
 
 #[derive(Deserialize, Serialize)]
 #[serde(remote = "csv::QuoteStyle")]
@@ -43,7 +46,7 @@ pub enum QuoteStyleSerial {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct QuoteStyleWrapper(#[serde(with = "QuoteStyleSerial")] QuoteStyle);
+pub struct QuoteStyleWrapper(#[serde(with = "QuoteStyleSerial")] pub QuoteStyle);
 
 /// Unified [`csv::ReaderBuilder`] and [`csv::WriterBuilder`] configuration.
 ///
@@ -163,6 +166,60 @@ where
             writer.serialize(line)?
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "async_csv")]
+fn quote_style_conv(other: csv_async::QuoteStyle) -> QuoteStyle {
+    match other {
+        csv_async::QuoteStyle::Always => QuoteStyle::Always,
+        csv_async::QuoteStyle::Necessary => QuoteStyle::Necessary,
+        csv_async::QuoteStyle::NonNumeric => QuoteStyle::NonNumeric,
+        csv_async::QuoteStyle::Never => QuoteStyle::Never,
+        x => panic!("Unrecognized quote style in conversion: {:#?}", x),
+    }
+}
+
+#[cfg(feature = "async_csv")]
+fn term_conv(other: csv_async::Terminator) -> Terminator {
+    match other {
+        csv_async::Terminator::CRLF => Terminator::CRLF,
+        csv_async::Terminator::Any(x) => Terminator::Any(x),
+        x => panic!("Unrecognized terminator style in conversion: {:#?}", x),
+    }
+}
+
+#[cfg(feature = "async_csv")]
+fn trim_conv(other: csv_async::Trim) -> Trim {
+    match other {
+        csv_async::Trim::None => Trim::None,
+        csv_async::Trim::Headers => Trim::Headers,
+        csv_async::Trim::Fields => Trim::Fields,
+        csv_async::Trim::All => Trim::All,
+        x => panic!("Unrecognized trim style in conversion: {:#?}", x),
+    }
+}
+
+#[cfg(feature = "async_csv")]
+impl<T, U> From<AsyncCsvCoder<T, U>> for CsvCoder<T, U> {
+    fn from(value: AsyncCsvCoder<T, U>) -> Self {
+        Self {
+            comment: value.comment,
+            delimiter: value.delimiter,
+            double_quote: value.double_quote,
+            escape: value.escape,
+            flexible: value.flexible,
+            has_headers: value.has_headers,
+            quote: value.quote,
+            quoting: value.quoting,
+            quote_style: value
+                .quote_style
+                .map(|q| QuoteStyleWrapper(quote_style_conv(q.0))),
+            terminator: value.terminator.map(|t| TerminatorWrapper(term_conv(t.0))),
+            trim: value.trim.map(|t| TrimWrapper(trim_conv(t.0))),
+            _phantom_container: PhantomData,
+            _phantom_elements: PhantomData,
+        }
     }
 }
 
