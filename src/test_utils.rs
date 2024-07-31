@@ -32,6 +32,7 @@ macro_rules! cursor_vec {
     ($x: ident, $peek: ident) => {
         let mut inner = std::io::Cursor::default();
         let $x = std::cell::UnsafeCell::new($crate::test_utils::CursorVec::new(&mut inner));
+        #[allow(unused_variables)]
         #[cfg(all(test, not(miri)))]
         let $peek = unsafe { &*$x.get() }.get_ref();
     };
