@@ -129,8 +129,18 @@ impl<T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for DirectoryBackedA
         Ok(self)
     }
 
-    fn append_array(&mut self, mut rhs: Self) -> Result<&mut Self, Self::BackingError> {
-        rhs.move_root(self.directory_root.clone())?;
+    fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
+        rhs.array
+            .get_disks()
+            .iter()
+            .map(|disk| {
+                copy(
+                    disk.path.clone(),
+                    self.directory_root.join(disk.path.file_name().unwrap()),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        remove_dir_all(rhs.directory_root)?;
         self.array.append_array(rhs.array);
         Ok(self)
     }

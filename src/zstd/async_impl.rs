@@ -19,8 +19,9 @@ use serde::{
     Deserialize, Serialize,
 };
 use tokio::{
-    fs::{copy, create_dir_all, remove_file, rename, File},
+    fs::{copy, create_dir_all, remove_dir_all, remove_file, rename, File},
     io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt, BufReader},
+    spawn,
     task::JoinSet,
 };
 use uuid::Uuid;
@@ -245,9 +246,30 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
         Ok(self)
     }
 
-    async fn append_array(&mut self, mut rhs: Self) -> Result<&mut Self, Self::BackingError> {
-        rhs.move_root(self.directory_root.clone()).await?;
+    async fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
+        let mut copy_futures = JoinSet::new();
+
+        let disks: Vec<PathBuf> = rhs
+            .array
+            .get_disks()
+            .into_iter()
+            .map(|x| x.path.clone())
+            .collect_vec();
+        disks.into_iter().for_each(|path| {
+            let new_root_clone = self.directory_root.clone();
+            copy_futures.spawn(async move {
+                copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
+            });
+        });
+        let dir_remove = spawn(remove_dir_all(rhs.directory_root));
+
         self.array.append_array(rhs.array);
+
+        while let Some(future) = copy_futures.join_next().await {
+            let _ = future?;
+        }
+        dir_remove.await??;
+
         Ok(self)
     }
 }
