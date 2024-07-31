@@ -260,6 +260,7 @@ impl<
     /// If switching between compatible coders (e.g. simd_json -> serde_json)
     /// without switching the backing disk, use [`Self::encoder_into`] to skip
     /// the extraneous disk reads/writes.
+    #[allow(clippy::type_complexity)]
     pub fn change_backing<OtherDisk, OtherCoder>(
         self,
         disk: OtherDisk,

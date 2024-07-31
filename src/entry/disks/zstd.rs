@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt::{Debug, Display},
-    io::{BufRead, Read, Seek},
+    io::BufRead,
     marker::PhantomData,
     ops::Deref,
     path::{Path, PathBuf},
@@ -16,10 +16,7 @@ use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
 use super::{ReadDisk, WriteDisk};
 
 #[cfg(feature = "async_zstd")]
-use {
-    std::{pin::Pin, task::Context},
-    tokio::io::{AsyncBufRead, AsyncRead, AsyncSeek},
-};
+use tokio::io::AsyncBufRead;
 
 #[cfg(feature = "async_zstdmt")]
 use async_compression::zstd::CParameter;
@@ -163,33 +160,14 @@ impl<const ZSTD_LEVEL: u8, B> ZstdDisk<'_, ZSTD_LEVEL, B> {
     }
 }
 
-pub struct ZstdDecoderWrapper<'a, B: BufRead>(Decoder<'a, B>);
-
-impl<B: BufRead> Read for ZstdDecoderWrapper<'_, B> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.0.read(buf)
-    }
-    fn read_vectored(&mut self, bufs: &mut [std::io::IoSliceMut<'_>]) -> std::io::Result<usize> {
-        self.0.read_vectored(bufs)
-    }
-}
-
-impl<B: BufRead + Seek> Seek for ZstdDecoderWrapper<'_, B> {
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        self.0.get_mut().seek(pos)
-    }
-}
-
 #[cfg(feature = "zstd")]
 impl<'a, const ZSTD_LEVEL: u8, B: ReadDisk<ReadDisk: BufRead>> ReadDisk
     for ZstdDisk<'a, ZSTD_LEVEL, B>
 {
-    type ReadDisk = ZstdDecoderWrapper<'a, B::ReadDisk>;
+    type ReadDisk = zstd::Decoder<'a, B::ReadDisk>;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(ZstdDecoderWrapper(Decoder::with_buffer(
-            self.inner.read_disk()?,
-        )?))
+        Decoder::with_buffer(self.inner.read_disk()?)
     }
 }
 
@@ -214,48 +192,14 @@ impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEV
 }
 
 #[cfg(feature = "async_zstd")]
-pub struct AsyncZstdDecoderWrapper<B: AsyncBufRead>(
-    async_compression::tokio::bufread::ZstdDecoder<B>,
-);
-
-#[cfg(feature = "async_zstd")]
-impl<B: AsyncBufRead + Unpin> AsyncRead for AsyncZstdDecoderWrapper<B> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut tokio::io::ReadBuf,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut (self.get_mut()).0).poll_read(cx, buf)
-    }
-}
-
-#[cfg(feature = "async_zstd")]
-impl<B: AsyncBufRead + AsyncSeek + Unpin> AsyncSeek for AsyncZstdDecoderWrapper<B> {
-    fn poll_complete(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<u64>> {
-        Pin::new(&mut (self.get_mut()).0.get_mut()).poll_complete(cx)
-    }
-    fn start_seek(
-        self: std::pin::Pin<&mut Self>,
-        position: std::io::SeekFrom,
-    ) -> std::io::Result<()> {
-        Pin::new(&mut (self.get_mut()).0.get_mut()).start_seek(position)
-    }
-}
-
-#[cfg(feature = "async_zstd")]
 impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send>
     AsyncReadDisk for ZstdDisk<'_, ZSTD_LEVEL, B>
 {
-    type ReadDisk = AsyncZstdDecoderWrapper<B::ReadDisk>;
+    type ReadDisk = async_compression::tokio::bufread::ZstdDecoder<B::ReadDisk>;
 
     async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(AsyncZstdDecoderWrapper(
-            async_compression::tokio::bufread::ZstdDecoder::new(
-                self.inner.async_read_disk().await?,
-            ),
+        Ok(async_compression::tokio::bufread::ZstdDecoder::new(
+            self.inner.async_read_disk().await?,
         ))
     }
 }
@@ -294,11 +238,10 @@ impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
     }
 }
 
-/*
 // Miri does not appreciate FFI calls
 #[cfg(all(test, not(miri)))]
 mod tests {
-    use std::{io::Cursor, io::Write, sync::Mutex};
+    use std::{io::Cursor, io::Read, io::Write, sync::Mutex};
 
     use crate::test_utils::CursorVec;
 
@@ -313,7 +256,7 @@ mod tests {
         };
         assert!(backing.get_ref().is_empty());
 
-        let zstd = ZstdDisk::new(backing);
+        let zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.write_disk().unwrap();
         write.write_all(TEST_SEQUENCE).unwrap();
         write.flush().unwrap();
@@ -325,7 +268,7 @@ mod tests {
 
         // Reading after drop and rebuild at a different compression
         let mut read = Vec::default();
-        let _ = ZstdDisk::new(zstd.into_inner(), Some(ZstdLevel::const_new(18).unwrap()))
+        let _ = ZstdDisk::<18, _>::new(zstd.into_inner())
             .read_disk()
             .unwrap()
             .read_to_end(&mut read);
@@ -344,7 +287,7 @@ mod tests {
         };
         assert!(backing.get_ref().is_empty());
 
-        let zstd = ZstdDisk::new(backing, None);
+        let zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.async_write_disk().await.unwrap();
         write.write_all(TEST_SEQUENCE).await.unwrap();
         write.flush().await.unwrap();
@@ -362,7 +305,7 @@ mod tests {
 
         // Reading after drop and rebuild at a different compression
         let mut read = Vec::default();
-        ZstdDisk::new(zstd.into_inner(), Some(ZstdLevel::const_new(18).unwrap()))
+        ZstdDisk::<18, _>::new(zstd.into_inner())
             .async_read_disk()
             .await
             .unwrap()
@@ -372,4 +315,3 @@ mod tests {
         assert_eq!(read, TEST_SEQUENCE);
     }
 }
-*/
