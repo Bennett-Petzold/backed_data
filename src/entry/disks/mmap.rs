@@ -4,6 +4,7 @@ use std::{
     io::{Cursor, ErrorKind, Write},
     mem::transmute,
     ops::Deref,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
@@ -36,15 +37,6 @@ fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
         .create(true)
         .truncate(false)
         .open(path.as_ref())?;
-
-    // Windows cannot handle an mmap of length zero, if the file is empty we
-    // need to give it some garbage to work with.
-    #[cfg(target_os = "windows")]
-    {
-        if f.metadata()?.len() == 0 {
-            f.set_len(1)?;
-        }
-    }
 
     Ok(f)
 }
@@ -361,13 +353,44 @@ pub struct MmapWriter {
 }
 
 impl MmapWriter {
+    // OS-dependent length reading.
+    //
+    // Windows cannot handle an mmap of length zero, if the file is empty we
+    // cannot read mmap's len.
+    fn get_reserved_len(
+        mmap: &memmap2::MmapMut,
+        #[cfg(target_os = "windows")] file: &File,
+    ) -> std::io::Result<usize> {
+        let len;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            len = mmap.len();
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            len = if file.metadata()?.size() == 0 {
+                0
+            } else {
+                mmap.len()
+            };
+        }
+
+        Ok(len)
+    }
+
     fn from_args<P: AsRef<Path>>(path: P, mmap: memmap2::MmapMut) -> std::io::Result<Self> {
         #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::Sequential);
         #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateWrite);
 
-        let reserved_len = mmap.len();
+        let reserved_len = Self::get_reserved_len(
+            &mmap,
+            #[cfg(target_os = "windows")]
+            open_mmap(&path)?,
+        )?;
 
         Ok(MmapWriter {
             path: path.as_ref().to_path_buf(),
@@ -384,7 +407,11 @@ impl MmapWriter {
 
         let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
 
-        let reserved_len = mmap.len();
+        let reserved_len = Self::get_reserved_len(
+            &mmap,
+            #[cfg(target_os = "windows")]
+            &file,
+        )?;
 
         Ok(MmapWriter {
             path: path.as_ref().to_path_buf(),
