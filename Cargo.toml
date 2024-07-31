@@ -18,12 +18,12 @@ simd_json = ["dep:simd-json"]
 encrypted = ["dep:secrets", "dep:pgp"]
 mmap = ["dep:mmap"]
 
-# zstd related features
-zstd = ["array", "dep:zstd"]
+# zstd features
+zstd = ["array", "dep:zstd", "dep:num-traits"]
 zstd-thin-lto = ["zstd", "zstd/thin-lto"]
 zstd-fat-lto = ["zstd", "zstd/fat-lto"]
 zstdmt = ["zstd", "zstd/zstdmt", "dep:lazy_static"]
-async-zstd = ["array", "async", "dep:async-compression", "async-compression/zstd"]
+async-zstd = ["async", "dep:num-traits", "dep:async-compression", "async-compression/zstd"]
 async-zstdmt = ["async-zstd", "async-compression/zstdmt", "dep:lazy_static"]
 
 [dependencies]
@@ -36,6 +36,7 @@ uuid = { version = "1.8.0", features = ["v4"], optional = true }
 
 # Zstd dependencies
 zstd = { version = "0.13.1", optional = true }
+num-traits = { version = "0.2.19", optional = true }
 lazy_static = { version = "1.4.0", optional = true }
 
 # Format dependencies
