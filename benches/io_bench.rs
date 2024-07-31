@@ -1,5 +1,4 @@
 use std::{
-    array,
     env::temp_dir,
     fs::{create_dir, remove_dir_all, File},
     io::Seek,
@@ -11,7 +10,7 @@ use backed_array::{
     zstd::sync_impl::ZstdDirBackedArray,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 const DATA_SIZE: usize = 1024 * 16;
 const DATA_CHUNKS: usize = 8;
