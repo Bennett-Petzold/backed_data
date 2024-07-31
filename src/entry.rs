@@ -214,23 +214,7 @@ impl<T: Serialize, Disk: Write> BackedEntry<T, Disk> {
     }
 }
 
-impl<T: Serialize, Disk: Write> BackedEntry<T, Disk>
-where
-    BackedEntry<T, Disk>: BackedEntryUnload,
-{
-    /// Write the value to disk only, unloading current memory.
-    ///
-    /// See [`Self::write`] to keep the value in memory.
-    pub fn write_unload<U>(&mut self, new_value: &U) -> bincode::Result<()>
-    where
-        for<'a> &'a U: Into<&'a T>,
-    {
-        self.unload();
-        serialize_into(&mut self.disk_entry, new_value.into())?;
-        self.disk_entry.flush()?; // Make sure buffer is emptied
-        Ok(())
-    }
-}
+impl<T: Serialize, Disk: Write> BackedEntry<T, Disk> where BackedEntry<T, Disk>: BackedEntryUnload {}
 
 #[cfg(feature = "async")]
 impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedEntryAsync<T, Disk> {
@@ -350,9 +334,11 @@ impl<T, U> BackedEntryUnload for BackedEntryArr<T, U> {
     }
 }
 
-impl<T: Serialize, Disk: Write> BackedEntryArr<T, Disk> {
-    /// [`Self::write_unload`] that takes a slice, to avoid a box copy
-    pub fn write_unload_slice(&mut self, new_value: &[T]) -> bincode::Result<()> {
+impl<T: Serialize, U: Write> BackedEntryArr<T, U> {
+    /// Write the value to disk only, unloading current memory.
+    ///
+    /// See [`Self::write`] to keep the value in memory.
+    pub fn write_unload(&mut self, new_value: &[T]) -> bincode::Result<()> {
         self.unload();
         serialize_into(&mut self.disk_entry, new_value)?;
         self.disk_entry.flush()?; // Make sure buffer is emptied
@@ -405,5 +391,17 @@ impl<T: DeserializeOwned, Disk: AsyncRead + Unpin> BackedEntryOptionAsync<T, Dis
 impl<T, U> BackedEntryUnload for BackedEntryOption<T, U> {
     fn unload(&mut self) {
         self.value = None;
+    }
+}
+
+impl<T: Serialize, U: Write> BackedEntryOption<T, U> {
+    /// Write the value to disk only, unloading current memory.
+    ///
+    /// See [`Self::write`] to keep the value in memory.
+    pub fn write_unload(&mut self, new_value: &T) -> bincode::Result<()> {
+        self.unload();
+        serialize_into(&mut self.disk_entry, new_value)?;
+        self.disk_entry.flush()?; // Make sure buffer is emptied
+        Ok(())
     }
 }

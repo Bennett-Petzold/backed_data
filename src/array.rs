@@ -186,7 +186,7 @@ pub mod sync_impl {
         ///
         /// # Example
         /// ```rust
-        /// use backed_array::array::BackedArray;
+        /// use backed_array::array::sync_impl::BackedArray;
         /// use std::fs::{File, create_dir_all, remove_dir_all, OpenOptions};
         ///
         /// let FILENAME_BASE = std::env::temp_dir().join("example_array_append");
@@ -208,7 +208,7 @@ pub mod sync_impl {
             let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
             self.keys.push(start_idx..(start_idx + values.len()));
             let mut entry = BackedEntryArr::new(backing_store);
-            entry.write_unload_slice(values)?;
+            entry.write_unload(values)?;
             self.entries.push(entry);
             Ok(self)
         }
@@ -217,7 +217,7 @@ pub mod sync_impl {
         ///
         /// # Example
         /// ```rust
-        /// use backed_array::array::BackedArray;
+        /// use backed_array::array::sync_impl::BackedArray;
         /// use std::fs::{File, remove_file, OpenOptions};
         ///
         /// let FILENAME = std::env::temp_dir().join("example_array_append_memory");
@@ -300,6 +300,88 @@ pub mod sync_impl {
         pub fn load<R: Read>(&mut self, writer: &mut R) -> bincode::Result<Self> {
             self.clear_memory();
             deserialize_from(writer)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn multiple_retrieve() {
+            let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+            let back_vector_2 = Cursor::new(Vec::with_capacity(3));
+
+            const INPUT_1: [u8; 3] = [0, 1, 1];
+            const INPUT_2: [u8; 3] = [2, 3, 5];
+
+            let mut backed = BackedArray::new();
+            backed.append(&INPUT_1, back_vector_1).unwrap();
+            backed
+                .append_memory(Box::new(INPUT_2), back_vector_2)
+                .unwrap();
+
+            assert_eq!(backed.get(0).unwrap(), &0);
+            assert_eq!(backed.get(4).unwrap(), &3);
+            assert_eq!(
+                backed
+                    .get_multiple([0, 2, 4, 5])
+                    .into_iter()
+                    .collect::<bincode::Result<Vec<_>>>()
+                    .unwrap(),
+                [&0, &1, &3, &5]
+            );
+            assert_eq!(
+                backed
+                    .get_multiple([5, 2, 0, 5])
+                    .into_iter()
+                    .collect::<bincode::Result<Vec<_>>>()
+                    .unwrap(),
+                [&5, &1, &0, &5]
+            );
+            assert_eq!(
+                backed
+                    .get_multiple_strict([5, 2, 0, 5])
+                    .into_iter()
+                    .collect::<Result<Vec<_>, BackedArrayError>>()
+                    .unwrap(),
+                [&5, &1, &0, &5]
+            );
+        }
+
+        #[test]
+        fn out_of_bounds_access() {
+            let back_vector = Cursor::new(Vec::with_capacity(3));
+
+            const INPUT: &[u8] = &[0, 1, 1];
+
+            let mut backed = BackedArray::new();
+            backed.append(INPUT, back_vector).unwrap();
+
+            assert!(backed.get(0).is_ok());
+            assert!(backed.get(10).is_err());
+            assert!(backed
+                .get_multiple_strict([0, 10])
+                .into_iter()
+                .collect::<Result<Vec<_>, BackedArrayError>>()
+                .is_err());
+            assert_eq!(
+                backed
+                    .get_multiple([0, 10])
+                    .into_iter()
+                    .collect::<bincode::Result<Vec<_>>>()
+                    .unwrap()
+                    .len(),
+                1
+            );
+            assert!(backed
+                .get_multiple([20, 10])
+                .into_iter()
+                .collect::<bincode::Result<Vec<_>>>()
+                .unwrap()
+                .is_empty());
         }
     }
 }
@@ -513,143 +595,66 @@ pub mod async_impl {
                 ))?
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use std::io::Cursor;
+    #[cfg(test)]
+    mod tests {
+        use std::io::Cursor;
 
-    use super::*;
+        use super::*;
 
-    #[test]
-    fn multiple_retrieve() {
-        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
-        let back_vector_2 = Cursor::new(Vec::with_capacity(3));
+        #[tokio::test]
+        async fn write() {
+            let mut back_vector = vec![0];
 
-        const INPUT_1: [u8; 3] = [0, 1, 1];
-        const INPUT_2: [u8; 3] = [2, 3, 5];
+            const INPUT: [u8; 3] = [2, 3, 5];
 
-        let mut backed = BackedArray::new();
-        backed.append(&INPUT_1, back_vector_1).unwrap();
-        backed
-            .append_memory(Box::new(INPUT_2), back_vector_2)
-            .unwrap();
+            let mut backed = BackedArray::new();
+            backed.append_async(&INPUT, &mut back_vector).await.unwrap();
+            assert_eq!(back_vector[back_vector.len() - 3..], [2, 3, 5]);
+            assert_eq!(back_vector[back_vector.len() - 4], 3);
+        }
 
-        assert_eq!(backed.get(0).unwrap(), &0);
-        assert_eq!(backed.get(4).unwrap(), &3);
-        assert_eq!(
+        #[tokio::test]
+        async fn multiple_retrieve() {
+            let back_vector_1 = Cursor::new(Vec::with_capacity(3));
+            let back_vector_2 = Cursor::new(Vec::with_capacity(3));
+
+            const INPUT_1: [u8; 3] = [0, 1, 1];
+            const INPUT_2: [u8; 3] = [2, 3, 5];
+
+            let mut backed = BackedArray::new();
+            backed.append_async(&INPUT_1, back_vector_1).await.unwrap();
             backed
-                .get_multiple([0, 2, 4, 5])
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap(),
-            [&0, &1, &3, &5]
-        );
-        assert_eq!(
-            backed
-                .get_multiple([5, 2, 0, 5])
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap(),
-            [&5, &1, &0, &5]
-        );
-        assert_eq!(
-            backed
-                .get_multiple_strict([5, 2, 0, 5])
-                .into_iter()
-                .collect::<Result<Vec<_>, BackedArrayError>>()
-                .unwrap(),
-            [&5, &1, &0, &5]
-        );
-    }
-
-    #[test]
-    fn out_of_bounds_access() {
-        let back_vector = Cursor::new(Vec::with_capacity(3));
-
-        const INPUT: &[u8] = &[0, 1, 1];
-
-        let mut backed = BackedArray::new();
-        backed.append(INPUT, back_vector).unwrap();
-
-        assert!(backed.get(0).is_ok());
-        assert!(backed.get(10).is_err());
-        assert!(backed
-            .get_multiple_strict([0, 10])
-            .into_iter()
-            .collect::<Result<Vec<_>, BackedArrayError>>()
-            .is_err());
-        assert_eq!(
-            backed
-                .get_multiple([0, 10])
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(backed
-            .get_multiple([20, 10])
-            .into_iter()
-            .collect::<bincode::Result<Vec<_>>>()
-            .unwrap()
-            .is_empty());
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn write_async() {
-        let mut back_vector = vec![0];
-
-        const INPUT: [u8; 3] = [2, 3, 5];
-
-        let mut backed = BackedArray::new();
-        backed.append_async(&INPUT, &mut back_vector).await.unwrap();
-        assert_eq!(back_vector[back_vector.len() - 3..], [2, 3, 5]);
-        assert_eq!(back_vector[back_vector.len() - 4], 3);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn multiple_retrieve_async() {
-        let back_vector_1 = Cursor::new(Vec::with_capacity(3));
-        let back_vector_2 = Cursor::new(Vec::with_capacity(3));
-
-        const INPUT_1: [u8; 3] = [0, 1, 1];
-        const INPUT_2: [u8; 3] = [2, 3, 5];
-
-        let mut backed = BackedArray::new();
-        backed.append_async(&INPUT_1, back_vector_1).await.unwrap();
-        backed
-            .append_memory_async(Box::new(INPUT_2), back_vector_2)
-            .await
-            .unwrap();
-
-        assert_eq!(backed.get_async(0).await.unwrap(), &0);
-        assert_eq!(backed.get_async(4).await.unwrap(), &3);
-        /*
-        assert_eq!(
-            backed
-                .get_multiple_async([0, 2, 4, 5])
+                .append_memory_async(Box::new(INPUT_2), back_vector_2)
                 .await
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap(),
-            [&0, &1, &3, &5]
-        );
-        assert_eq!(
-            backed
-                .get_multiple_async([5, 2, 0, 5])
-                .await
-                .into_iter()
-                .collect::<bincode::Result<Vec<_>>>()
-                .unwrap(),
-            [&5, &1, &0, &5]
-        );
-        assert_eq!(
-            backed.get_multiple_async([5, 2, 0, 5]).await.unwrap(),
-            [&5, &1, &0, &5]
-        );
-        */
+                .unwrap();
+
+            assert_eq!(backed.get_async(0).await.unwrap(), &0);
+            assert_eq!(backed.get_async(4).await.unwrap(), &3);
+            /*
+            assert_eq!(
+                backed
+                    .get_multiple_async([0, 2, 4, 5])
+                    .await
+                    .into_iter()
+                    .collect::<bincode::Result<Vec<_>>>()
+                    .unwrap(),
+                [&0, &1, &3, &5]
+            );
+            assert_eq!(
+                backed
+                    .get_multiple_async([5, 2, 0, 5])
+                    .await
+                    .into_iter()
+                    .collect::<bincode::Result<Vec<_>>>()
+                    .unwrap(),
+                [&5, &1, &0, &5]
+            );
+            assert_eq!(
+                backed.get_multiple_async([5, 2, 0, 5]).await.unwrap(),
+                [&5, &1, &0, &5]
+            );
+            */
+        }
     }
 }
