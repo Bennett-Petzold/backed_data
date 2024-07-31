@@ -46,6 +46,15 @@ where
     }
 }
 
+impl<'a, T> PartialEq<T> for ToRef<'a, T>
+where
+    &'a T: PartialEq<T>,
+{
+    fn eq(&self, other: &T) -> bool {
+        self.0 == *other
+    }
+}
+
 impl<'a, T> PartialOrd<&'a T> for ToRef<'a, T>
 where
     &'a T: PartialOrd<&'a T>,
@@ -90,6 +99,15 @@ where
 {
     fn eq(&self, other: &&'a T) -> bool {
         self.0 == other
+    }
+}
+
+impl<'a, T> PartialEq<T> for ToMut<'a, T>
+where
+    &'a mut T: PartialEq<T>,
+{
+    fn eq(&self, other: &T) -> bool {
+        self.0 == *other
     }
 }
 
@@ -339,11 +357,56 @@ impl<T, U> BorrowExtender<T, U> {
             child,
         })
     }
+
+    pub fn new_mut<V: FnOnce(&mut T) -> U>(mut parent: T, child: V) -> Self {
+        let parent_ptr: *mut _ = &mut parent;
+        let child = (child)(unsafe { &mut *parent_ptr });
+        Self {
+            _parent: parent,
+            child,
+        }
+    }
+
+    pub fn try_new_mut<'a, W, V: FnOnce(&'a mut T) -> Result<U, W>>(
+        mut parent: T,
+        child: V,
+    ) -> Result<Self, W>
+    where
+        T: 'a,
+    {
+        let parent_ptr: *mut _ = &mut parent;
+        let child = (child)(unsafe { &mut *parent_ptr })?;
+        Ok(Self {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub fn maybe_new_mut<'a, V: FnOnce(&'a mut T) -> Option<U>>(
+        mut parent: T,
+        child: V,
+    ) -> Option<Self>
+    where
+        T: 'a,
+    {
+        let parent_ptr: *mut _ = &mut parent;
+        let child = (child)(unsafe { &mut *parent_ptr })?;
+        Some(Self {
+            _parent: parent,
+            child,
+        })
+    }
 }
 
 impl<T, U> Deref for BorrowExtender<T, U> {
     type Target = U;
     fn deref(&self) -> &Self::Target {
         &self.child
+    }
+}
+
+impl<T, U> DerefMut for BorrowExtender<T, U> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.child
     }
 }

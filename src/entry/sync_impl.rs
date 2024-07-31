@@ -407,9 +407,10 @@ mod tests {
 
     #[cfg(feature = "bincode")]
     #[test]
+    /// This sometimes fails, figure out why.
     fn read_threaded() {
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
-        const NEW_VALUES: &[u8] = &[7, 5, 3, 1, 0];
+        const NEW_VALUES: &[u8] = &[17, 15, 13, 11, 10];
 
         let mut binding = Cursor::new(Vec::with_capacity(10));
         let mut back_vec = CursorVec {

@@ -1,4 +1,8 @@
-use std::{fmt::Debug, iter::FusedIterator, ops::Range};
+use std::{
+    fmt::Debug,
+    iter::{Enumerate, FusedIterator, Peekable},
+    ops::Range,
+};
 
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
@@ -423,9 +427,126 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Fused
 {
 }
 
+/// Iterates over a backed array, returning each item in order.
+///
+/// To keep an accurate size count, failed reads will not be retried.
+/// This will keep each disk loaded after pulling data from it.
+/// Stepping by > 1 with `nth` implementation may skip loading a disk.
+pub struct BackedArrayIterMut<'a, K: Container, E: BackedEntryContainerNestedAll> {
+    pos: usize,
+    len: usize,
+    keys: Peekable<std::slice::Iter<'a, K::Data>>,
+    entries: std::slice::IterMut<'a, E::Data>,
+    // TODO: Rewrite this to be a box of Once or MaybeUninit type
+    // Problem with once types is that either a generic needs to be introduced,
+    // or this iterator needs to choose between cell/lock tradeoffs.
+    #[allow(clippy::type_complexity)]
+    handles: Vec<
+        Result<BackedEntryMut<'a, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>, E::ReadError>,
+    >,
+}
+
+impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll>
+    BackedArrayIterMut<'a, K, E>
+{
+    fn new(backed: &'a mut BackedArray<K, E>) -> Self {
+        let len = backed.keys.as_ref().last().unwrap_or(&(0..0)).end;
+        let mut handles = Vec::with_capacity(backed.chunks_len());
+        let keys = backed.keys.as_ref().iter().peekable();
+        let mut entries = backed.entries.as_mut().iter_mut();
+
+        if let Some(entry) = entries.by_ref().next() {
+            handles.push(entry.get_mut().mut_handle());
+        }
+
+        Self {
+            pos: 0,
+            len,
+            keys,
+            handles,
+            entries,
+        }
+    }
+
+    /// Flush all opened handles.
+    pub fn flush(&mut self) -> Result<&mut Self, E::WriteError> {
+        for h in self.handles.iter_mut().flatten() {
+            h.flush()?;
+        }
+        Ok(self)
+    }
+}
+
+impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Iterator
+    for BackedArrayIterMut<'a, K, E>
+where
+    E::Unwrapped: 'a,
+    E::ReadError: 'a,
+{
+    //type Item = Result<&'a mut <E::Unwrapped as Container>::Mut<'a>, E::ReadError>;
+    type Item = Result<
+        <<E as BackedEntryContainerNested>::Unwrapped as Container>::Mut<'a>,
+        &'a E::ReadError,
+    >;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.nth(0)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.pos += n;
+
+        // # of steps forward taken by keys
+        let mut step_count = 0;
+
+        // Remove all key positions prior to `pos`.
+        // This iterator only goes forward, so keys are not reused once
+        // passed.
+        while let Some(key) = self.keys.by_ref().peek() {
+            if key.end > self.pos {
+                // Update to latest entry handle
+                break;
+            }
+            let _ = self.keys.by_ref().next();
+            step_count += 1;
+        }
+
+        let inner_pos = self.pos - self.keys.peek()?.start;
+        self.pos += 1; // Position advances, even on errors
+
+        if step_count > 0 {
+            let entry = self.entries.nth(step_count - 1).unwrap().get_mut();
+            self.handles.push(entry.mut_handle());
+        }
+
+        // There is always a last value, and it's valid for struct lifetime,
+        // but the compiler doesn't know this.
+        let handle_ptr: *mut _ = self.handles.last_mut().unwrap();
+        let handle = unsafe { &mut *handle_ptr };
+
+        match handle {
+            Ok(h) => h.c_get_mut(inner_pos).map(Ok),
+            Err(e) => Some(Err(&*e)),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.len - self.pos;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> FusedIterator
+    for BackedArrayIterMut<'a, K, E>
+where
+    E::Unwrapped: 'a,
+    E::ReadError: 'a,
+{
+}
+
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
     /// Provides a [`BackedArrayIter`] over each backed item.
-    pub fn item_iter(&self) -> BackedArrayIter<'_, K, E> {
+    pub fn iter(&self) -> BackedArrayIter<'_, K, E> {
         BackedArrayIter::new(self)
     }
 
@@ -439,6 +560,14 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
 }
 
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> BackedArray<K, E> {
+    pub fn iter_mut<'a>(&'a mut self) -> BackedArrayIterMut<'a, K, E>
+    where
+        E::Unwrapped: 'a,
+        E::ReadError: 'a,
+    {
+        BackedArrayIterMut::new(self)
+    }
+
     /// Provides mutable handles to underlying chunks, using [`BackedEntryMut`].
     ///
     /// See [`Self::chunk_iter`] for the immutable iterator.
@@ -480,7 +609,7 @@ mod tests {
 
     use itertools::Itertools;
 
-    use crate::{entry::formats::BincodeCoder, test_utils::CursorVec};
+    use crate::{entry::formats::BincodeCoder, test_utils::cursor_vec, test_utils::CursorVec};
 
     use super::*;
 
@@ -604,7 +733,7 @@ mod tests {
         backed
             .append(INPUT_1, back_vector_1, BincodeCoder {})
             .unwrap();
-        let collected = backed.item_iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let collected = backed.iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(collected[5], &7);
         assert_eq!(collected[2], &1);
         assert_eq!(collected.len(), 6);
@@ -672,8 +801,99 @@ mod tests {
 
         drop(handle_vec);
         assert_eq!(
-            backed.item_iter().collect::<Result<Vec<_>, _>>().unwrap(),
+            backed.iter().collect::<Result<Vec<_>, _>>().unwrap(),
             [&20, &1, &30, &5, &7, &40, &5, &7]
+        );
+    }
+
+    #[test]
+    fn item_mod_iter() {
+        const FIB: &[u8] = &[0, 1, 1, 2, 3, 5];
+        const INPUT_1: &[u8] = &[4, 6, 7];
+
+        let after_mod = INPUT_1
+            .iter()
+            .chain(FIB.iter().skip(INPUT_1.len()))
+            .cloned()
+            .collect_vec();
+        let after_second_mod = INPUT_1.iter().chain(INPUT_1).collect_vec();
+        let after_third_mod = INPUT_1.iter().chain(INPUT_1).chain(INPUT_1).collect_vec();
+
+        cursor_vec!(back_vec, back_peek);
+        cursor_vec!(back_vec_2, _back_peek_3);
+
+        let mut backed = VecBackedArray::new();
+        backed
+            .append(FIB, unsafe { &mut *back_vec.get() }, BincodeCoder {})
+            .unwrap();
+
+        // Read checks
+        assert_eq!(backed.iter_mut().size_hint(), (FIB.len(), Some(FIB.len())));
+        assert_eq!(backed.iter_mut().count(), FIB.len());
+        assert_eq!(backed.iter_mut().map(|x| (*x.unwrap())).collect_vec(), FIB);
+
+        let mut backed_iter = backed.iter_mut();
+        for val in INPUT_1 {
+            let mut entry = backed_iter.next().unwrap().unwrap();
+            *entry = *val;
+        }
+
+        // Backed storage is not modified
+        #[cfg(not(miri))]
+        assert_eq!(&back_peek[back_peek.len() - FIB.len()..], FIB);
+
+        backed_iter.flush().unwrap();
+
+        // Backed storage is now modified
+        #[cfg(not(miri))]
+        assert_eq!(back_peek[back_peek.len() - after_mod.len()..], after_mod);
+
+        assert_eq!(
+            backed_iter.map(|ent| (*ent.unwrap())).collect_vec(),
+            FIB.iter().skip(INPUT_1.len()).cloned().collect_vec()
+        );
+
+        assert_eq!(
+            backed.iter_mut().map(|ent| (*ent.unwrap())).collect_vec(),
+            after_mod
+        );
+
+        let mut backed_iter = backed.iter_mut();
+        let _ = backed_iter.by_ref().nth(2);
+        for val in INPUT_1 {
+            let mut entry = backed_iter.next().unwrap().unwrap();
+            *entry = *val;
+        }
+
+        // TESTING ONLY
+        // This breaks handle guarantees about flush on drop
+        std::mem::forget(backed_iter);
+
+        // Backed storage is not modified
+        #[cfg(not(miri))]
+        assert_eq!(back_peek[back_peek.len() - after_mod.len()..], after_mod);
+
+        // Memory representation is updated
+        assert_eq!(
+            backed.iter_mut().collect::<Result<Vec<_>, _>>().unwrap(),
+            after_second_mod
+        );
+
+        // Backed storage is updated after drop
+        #[cfg(not(miri))]
+        assert_eq!(
+            back_peek[back_peek.len() - after_mod.len()..],
+            after_second_mod.iter().map(|x| **x).collect_vec(),
+        );
+
+        backed
+            .append(INPUT_1, unsafe { &mut *back_vec_2.get() }, BincodeCoder {})
+            .unwrap();
+
+        // Correctly crosses multiple storage disks
+        assert_eq!(
+            backed.iter_mut().collect::<Result<Vec<_>, _>>().unwrap(),
+            after_third_mod
         );
     }
 
