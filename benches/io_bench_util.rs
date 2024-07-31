@@ -25,6 +25,28 @@ use backed_data::{
     array::async_impl::BackedEntryContainerNestedAsyncWrite, entry::disks::AsyncWriteDisk,
 };
 
+/// [`csv`] does not write a header for non-struct data, but the reader expects
+/// one by default.
+#[cfg(feature = "csv")]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
+pub struct U8Wrapper {
+    inner: u8,
+}
+
+#[cfg(feature = "csv")]
+impl From<u8> for U8Wrapper {
+    fn from(value: u8) -> Self {
+        Self { inner: value }
+    }
+}
+
+#[cfg(feature = "csv")]
+impl From<U8Wrapper> for u8 {
+    fn from(val: U8Wrapper) -> Self {
+        val.inner
+    }
+}
+
 pub fn logfile() -> &'static Mutex<File> {
     static LOGFILE: OnceLock<Mutex<File>> = OnceLock::new();
     LOGFILE.get_or_init(|| {
@@ -74,11 +96,14 @@ where
     E::Coder: Default,
     E::Disk: From<PathBuf>,
     E::WriteError: From<std::io::Error> + Debug,
-    E::Unwrapped: for<'a> From<&'a [u8]>,
+    E::Unwrapped: for<'a> From<&'a [E::InnerData]>,
+    for<'a> &'a [E::InnerData]: From<&'a [u8]>,
+    for<'a> &'a E::InnerData: From<&'a u8>,
 {
     let mut arr = DirectoryBackedArray::<K, E>::new(path.as_ref().to_path_buf()).unwrap();
     for inner_data in data {
-        arr.append(inner_data.as_ref()).unwrap();
+        let data: &[E::InnerData] = <String as AsRef<[u8]>>::as_ref(inner_data).into();
+        arr.append::<&[E::InnerData]>(data).unwrap();
     }
     if arr.save(&BincodeCoder::default()).is_err() {
         panic!()
