@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Read, Seek, Write},
+    io::{BufReader, BufWriter, Read, Write},
     ops::{Deref, DerefMut},
     path::PathBuf,
 };
@@ -11,7 +11,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::{BackedEntry, BackedEntryArr, BackedEntryOption, BackedEntryUnload};
 
 pub trait ReadDisk: Serialize + for<'de> Deserialize<'de> {
-    type ReadDisk: Read + Seek;
+    type ReadDisk: Read;
     fn read_disk(&mut self) -> std::io::Result<Self::ReadDisk>;
 }
 
@@ -84,8 +84,7 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryArr<T, Disk> {
     /// Will remain in memory until an explicit call to unload.
     pub fn load(&mut self) -> bincode::Result<&[T]> {
         if self.value.is_empty() {
-            let mut disk = self.disk.read_disk()?;
-            disk.rewind()?;
+            let disk = self.disk.read_disk()?;
             self.value = bincode::options()
                 .with_limit(u32::max_value() as u64)
                 .allow_trailing_bytes()
@@ -131,8 +130,7 @@ impl<T: DeserializeOwned, Disk: ReadDisk> BackedEntryOption<T, Disk> {
     /// Will remain in memory until an explicit call to unload.
     pub fn load(&mut self) -> bincode::Result<&T> {
         if self.value.is_none() {
-            let mut disk = self.disk.read_disk()?;
-            disk.rewind()?;
+            let disk = self.disk.read_disk()?;
             self.value = Some(
                 bincode::options()
                     .with_limit(u32::max_value() as u64)
