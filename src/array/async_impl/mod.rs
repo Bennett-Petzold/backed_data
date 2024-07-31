@@ -81,7 +81,11 @@ pub trait BackedEntryContainerNestedAsyncRead:
     BackedEntryContainerNestedAsync<
     Unwrapped: for<'de> Deserialize<'de> + Send + Sync,
     Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk, Error = Self::AsyncReadError>,
+    Coder: AsyncDecoder<
+        <Self::Disk as AsyncReadDisk>::ReadDisk,
+        T = Self::Unwrapped,
+        Error = Self::AsyncReadError,
+    >,
 >
 {
     type AsyncReadError;
@@ -92,7 +96,7 @@ where
     T: BackedEntryContainerNestedAsync<
         Unwrapped: for<'de> Deserialize<'de> + Send + Sync,
         Disk: AsyncReadDisk,
-        Coder: AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk>,
+        Coder: AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk, T = Self::Unwrapped>,
     >,
 {
     type AsyncReadError =
@@ -106,7 +110,11 @@ pub trait BackedEntryContainerNestedAsyncWrite:
     BackedEntryContainerNestedAsync<
     Unwrapped: Serialize + Send + Sync,
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk, Error = Self::AsyncWriteError>,
+    Coder: AsyncEncoder<
+        <Self::Disk as AsyncWriteDisk>::WriteDisk,
+        T = Self::Unwrapped,
+        Error = Self::AsyncWriteError,
+    >,
 >
 {
     type AsyncWriteError;
@@ -117,7 +125,7 @@ where
     T: BackedEntryContainerNestedAsync<
         Unwrapped: Serialize + Send + Sync,
         Disk: AsyncWriteDisk,
-        Coder: AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk>,
+        Coder: AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk, T = Self::Unwrapped>,
     >,
 {
     type AsyncWriteError =
@@ -174,8 +182,8 @@ impl<
     /// let file_0 = FILENAME_BASE.clone().join("_0");
     /// let file_1 = FILENAME_BASE.join("_1");
     /// let mut array: AsyncVecBackedArray<u32, Plainfile, _> = AsyncVecBackedArray::default();
-    /// rt.block_on(array.a_append(values.0, file_0.into(), AsyncBincodeCoder {}));
-    /// rt.block_on(array.a_append(values.1, file_1.into(), AsyncBincodeCoder {}));
+    /// rt.block_on(array.a_append(values.0, file_0.into(), AsyncBincodeCoder::default()));
+    /// rt.block_on(array.a_append(values.1, file_1.into(), AsyncBincodeCoder::default()));
     ///
     /// assert_eq!(*rt.block_on(array.a_get(4)).unwrap(), 3);
     /// remove_dir_all(FILENAME_BASE).unwrap();
@@ -228,10 +236,10 @@ impl<
     ///         [2, 3, 5]);
     ///
     ///     let mut array: AsyncVecBackedArray<u32, Plainfile, _> = AsyncVecBackedArray::default();
-    ///     rt.block_on(array.a_append_memory(values.0, FILENAME.clone().into(), AsyncBincodeCoder {}));
+    ///     rt.block_on(array.a_append_memory(values.0, FILENAME.clone().into(), AsyncBincodeCoder::default()));
     ///
     ///     // Overwrite file, making disk pointer for first array invalid
-    ///     rt.block_on(array.a_append_memory(values.1, FILENAME.clone().into(), AsyncBincodeCoder {}));
+    ///     rt.block_on(array.a_append_memory(values.1, FILENAME.clone().into(), AsyncBincodeCoder::default()));
     ///
     ///     assert_eq!(*rt.block_on(array.a_get(0)).unwrap(), 0);
     ///     remove_file(FILENAME).unwrap();

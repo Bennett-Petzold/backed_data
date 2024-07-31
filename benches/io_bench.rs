@@ -12,11 +12,17 @@ use pprof::criterion::{Output, PProfProfiler};
 #[cfg(feature = "zstd")]
 use backed_data::directory::ZstdDirBackedArray;
 
+#[cfg(feature = "async")]
+use backed_data::directory::AsyncStdDirBackedArray;
+
 #[cfg(feature = "async_zstd")]
 use backed_data::directory::AsyncZstdDirBackedArray;
 
 #[cfg(feature = "async_bincode")]
-use backed_data::{directory::AsyncStdDirBackedArray, entry::formats::AsyncBincodeCoder};
+use backed_data::entry::formats::AsyncBincodeCoder;
+
+#[cfg(feature = "async_csv")]
+use backed_data::entry::formats::AsyncCsvCoder;
 
 #[cfg(feature = "async")]
 use {
@@ -41,18 +47,21 @@ create_fn!(create_csv, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
 create_fn!(parallel create_csv_par, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
 
 #[cfg(feature = "async_bincode")]
-create_fn!(async create_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
+create_fn!(async create_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<Box<[u8]>>>,);
 #[cfg(feature = "async_bincode")]
-create_fn!(async concurrent create_plainfiles_async_con, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
+create_fn!(async concurrent create_plainfiles_async_con, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<Box<[u8]>>>,);
 #[cfg(feature = "async_bincode")]
-create_fn!(async parallel create_plainfiles_async_par, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>,);
+create_fn!(async parallel create_plainfiles_async_par, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<Box<[u8]>>>,);
 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
-create_fn!(async create_zstdfiles_async, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
+create_fn!(async create_zstdfiles_async, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder<Box<[u8]>>>, const LEVEL: u8,);
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
-create_fn!(async concurrent create_zstdfiles_async_con, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
+create_fn!(async concurrent create_zstdfiles_async_con, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder<Box<[u8]>>>, const LEVEL: u8,);
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
-create_fn!(async parallel create_zstdfiles_async_par, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder>, const LEVEL: u8,);
+create_fn!(async parallel create_zstdfiles_async_par, AsyncZstdDirBackedArray<LEVEL, u8, AsyncBincodeCoder<Box<[u8]>>>, const LEVEL: u8,);
+
+#[cfg(feature = "async_csv")]
+create_fn!(async create_csv_async, AsyncStdDirBackedArray<u8, AsyncCsvCoder<Box<[u8]>, u8>>,);
 
 read_dir!(read_plainfiles, StdDirBackedArray<u8, BincodeCoder<_>>);
 read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder<_>>);
@@ -63,18 +72,21 @@ read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder<_>>);
 read_dir!(read_csv, StdDirBackedArray<u8, CsvCoder<_, _>>);
 
 #[cfg(feature = "async_bincode")]
-read_dir!(async read_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>);
+read_dir!(async read_plainfiles_async, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<_>>);
 #[cfg(feature = "async_bincode")]
-read_dir!(async concurrent read_plainfiles_async_con, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>);
+read_dir!(async concurrent read_plainfiles_async_con, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<_>>);
 #[cfg(feature = "async_bincode")]
-read_dir!(async parallel read_plainfiles_async_par, AsyncStdDirBackedArray<u8, AsyncBincodeCoder>);
+read_dir!(async parallel read_plainfiles_async_par, AsyncStdDirBackedArray<u8, AsyncBincodeCoder<_>>);
 
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
-read_dir!(async read_zstdfiles_async, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
+read_dir!(async read_zstdfiles_async, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder<_>>);
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
-read_dir!(async concurrent read_zstdfiles_async_con, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
+read_dir!(async concurrent read_zstdfiles_async_con, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder<_>>);
 #[cfg(all(feature = "async_zstd", feature = "async_bincode"))]
-read_dir!(async parallel read_zstdfiles_async_par, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder>);
+read_dir!(async parallel read_zstdfiles_async_par, AsyncZstdDirBackedArray<0, u8, AsyncBincodeCoder<_>>);
+
+#[cfg(all(feature = "async_csv", feature = "async_bincode"))]
+read_dir!(async read_csv_async, AsyncStdDirBackedArray<u8, AsyncCsvCoder<_, _>>);
 
 fn file_creation_benches(c: &mut Criterion) {
     let data = complete_works();
@@ -308,6 +320,14 @@ fn file_load_benches(c: &mut Criterion) {
                         .iter(|| black_box(read_zstdfiles_async_par(&path)))
                 });
             }
+        }
+
+        #[cfg(feature = "async_zstd")]
+        {
+            let path = create_files(|path, data| rt.block_on(create_csv_async(path, data)));
+            group.bench_function("async_load_csv", |b| {
+                b.to_async(&rt).iter(|| black_box(read_csv_async(&path)))
+            });
         }
 
         rt.shutdown_background()

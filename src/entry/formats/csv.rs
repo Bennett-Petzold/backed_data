@@ -46,6 +46,11 @@ pub enum QuoteStyleSerial {
 pub struct QuoteStyleWrapper(#[serde(with = "QuoteStyleSerial")] QuoteStyle);
 
 /// Unified [`csv::ReaderBuilder`] and [`csv::WriterBuilder`] configuration.
+///
+/// # Fields
+/// * `comment`..=`trim`: Options from the builders, applied if set.
+/// * `T`: The output container type.
+/// * `E`: The output element type.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CsvCoder<T: ?Sized, E: ?Sized> {
     pub comment: Option<u8>,
@@ -64,7 +69,7 @@ pub struct CsvCoder<T: ?Sized, E: ?Sized> {
 }
 
 impl<T: ?Sized, E: ?Sized> CsvCoder<T, E> {
-    fn reader_builder(&self) -> csv::ReaderBuilder {
+    fn reader_builder(&self) -> ReaderBuilder {
         let mut builder = ReaderBuilder::new();
         builder.comment(self.comment);
         if let Some(delimiter) = self.delimiter {
@@ -96,7 +101,7 @@ impl<T: ?Sized, E: ?Sized> CsvCoder<T, E> {
         builder
     }
 
-    fn writer_builder(&self) -> csv::WriterBuilder {
+    fn writer_builder(&self) -> WriterBuilder {
         let mut builder = WriterBuilder::new();
         builder.comment(self.comment);
         if let Some(delimiter) = self.delimiter {

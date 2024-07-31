@@ -345,11 +345,11 @@ mod tests {
 
         let mut backed = AsyncVecBackedArray::new();
         backed
-            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder {})
+            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder::default())
             .await
             .unwrap();
         backed
-            .a_append_memory(INPUT_1, back_vector_1, AsyncBincodeCoder {})
+            .a_append_memory(INPUT_1, back_vector_1, AsyncBincodeCoder::default())
             .await
             .unwrap();
 
@@ -377,7 +377,7 @@ mod tests {
 
         let mut backed = AsyncVecBackedArray::new();
         backed
-            .a_append(INPUT, back_vector, AsyncBincodeCoder {})
+            .a_append(INPUT, back_vector, AsyncBincodeCoder::default())
             .await
             .unwrap();
 
@@ -401,11 +401,11 @@ mod tests {
 
         let mut backed = AsyncVecBackedArray::new();
         backed
-            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder {})
+            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder::default())
             .await
             .unwrap();
         backed
-            .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder {})
+            .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder::default())
             .await
             .unwrap();
 
@@ -435,11 +435,11 @@ mod tests {
 
         let mut backed = AsyncVecBackedArray::new();
         backed
-            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder {})
+            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder::default())
             .await
             .unwrap();
         backed
-            .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder {})
+            .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder::default())
             .await
             .unwrap();
         let collected = stream::iter(backed.generic_stream())
@@ -470,11 +470,11 @@ mod tests {
 
                 let mut backed = AsyncVecBackedArray::new();
                 backed
-                    .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder {})
+                    .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder::default())
                     .await
                     .unwrap();
                 backed
-                    .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder {})
+                    .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder::default())
                     .await
                     .unwrap();
                 let backed = Arc::new(backed);
@@ -506,11 +506,11 @@ mod tests {
 
         let mut backed = AsyncVecBackedArray::new();
         backed
-            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder {})
+            .a_append(INPUT_0, back_vector_0, AsyncBincodeCoder::default())
             .await
             .unwrap();
         backed
-            .a_append_memory(INPUT_1, back_vector_1, AsyncBincodeCoder {})
+            .a_append_memory(INPUT_1, back_vector_1, AsyncBincodeCoder::default())
             .await
             .unwrap();
 

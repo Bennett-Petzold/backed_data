@@ -1,5 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
+#[cfg(feature = "array")]
 use stable_deref_trait::StableDeref;
 
 /// Wrapper that allows &T to implement [`AsRef<T>`].
@@ -46,6 +47,7 @@ where
     }
 }
 
+#[cfg(feature = "array")]
 unsafe impl<T: ?Sized> StableDeref for ToRef<'_, T> {}
 
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
@@ -104,6 +106,7 @@ where
     }
 }
 
+#[cfg(feature = "array")]
 unsafe impl<T: ?Sized> StableDeref for ToMut<'_, T> {}
 
 /// Wrapper that allows &T to implement [`AsRef<T>`].
@@ -150,6 +153,7 @@ where
     }
 }
 
+#[cfg(feature = "array")]
 unsafe impl<T: ?Sized> StableDeref for IndirectRef<'_, T> {}
 
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
@@ -208,6 +212,7 @@ where
     }
 }
 
+#[cfg(feature = "array")]
 unsafe impl<T: ?Sized> StableDeref for IndirectMut<'_, T> {}
 
 /// Combined trait for types with both [`AsRef`] and [`AsMut`].

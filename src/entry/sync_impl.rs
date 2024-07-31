@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use itertools::Either;
+use either::Either;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::Once;
@@ -44,8 +44,7 @@ where
     }
 }
 
-impl<T: Once<Inner: for<'de> Deserialize<'de>>, Disk: ReadDisk, Coder: Decoder<Disk::ReadDisk>>
-    BackedEntry<T, Disk, Coder>
+impl<T: Once<Inner: for<'de> Deserialize<'de>>, Disk: ReadDisk, Coder> BackedEntry<T, Disk, Coder>
 where
     Coder: Decoder<Disk::ReadDisk, T = T::Inner>,
 {
