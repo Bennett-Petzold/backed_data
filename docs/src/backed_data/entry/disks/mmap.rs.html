@@ -1293,7 +1293,7 @@
 
             <span class="attr">#[cfg(not(target_os = <span class="string">"linux"</span>))]
             </span>{
-                file.set_len(<span class="self">self</span>.reserved_len <span class="kw">as </span>u64)<span class="question-mark">?</span>;
+                file.set_len(new_reservation <span class="kw">as </span>u64)<span class="question-mark">?</span>;
                 <span class="self">self</span>.reserved_len = new_reservation;
             }
 
