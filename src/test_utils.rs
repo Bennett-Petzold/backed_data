@@ -1,10 +1,10 @@
-use std::{
-    io::{Cursor, Read, Seek, Write},
-    pin::Pin,
-};
+use std::io::{Cursor, Read, Seek, Write};
 
 #[cfg(feature = "async")]
-use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
+use {
+    std::pin::Pin,
+    tokio::io::{AsyncRead, AsyncSeek, AsyncWrite},
+};
 
 use crate::entry::DiskOverwritable;
 
