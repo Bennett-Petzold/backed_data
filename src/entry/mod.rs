@@ -124,3 +124,15 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
         Self { value: None, disk }
     }
 }
+
+impl<T, Disk: for<'de> Deserialize<'de>> AsRef<BackedEntry<T, Disk>> for BackedEntry<T, Disk> {
+    fn as_ref(&self) -> &BackedEntry<T, Disk> {
+        self
+    }
+}
+
+impl<T, Disk: for<'de> Deserialize<'de>> AsMut<BackedEntry<T, Disk>> for BackedEntry<T, Disk> {
+    fn as_mut(&mut self) -> &mut BackedEntry<T, Disk> {
+        self
+    }
+}
