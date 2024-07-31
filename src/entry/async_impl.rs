@@ -16,7 +16,7 @@ use crate::utils::{Once, ToMut};
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
     formats::{AsyncDecoder, AsyncEncoder},
-    BackedEntryAsync,
+    BackedEntryAsync, BackedEntryTrait,
 };
 
 impl<T: Serialize, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
@@ -81,6 +81,177 @@ impl<T: Serialize, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
         disk.flush().await?;
         disk.shutdown().await?;
         Ok(())
+    }
+}
+
+pub trait OnceCellWrap {
+    type T;
+
+    fn get_cell(self) -> OnceCell<Self::T>;
+    fn get_cell_ref(&self) -> &OnceCell<Self::T>;
+    fn get_cell_mut(&mut self) -> &mut OnceCell<Self::T>;
+}
+
+impl<T> OnceCellWrap for OnceCell<T> {
+    type T = T;
+
+    fn get_cell(self) -> OnceCell<Self::T> {
+        self
+    }
+    fn get_cell_ref(&self) -> &OnceCell<Self::T> {
+        self
+    }
+    fn get_cell_mut(&mut self) -> &mut OnceCell<Self::T> {
+        self
+    }
+}
+
+/// [`BackedEntryTrait`] that can be asynchronously written to.
+pub trait BackedEntryAsyncWrite:
+    BackedEntryTrait<
+    T: OnceCellWrap<T: Serialize>,
+    Disk: AsyncWriteDisk,
+    Coder: AsyncEncoder<
+        <<Self as BackedEntryTrait>::Disk as AsyncWriteDisk>::WriteDisk,
+        Error = Self::WriteError,
+    >,
+>
+{
+    type WriteError;
+    fn get_inner_mut(
+        &mut self,
+    ) -> &mut BackedEntryAsync<<Self::T as OnceCellWrap>::T, Self::Disk, Self::Coder>;
+}
+
+impl<
+        U: Serialize,
+        E: BackedEntryTrait<
+            T = OnceCell<U>,
+            Disk: AsyncWriteDisk,
+            Coder: AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk>,
+        >,
+    > BackedEntryAsyncWrite for E
+{
+    type WriteError = <E::Coder as AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk>>::Error;
+    fn get_inner_mut(&mut self) -> &mut BackedEntryAsync<U, Self::Disk, Self::Coder> {
+        BackedEntryTrait::get_mut(self)
+    }
+}
+
+/// [`BackedEntryTrait`] that can be read asynchronously.
+pub trait BackedEntryAsyncRead:
+    BackedEntryTrait<
+    T: OnceCellWrap<T: for<'de> Deserialize<'de>>,
+    Disk: AsyncReadDisk,
+    Coder: AsyncDecoder<
+        <<Self as BackedEntryTrait>::Disk as AsyncReadDisk>::ReadDisk,
+        Error = Self::ReadError,
+    >,
+>
+{
+    type ReadError;
+    fn get_inner_ref(
+        &self,
+    ) -> &BackedEntryAsync<<Self::T as OnceCellWrap>::T, Self::Disk, Self::Coder>;
+}
+
+impl<
+        U: for<'de> Deserialize<'de>,
+        E: BackedEntryTrait<
+            T = OnceCell<U>,
+            Disk: AsyncReadDisk,
+            Coder: AsyncDecoder<<E::Disk as AsyncReadDisk>::ReadDisk>,
+        >,
+    > BackedEntryAsyncRead for E
+{
+    type ReadError = <E::Coder as AsyncDecoder<<E::Disk as AsyncReadDisk>::ReadDisk>>::Error;
+    fn get_inner_ref(&self) -> &BackedEntryAsync<U, Self::Disk, Self::Coder> {
+        BackedEntryTrait::get_ref(self)
+    }
+}
+
+/// Gives mutable handle to a backed entry.
+///
+/// Modifying by [`BackedEntryAsync::a_write`] writes the entire value to the
+/// underlying storage on every modification. This allows for multiple values
+/// values to be written before syncing with disk.
+///
+/// Call [`Self::flush`] to sync changes with underlying storage before
+/// dropping. Otherwise, this causes a panic.
+pub struct BackedEntryAsyncMut<'a, E> {
+    entry: &'a mut E,
+    modified: bool,
+}
+
+impl<E: BackedEntryAsyncRead> Deref for BackedEntryAsyncMut<'_, E> {
+    type Target = E::T;
+
+    fn deref(&self) -> &Self::Target {
+        //self.entry.get_inner_ref().value.get().unwrap()
+        todo!()
+    }
+}
+
+impl<E: BackedEntryAsyncRead + BackedEntryAsyncWrite> DerefMut for BackedEntryAsyncMut<'_, E> {
+    /// [`DerefMut::deref_mut`] that sets a modified flag.
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.modified = true;
+        //self.entry.get_inner_mut().value.get_mut().unwrap()
+        todo!()
+    }
+}
+
+impl<E: BackedEntryAsyncWrite> BackedEntryAsyncMut<'_, E> {
+    /// Returns true if the memory version is desynced from the disk version
+    #[allow(dead_code)]
+    pub fn is_modified(&self) -> bool {
+        self.modified
+    }
+
+    /// Saves modifications to disk, unsetting the modified flag if sucessful.
+    pub async fn flush(&mut self) -> Result<&mut Self, E::WriteError> {
+        self.entry.get_inner_mut().a_update().await?;
+        self.modified = false;
+        Ok(self)
+    }
+}
+
+impl<E> Drop for BackedEntryAsyncMut<'_, E> {
+    /// [`Drop::drop`] panics if the handle is dropped while modified.
+    /// Flush before dropping to avoid a panic.
+    fn drop(&mut self) {
+        if self.modified {
+            panic!("BackedEntryAsyncMut dropped while modified.");
+        }
+    }
+}
+
+impl<'a, E: BackedEntryAsyncRead> BackedEntryAsyncMut<'a, E> {
+    /// Returns [`BackedEntryAsyncMut`] to allow efficient in-memory modifications.
+    ///
+    /// Make sure to call [`BackedEntryAsyncMut::flush`] to sync with disk before
+    /// dropping. Unlike the sync implementation, this will always panic if not
+    /// synced instead of attempting a recovery.
+    pub async fn mut_handle(backed: &'a mut E) -> Result<Self, E::ReadError> {
+        backed.get_inner_ref().a_load().await?;
+        Ok(BackedEntryAsyncMut {
+            entry: backed,
+            modified: false,
+        })
+    }
+}
+
+impl<
+        T: Serialize + for<'de> Deserialize<'de>,
+        Disk: AsyncWriteDisk + AsyncReadDisk,
+        Coder: AsyncEncoder<Disk::WriteDisk> + AsyncDecoder<Disk::ReadDisk>,
+    > BackedEntryAsync<T, Disk, Coder>
+{
+    /// Convenience wrapper for [`BackedEntryAsyncMut::mut_handle`]
+    pub async fn a_mut_handle(
+        &mut self,
+    ) -> Result<BackedEntryAsyncMut<Self>, <Coder as AsyncDecoder<Disk::ReadDisk>>::Error> {
+        BackedEntryAsyncMut::mut_handle(self).await
     }
 }
 
