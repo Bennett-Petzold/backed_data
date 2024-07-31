@@ -437,6 +437,9 @@ fn zstd_setting_benches(c: &mut Criterion) {
 
     let path = temp_dir().join("file_creation_bench");
 
+    #[cfg(feature = "async-zstd")]
+    let rt = Runtime::new().unwrap();
+
     let mut group = c.benchmark_group("zstd_setting_benches");
     for zstd_level in 0..22 {
         #[cfg(any(feature = "zstdmt", feature = "zstdmt-async"))]
@@ -497,8 +500,8 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 |b, zstd_level| {
                     let _ = remove_dir_all(path.clone());
                     create_dir(path.clone()).unwrap();
-                    b.iter(|| {
-                        create_zstdfiles(
+                    b.to_async(&rt).iter(|| {
+                        create_zstdfiles_async(
                             black_box(path.clone()),
                             black_box(data),
                             Some(*zstd_level),
@@ -521,29 +524,39 @@ fn zstd_setting_benches(c: &mut Criterion) {
             )
             .unwrap();
 
-            let mut file = File::options()
-                .create(true)
-                .read(true)
-                .write(true)
-                .truncate(true)
-                .open(path.join("CONFIG"))
-                .unwrap();
-            create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
-                .save_to_disk(file.try_clone().unwrap())
-                .unwrap();
+            let _ = remove_dir_all(path.clone());
+            create_dir(path.clone()).unwrap();
+
+            rt.block_on(async {
+                let mut file = AsyncFile::options()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path.join("CONFIG"))
+                    .await
+                    .unwrap();
+                let mut arr = create_zstdfiles_async(path.clone(), data, None).await;
+                arr.save_to_disk(&mut file).await.unwrap();
+            });
+            sync_all_dir(path.clone());
+
             group.bench_with_input(
                 BenchmarkId::new(
                     "zstd_read_async",
                     format!("Compression Level: {zstd_level}"),
                 ),
                 &(),
-                |b, _| b.iter(|| black_box(read_zstdfiles(&mut file))),
+                |b, _| {
+                    b.to_async(&rt)
+                        .iter(|| black_box(read_zstdfiles_async(black_box(path.join("CONFIG")))))
+                },
             );
         }
 
-        #[cfg(feature = "zstdmt")]
+        #[cfg(any(feature = "zstdmt", feature = "async-zstdmt"))]
         for t_count in 0..5 {
             set_zstd_multithread(t_count);
+            #[cfg(feature = "zstdmt")]
             group.bench_with_input(
                 BenchmarkId::new(
                     "zstd_write_mt",
@@ -563,23 +576,24 @@ fn zstd_setting_benches(c: &mut Criterion) {
                 },
             );
 
-            let mut file = File::options()
-                .create(true)
-                .read(true)
-                .write(true)
-                .truncate(true)
-                .open(path.join("CONFIG"))
-                .unwrap();
-            create_zstdfiles(black_box(path.clone()), black_box(data), Some(zstd_level))
-                .save_to_disk(file.try_clone().unwrap())
-                .unwrap();
+            #[cfg(feature = "async-zstdmt")]
             group.bench_with_input(
                 BenchmarkId::new(
-                    "zstd_read_mt",
+                    "zstd_write_async_mt",
                     format!("Compression Level: {zstd_level}, Thread Count: {t_count}"),
                 ),
-                &(),
-                |b, _| b.iter(|| black_box(read_zstdfiles(&mut file))),
+                &zstd_level,
+                |b, zstd_level| {
+                    let _ = remove_dir_all(path.clone());
+                    create_dir(path.clone()).unwrap();
+                    b.to_async(&rt).iter(|| {
+                        create_zstdfiles_async(
+                            black_box(path.clone()),
+                            black_box(data),
+                            Some(*zstd_level),
+                        )
+                    })
+                },
             );
         }
     }
