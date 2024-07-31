@@ -165,7 +165,9 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        remove_dir_all(rhs.directory_root)?;
+        if self.directory_root != rhs.directory_root {
+            remove_dir_all(rhs.directory_root)?;
+        }
         self.array.append_array(rhs.array);
         Ok(self)
     }

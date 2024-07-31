@@ -180,6 +180,8 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
     async fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
         let mut copy_futures = JoinSet::new();
 
+        let remove = self.directory_root != rhs.directory_root;
+
         let disks: Vec<PathBuf> = rhs
             .array
             .get_disks()
@@ -192,7 +194,10 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
                 copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
             });
         });
-        let dir_remove = spawn(remove_dir_all(rhs.directory_root));
+
+        if remove {
+            remove_dir_all(rhs.directory_root).await?;
+        }
 
         self.array.append_array(rhs.array);
 
