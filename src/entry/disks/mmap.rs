@@ -362,7 +362,10 @@ impl ReadDisk for Mmap {
 /// Wraps a mutable mmap,
 pub struct MmapWriter {
     path: PathBuf,
+    #[cfg(not(target_os = "windows"))]
     mmap: memmap2::MmapMut,
+    #[cfg(target_os = "windows")]
+    mmap: Option<memmap2::MmapMut>,
     written_len: usize,
     reserved_len: usize,
     #[cfg(target_os = "linux")]
@@ -391,7 +394,7 @@ impl MmapWriter {
             len = if file.metadata()?.len() == 0 {
                 0
             } else {
-                mmap.len()
+                mmap.unwrap().len()
             };
         }
 
@@ -412,7 +415,10 @@ impl MmapWriter {
 
         Ok(MmapWriter {
             path: path.as_ref().to_path_buf(),
+            #[cfg(not(target_os = "windows"))]
             mmap,
+            #[cfg(target_os = "windows")]
+            mmap: Some(mmap),
             written_len: 0,
             reserved_len,
             #[cfg(target_os = "linux")]
@@ -439,7 +445,10 @@ impl MmapWriter {
 
         Ok(MmapWriter {
             path: path.as_ref().to_path_buf(),
+            #[cfg(not(target_os = "windows"))]
             mmap,
+            #[cfg(target_os = "windows")]
+            mmap: Some(mmap),
             written_len: 0,
             reserved_len,
             #[cfg(target_os = "linux")]
@@ -547,8 +556,10 @@ impl MmapWriter {
         #[cfg(not(target_os = "windows"))]
         const MIN_RESERVE_LEN: usize = 8 * 1024;
 
+        // Windows (on the GitHub runner at least), crashes with an 8 KiB
+        // reservation.
         #[cfg(target_os = "windows")]
-        const MIN_RESERVE_LEN: usize = 1;
+        const MIN_RESERVE_LEN: usize = 1024;
 
         let remaining_len = self.reserved_len - self.written_len;
         if buf_len > remaining_len {
@@ -558,6 +569,12 @@ impl MmapWriter {
             let new_reservation = self.reserved_len + max(extend_len, MIN_RESERVE_LEN);
 
             let file = self.file()?;
+
+            // Can't resize length under an active memory mapping in Windows
+            #[cfg(target_os = "windows")]
+            {
+                self.mmap = None;
+            }
 
             // Make one big sparse allocation, if the filesystem supports it.
             #[cfg(target_os = "linux")]
@@ -593,7 +610,19 @@ impl MmapWriter {
     /// beyond the length of the file/mapping.
     fn write_data(&mut self, buf: &[u8]) {
         let new_len = self.written_len + buf.len();
-        self.mmap[self.written_len..new_len].copy_from_slice(buf);
+        let mmap;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            mmap = &mut self.mmap;
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            mmap = self.mmap.as_mut().unwrap();
+        }
+
+        mmap[self.written_len..new_len].copy_from_slice(buf);
         self.written_len = new_len;
     }
 
@@ -601,6 +630,12 @@ impl MmapWriter {
     fn truncate(&mut self) -> std::io::Result<()> {
         // Shrink to the actually written size, discarding garbage at the end.
         if self.written_len < self.reserved_len {
+            // Can't resize length under an active memory mapping in Windows
+            #[cfg(target_os = "windows")]
+            {
+                self.mmap = None;
+            }
+
             self.file()?.set_len(self.written_len as u64)?;
 
             self.reserved_len = self.written_len;
