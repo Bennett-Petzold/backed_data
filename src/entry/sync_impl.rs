@@ -60,6 +60,18 @@ impl<T: Once<Inner: for<'de> Deserialize<'de>>, Disk: ReadDisk, Coder: Decoder<D
         };
         Ok(value)
     }
+
+    /// Takes the inner value, loading from disk if not in memory.
+    pub fn take(self) -> Result<T::Inner, Coder::Error> {
+        let value = match self.value.into_inner() {
+            Some(x) => x,
+            None => {
+                let mut disk = self.disk.read_disk()?;
+                self.coder.decode(&mut disk)?
+            }
+        };
+        Ok(value)
+    }
 }
 
 impl<T: Once, Disk, Coder> BackedEntry<T, Disk, Coder> {

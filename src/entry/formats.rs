@@ -42,7 +42,7 @@ mod bincode_formats {
 
     use bincode::Options;
 
-    #[derive(Debug, Default, Clone, Copy)]
+    #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
     pub struct BincodeCoder {}
 
     impl<Source: Read> Decoder<Source> for BincodeCoder {

@@ -4,9 +4,9 @@ pub mod entry;
 
 #[cfg(feature = "array")]
 pub mod array;
-/*
-#[cfg(feature = "array")]
+#[cfg(feature = "directory")]
 pub mod directory;
+/*
 #[cfg(feature = "array")]
 pub mod meta;
 */

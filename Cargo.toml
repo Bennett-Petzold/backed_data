@@ -7,8 +7,9 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["bincode", "array", "zstd"]
-array = ["dep:uuid"]
+default = ["bincode", "directory", "zstd"]
+array = []
+directory = ["array", "dep:uuid"]
 async = ["dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-scoped"]
 
 # START FORMATS
