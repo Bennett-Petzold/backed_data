@@ -459,6 +459,7 @@ mod tests {
         use crate::entry::formats::SerdeJsonCoder;
 
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
+        #[cfg(not(miri))]
         const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
         cursor_vec!(back_vec, backing_store);
         cursor_vec!(back_vec_2, backing_store_2);
@@ -492,6 +493,7 @@ mod tests {
         use crate::entry::formats::{SerdeJsonCoder, SimdJsonCoder};
 
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
+        #[cfg(not(miri))]
         const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
         cursor_vec!(back_vec, backing_store);
 

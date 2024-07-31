@@ -1,7 +1,8 @@
 use num_traits::Unsigned;
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Debug,
+    error::Error,
+    fmt::{Debug, Display},
     io::{BufRead, Read, Seek},
     marker::PhantomData,
     ops::Deref,
@@ -80,6 +81,14 @@ impl<N: TryInto<i32, Error: Debug>> From<OutOfBounds> for ZstdLevelError<N> {
     }
 }
 
+impl<N: TryInto<i32, Error: Debug> + Debug> Display for ZstdLevelError<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <Self as Debug>::fmt(self, f)
+    }
+}
+
+impl<N: TryInto<i32, Error: Debug> + Debug> Error for ZstdLevelError<N> {}
+
 impl ZstdLevel {
     pub fn new<N>(value: N) -> Result<Self, ZstdLevelError<N>>
     where
@@ -107,37 +116,35 @@ impl ZstdLevel {
     }
 }
 
+/// Uses ZSTD to encode/decode to an underlying disk.
+///
+/// ZSTD_LEVEL is bounded by [`ZstdLevel`]'s constraints, returning an error
+/// when out of bounds.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ZstdDisk<'a, B> {
+pub struct ZstdDisk<'a, const ZSTD_LEVEL: u8, B> {
     inner: B,
-    pub zstd_level: ZstdLevel,
     _phantom: PhantomData<&'a ()>,
 }
 
-impl From<PathBuf> for ZstdDisk<'_, Plainfile> {
+impl<const ZSTD_LEVEL: u8> From<PathBuf> for ZstdDisk<'_, ZSTD_LEVEL, Plainfile> {
     fn from(value: PathBuf) -> Self {
         Self {
             inner: value.into(),
-            zstd_level: ZstdLevel::const_new(0).unwrap(),
             _phantom: PhantomData,
         }
     }
 }
 
-impl From<ZstdDisk<'_, Plainfile>> for PathBuf {
-    fn from(val: ZstdDisk<Plainfile>) -> Self {
+impl<const ZSTD_LEVEL: u8> From<ZstdDisk<'_, ZSTD_LEVEL, Plainfile>> for PathBuf {
+    fn from(val: ZstdDisk<ZSTD_LEVEL, Plainfile>) -> Self {
         Self::from(val.inner)
     }
 }
 
-impl<B> ZstdDisk<'_, B> {
-    pub const fn new(inner: B, level: Option<ZstdLevel>) -> Self {
+impl<const ZSTD_LEVEL: u8, B> ZstdDisk<'_, ZSTD_LEVEL, B> {
+    pub const fn new(inner: B) -> Self {
         Self {
             inner,
-            zstd_level: match level {
-                Some(x) => x,
-                None => ZstdLevel { level: 0 },
-            },
             _phantom: PhantomData,
         }
     }
@@ -165,7 +172,9 @@ impl<B: BufRead + Seek> Seek for ZstdDecoderWrapper<'_, B> {
 }
 
 #[cfg(feature = "zstd")]
-impl<'a, B: ReadDisk<ReadDisk: BufRead>> ReadDisk for ZstdDisk<'a, B> {
+impl<'a, const ZSTD_LEVEL: u8, B: ReadDisk<ReadDisk: BufRead>> ReadDisk
+    for ZstdDisk<'a, ZSTD_LEVEL, B>
+{
     type ReadDisk = ZstdDecoderWrapper<'a, B::ReadDisk>;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
@@ -176,12 +185,15 @@ impl<'a, B: ReadDisk<ReadDisk: BufRead>> ReadDisk for ZstdDisk<'a, B> {
 }
 
 #[cfg(feature = "zstd")]
-impl<'a, B: WriteDisk> WriteDisk for ZstdDisk<'a, B> {
+impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEVEL, B> {
     type WriteDisk = Encoder<'a, B::WriteDisk>;
 
     fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
         #[allow(unused_mut)]
-        let mut encoder = Encoder::new(self.inner.write_disk()?, *self.zstd_level)?;
+        let mut encoder = Encoder::new(
+            self.inner.write_disk()?,
+            *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
+        )?;
 
         #[cfg(feature = "zstdmt")]
         encoder
@@ -225,8 +237,8 @@ impl<B: AsyncBufRead + AsyncSeek + Unpin> AsyncSeek for AsyncZstdDecoderWrapper<
 }
 
 #[cfg(feature = "async_zstd")]
-impl<B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send> AsyncReadDisk
-    for ZstdDisk<'_, B>
+impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send>
+    AsyncReadDisk for ZstdDisk<'_, ZSTD_LEVEL, B>
 {
     type ReadDisk = AsyncZstdDecoderWrapper<B::ReadDisk>;
 
@@ -240,7 +252,9 @@ impl<B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send> AsyncReadDi
 }
 
 #[cfg(feature = "async_zstd")]
-impl<B: AsyncWriteDisk + Send + Sync> AsyncWriteDisk for ZstdDisk<'_, B> {
+impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
+    for ZstdDisk<'_, ZSTD_LEVEL, B>
+{
     type WriteDisk = async_compression::tokio::write::ZstdEncoder<B::WriteDisk>;
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
@@ -251,7 +265,9 @@ impl<B: AsyncWriteDisk + Send + Sync> AsyncWriteDisk for ZstdDisk<'_, B> {
             Ok(
                 async_compression::tokio::write::ZstdEncoder::with_quality_and_params(
                     disk,
-                    async_compression::Level::Precise(*self.zstd_level),
+                    async_compression::Level::Precise(
+                        *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
+                    ),
                     &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())],
                 ),
             )
@@ -261,12 +277,15 @@ impl<B: AsyncWriteDisk + Send + Sync> AsyncWriteDisk for ZstdDisk<'_, B> {
         {
             Ok(async_compression::tokio::write::ZstdEncoder::with_quality(
                 disk,
-                async_compression::Level::Precise(*self.zstd_level),
+                async_compression::Level::Precise(
+                    *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
+                ),
             ))
         }
     }
 }
 
+/*
 // Miri does not appreciate FFI calls
 #[cfg(all(test, not(miri)))]
 mod tests {
@@ -285,7 +304,7 @@ mod tests {
         };
         assert!(backing.get_ref().is_empty());
 
-        let zstd = ZstdDisk::new(backing, None);
+        let zstd = ZstdDisk::new(backing);
         let mut write = zstd.write_disk().unwrap();
         write.write_all(TEST_SEQUENCE).unwrap();
         write.flush().unwrap();
@@ -344,3 +363,4 @@ mod tests {
         assert_eq!(read, TEST_SEQUENCE);
     }
 }
+*/

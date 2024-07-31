@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     array::sync_impl::BackedArray,
-    entry::{disks::Plainfile, BackedEntryArr},
+    entry::{
+        disks::{Plainfile, ZstdDisk},
+        BackedEntryArr,
+    },
 };
 
 #[cfg(feature = "async")]
@@ -27,3 +30,15 @@ pub type StdDirBackedArray<T, Coder> =
 #[cfg(feature = "async")]
 pub type AsyncStdDirBackedArray<T, Coder> =
     DirectoryBackedArray<Vec<Range<usize>>, Vec<BackedEntryAsync<Box<[T]>, Plainfile, Coder>>>;
+
+#[cfg(feature = "zstd")]
+pub type ZstdDirBackedArray<'a, T, Coder> = DirectoryBackedArray<
+    Vec<Range<usize>>,
+    Vec<BackedEntryArr<T, ZstdDisk<'a, 0, Plainfile>, Coder>>,
+>;
+
+#[cfg(feature = "async_zstd")]
+pub type AsyncZstdDirBackedArray<'a, T, Coder> = DirectoryBackedArray<
+    Vec<Range<usize>>,
+    Vec<BackedEntryAsync<Box<[T]>, ZstdDisk<'a, 0, Plainfile>, Coder>>,
+>;
