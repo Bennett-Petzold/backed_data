@@ -2,9 +2,9 @@
 
 pub mod entry;
 
-/*
 #[cfg(feature = "array")]
 pub mod array;
+/*
 #[cfg(feature = "array")]
 pub mod directory;
 #[cfg(feature = "array")]
