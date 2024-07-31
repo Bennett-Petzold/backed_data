@@ -269,7 +269,7 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{collections::HashMap, io::Cursor};
 
     use crate::test_utils::CursorVec;
 
@@ -309,5 +309,34 @@ mod tests {
 
         drop(handle);
         assert_eq!(backed_entry.load().unwrap(), [20, 1, 30, 5, 7]);
+    }
+
+    #[test]
+    fn mutate_option() {
+        let mut input: HashMap<String, u128> = HashMap::new();
+        input.insert("THIS IS A STRING".to_string(), 55);
+        input.insert("THIS IS ALSO A STRING".to_string(), 23413);
+
+        let mut back_vec = CursorVec {
+            inner: &mut Cursor::new(Vec::with_capacity(10)),
+        };
+
+        // Intentional unsafe access to later peek underlying storage
+        let mut backed_entry = BackedEntryOption::new(&mut back_vec);
+        backed_entry.write_unload(&input).unwrap();
+
+        assert_eq!(&input, backed_entry.load().unwrap());
+        let mut handle = backed_entry.mut_handle().unwrap();
+        handle
+            .as_mut()
+            .unwrap()
+            .insert("EXTRA STRING".to_string(), 234137);
+        handle.flush().unwrap();
+
+        drop(handle);
+        assert_eq!(
+            backed_entry.load().unwrap().get("EXTRA STRING").unwrap(),
+            &234137
+        );
     }
 }
