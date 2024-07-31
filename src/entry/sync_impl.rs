@@ -353,7 +353,7 @@ impl<
     }
 
     /// Replaces [`self`]'s encoder without any disk operation.
-    pub fn encoder_from<OtherCoder>(
+    pub fn encoder_try_into<OtherCoder>(
         self,
     ) -> Result<BackedEntry<T, Disk, OtherCoder>, OtherCoder::Error>
     where
@@ -538,18 +538,57 @@ mod tests {
         backed_entry.write(VALUES.into()).unwrap();
 
         // Check for valid bincode encoding
-        let backing_store = unsafe { &*back_vec.get() }.get_ref();
-        assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
-        drop(backing_store);
+        {
+            let backing_store = unsafe { &*back_vec.get() }.get_ref();
+            assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
+        }
 
         let mut backed_entry = backed_entry.change_encoder(SerdeJsonCoder {}).unwrap();
 
         // Check for valid json encoding
-        let backing_store = unsafe { &*back_vec.get() }.get_ref();
-        assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
-        drop(backing_store);
+        {
+            let backing_store = unsafe { &*back_vec.get() }.get_ref();
+            assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
+        }
 
         // Check that data is preserved with json backing
+        assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
+        backed_entry.unload();
+        assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
+    }
+
+    #[cfg(all(feature = "serde_json", feature = "simd_json"))]
+    #[test]
+    fn encoder_into() {
+        use crate::entry::formats::{SerdeJsonCoder, SimdJsonCoder};
+
+        const VALUES: &[u8] = &[0, 1, 3, 5, 7];
+        const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
+        let mut binding = Cursor::new(Vec::with_capacity(10));
+        let back_vec = UnsafeCell::new(CursorVec {
+            inner: (&mut binding).into(),
+        });
+
+        // Intentional unsafe access to later peek underlying storage
+        let mut backed_entry =
+            unsafe { BackedEntryArr::new(&mut *back_vec.get(), SerdeJsonCoder {}) };
+        backed_entry.write(VALUES.into()).unwrap();
+
+        // Check for valid serde json encoding
+        {
+            let backing_store = unsafe { &*back_vec.get() }.get_ref();
+            assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
+        }
+
+        let mut backed_entry = backed_entry.encoder_into::<SimdJsonCoder>();
+
+        // Check for valid simd json encoding
+        {
+            let backing_store = unsafe { &*back_vec.get() }.get_ref();
+            assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
+        }
+
+        // Check that data is preserved alternative reader
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
         backed_entry.unload();
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
