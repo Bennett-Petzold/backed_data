@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
-use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
+use async_bincode::futures::{AsyncBincodeReader, AsyncBincodeWriter};
+use futures::io::{AsyncRead, AsyncWrite};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::{AsyncDecoder, AsyncEncoder};
 

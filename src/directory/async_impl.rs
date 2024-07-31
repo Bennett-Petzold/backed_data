@@ -3,12 +3,9 @@ use std::{
     sync::Arc,
 };
 
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{io::AsyncWriteExt, stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::{
-    fs::{copy, create_dir_all, remove_dir, remove_file, rename},
-    io::AsyncWriteExt,
-};
+use tokio::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
 use uuid::Uuid;
 
 use crate::{
@@ -194,7 +191,7 @@ where
         let mut disk = disk.async_write_disk().await?;
         coder.encode(self, &mut disk).await?;
         disk.flush().await?;
-        disk.shutdown().await?;
+        disk.close().await?;
         Ok(self)
     }
 }
@@ -253,6 +250,7 @@ mod tests {
     use std::{array, env::temp_dir, fs::remove_dir_all};
 
     use tokio::fs::File;
+    use tokio_util::compat::TokioAsyncReadCompatExt;
 
     use crate::{
         directory::AsyncStdDirBackedArray,
@@ -308,7 +306,10 @@ mod tests {
                 AsyncBincodeCoder::default()
                     .encode(
                         &arr,
-                        &mut File::create(directory.join("meta.data")).await.unwrap(),
+                        &mut File::create(directory.join("meta.data"))
+                            .await
+                            .unwrap()
+                            .compat(),
                     )
                     .await
                     .unwrap();
@@ -316,7 +317,12 @@ mod tests {
 
                 let arr: AsyncStdDirBackedArray<String, AsyncBincodeCoder<_>> =
                     AsyncBincodeCoder::default()
-                        .decode(&mut File::open(directory.join("meta.data")).await.unwrap())
+                        .decode(
+                            &mut File::open(directory.join("meta.data"))
+                                .await
+                                .unwrap()
+                                .compat(),
+                        )
                         .await
                         .unwrap();
                 assert_eq!(*arr.a_get(10).await.unwrap(), "TEST STRING");

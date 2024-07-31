@@ -16,7 +16,7 @@ use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
 use super::{ReadDisk, WriteDisk};
 
 #[cfg(feature = "async_zstd")]
-use tokio::io::AsyncBufRead;
+use futures::io::AsyncBufRead;
 
 #[cfg(feature = "async_zstdmt")]
 use async_compression::zstd::CParameter;
@@ -214,10 +214,10 @@ impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEV
 impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send>
     AsyncReadDisk for ZstdDisk<'_, ZSTD_LEVEL, B>
 {
-    type ReadDisk = async_compression::tokio::bufread::ZstdDecoder<B::ReadDisk>;
+    type ReadDisk = async_compression::futures::bufread::ZstdDecoder<B::ReadDisk>;
 
     async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(async_compression::tokio::bufread::ZstdDecoder::new(
+        Ok(async_compression::futures::bufread::ZstdDecoder::new(
             self.inner.async_read_disk().await?,
         ))
     }
@@ -227,7 +227,7 @@ impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sy
 impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
     for ZstdDisk<'_, ZSTD_LEVEL, B>
 {
-    type WriteDisk = async_compression::tokio::write::ZstdEncoder<B::WriteDisk>;
+    type WriteDisk = async_compression::futures::write::ZstdEncoder<B::WriteDisk>;
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
         let disk = self.inner.async_write_disk().await?;
@@ -242,7 +242,7 @@ impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
             };
 
             Ok(
-                async_compression::tokio::write::ZstdEncoder::with_quality_and_params(
+                async_compression::futures::write::ZstdEncoder::with_quality_and_params(
                     disk,
                     async_compression::Level::Precise(
                         *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
@@ -254,12 +254,14 @@ impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
 
         #[cfg(not(feature = "async_zstdmt"))]
         {
-            Ok(async_compression::tokio::write::ZstdEncoder::with_quality(
-                disk,
-                async_compression::Level::Precise(
-                    *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
+            Ok(
+                async_compression::futures::write::ZstdEncoder::with_quality(
+                    disk,
+                    async_compression::Level::Precise(
+                        *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
+                    ),
                 ),
-            ))
+            )
         }
     }
 }
@@ -304,7 +306,7 @@ mod tests {
     #[cfg(feature = "async_zstd")]
     #[tokio::test]
     async fn async_zstd() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use futures::io::{AsyncReadExt, AsyncWriteExt};
 
         const TEST_SEQUENCE: &[u8] = &[39, 3, 6, 7, 5];
         let mut cursor = Cursor::default();
@@ -317,7 +319,7 @@ mod tests {
         let mut write = zstd.async_write_disk().await.unwrap();
         write.write_all(TEST_SEQUENCE).await.unwrap();
         write.flush().await.unwrap();
-        write.shutdown().await.unwrap();
+        write.close().await.unwrap();
 
         // Reading from same struct
         let mut read = Vec::default();

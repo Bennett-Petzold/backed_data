@@ -5,8 +5,8 @@ use super::{ReadDisk, WriteDisk};
 #[cfg(feature = "async")]
 use {
     super::{AsyncReadDisk, AsyncWriteDisk},
+    futures::io::{AsyncRead, AsyncWrite},
     std::future::Future,
-    tokio::io::{AsyncRead, AsyncWrite},
 };
 
 /// Convenience struct to define a custom [`ReadDisk`], from a function.
@@ -116,8 +116,8 @@ where
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{AsyncReadDisk, CustomAsyncRead};
 ///
-/// let disk = CustomAsyncRead(|| ready(Ok(tokio::io::empty())));
-/// let reader: &dyn Future<Output = std::io::Result<tokio::io::Empty>> =
+/// let disk = CustomAsyncRead(|| ready(Ok(smol::io::empty())));
+/// let reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
 ///     &disk.async_read_disk();
 /// ```
 #[cfg(feature = "async")]
@@ -132,8 +132,8 @@ pub struct CustomAsyncRead<F>(pub F);
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{AsyncWriteDisk, CustomAsyncWrite};
 ///
-/// let disk = CustomAsyncWrite(|| ready(Ok(tokio::io::sink())));
-/// let writer: &dyn Future<Output = std::io::Result<tokio::io::Sink>> =
+/// let disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
+/// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
 /// ```
 #[cfg(feature = "async")]
@@ -153,13 +153,13 @@ pub struct CustomAsyncWrite<F>(pub F);
 /// };
 ///
 /// let disk = CustomAsync(
-///     CustomAsyncRead(|| ready(Ok(tokio::io::empty()))),
-///     CustomAsyncWrite(|| ready(Ok(tokio::io::sink())))
+///     CustomAsyncRead(|| ready(Ok(smol::io::empty()))),
+///     CustomAsyncWrite(|| ready(Ok(smol::io::sink())))
 /// );
 ///
-/// let reader: &dyn Future<Output = std::io::Result<tokio::io::Empty>> =
+/// let reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
 ///     &disk.async_read_disk();
-/// let writer: &dyn Future<Output = std::io::Result<tokio::io::Sink>> =
+/// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
 /// ```
 #[cfg(feature = "async")]
@@ -250,16 +250,16 @@ where
 ///         CustomWrite(|| Ok(std::io::sink()))
 ///     ),
 ///     CustomAsync(
-///         CustomAsyncRead(|| ready(Ok(tokio::io::empty()))),
-///         CustomAsyncWrite(|| ready(Ok(tokio::io::sink())))
+///         CustomAsyncRead(|| ready(Ok(smol::io::empty()))),
+///         CustomAsyncWrite(|| ready(Ok(smol::io::sink())))
 ///     )
 /// );
 ///
 /// let sync_reader: std::io::Empty = disk.read_disk().unwrap();
 /// let sync_writer: std::io::Sink = disk.write_disk().unwrap();
-/// let async_reader: &dyn Future<Output = std::io::Result<tokio::io::Empty>> =
+/// let async_reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
 ///     &disk.async_read_disk();
-/// let async_writer: &dyn Future<Output = std::io::Result<tokio::io::Sink>> =
+/// let async_writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
 /// ```
 #[cfg(feature = "async")]

@@ -4,6 +4,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use super::{ReadDisk, WriteDisk};
 
@@ -63,23 +64,24 @@ impl WriteDisk for Unbuffered {
 
 #[cfg(feature = "async")]
 impl AsyncReadDisk for Unbuffered {
-    type ReadDisk = tokio::fs::File;
+    type ReadDisk = Compat<tokio::fs::File>;
 
     async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        tokio::fs::File::open(self.path.clone()).await
+        Ok(tokio::fs::File::open(self.path.clone()).await?.compat())
     }
 }
 
 #[cfg(feature = "async")]
 impl AsyncWriteDisk for Unbuffered {
-    type WriteDisk = tokio::fs::File;
+    type WriteDisk = Compat<tokio::fs::File>;
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        tokio::fs::File::options()
+        Ok(tokio::fs::File::options()
             .write(true)
             .create(true)
             .truncate(true)
             .open(self.path.clone())
-            .await
+            .await?
+            .compat_write())
     }
 }

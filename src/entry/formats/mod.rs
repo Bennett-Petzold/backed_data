@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "async")]
-use tokio::io::{AsyncRead, AsyncWrite};
+use futures::io::{AsyncRead, AsyncWrite};
 
 pub trait Decoder<Source: ?Sized + Read> {
     type Error: From<std::io::Error>;
