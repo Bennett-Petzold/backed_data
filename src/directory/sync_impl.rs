@@ -4,29 +4,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    array::{
-        container::{
-            open_mut, open_ref, BackedEntryContainer, BackedEntryContainerNested,
-            BackedEntryContainerNestedAll, BackedEntryContainerNestedWrite, ResizingContainer,
-        },
-        sync_impl::BackedArray,
+use crate::array::{
+    container::{
+        open_mut, open_ref, BackedEntryContainer, BackedEntryContainerNested,
+        BackedEntryContainerNestedAll, BackedEntryContainerNestedWrite, ResizingContainer,
     },
-    entry::{disks::Plainfile, BackedEntryArr},
+    sync_impl::BackedArray,
 };
 
-/// [`BackedArray`] that uses a directory of plain files
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DirectoryBackedArray<K, E> {
-    array: BackedArray<K, E>,
-    directory_root: PathBuf,
-}
-
-pub type StdDirBackedArray<T, Coder> =
-    DirectoryBackedArray<Vec<Range<usize>>, Vec<BackedEntryArr<T, Plainfile, Coder>>>;
+use super::DirectoryBackedArray;
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
@@ -205,11 +193,9 @@ mod tests {
         fs::{remove_dir_all, File},
     };
 
-    use itertools::Itertools;
-
     use crate::entry::formats::{BincodeCoder, Decoder, Encoder};
 
-    use super::*;
+    use super::super::*;
 
     fn values() -> (Box<[String]>, Box<[String]>) {
         (
