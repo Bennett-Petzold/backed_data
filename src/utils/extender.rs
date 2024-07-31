@@ -6,44 +6,37 @@ use std::{
 #[cfg(feature = "async")]
 use futures::Future;
 
-/// Takes ownership of a parent value and computes the child.
+/// Takes ownership of a parent value and computes the child with a reference.
 ///
-/// Used to prevent the parent from being freed, and therefore create a child
-/// from its reference with the same lifetime.
+/// Used to prevent the parent from being freed, and therefore return a
+/// referenced value from a function.
 #[derive(Debug)]
 pub struct BorrowExtender<T, U> {
     _parent: T,
     child: U,
 }
 
+pub type BorrowNest<A, B, C> = BorrowExtender<BorrowExtender<A, B>, C>;
+
 impl<T, U> BorrowExtender<T, U> {
     pub fn new<V: FnOnce(&T) -> U>(parent: T, child: V) -> Self {
-        let parent_ptr: *const _ = &parent;
-        let child = (child)(unsafe { &*parent_ptr });
+        let child = (child)(&parent);
         Self {
             _parent: parent,
             child,
         }
     }
 
-    pub fn try_new<'a, W, V: FnOnce(&'a T) -> Result<U, W>>(parent: T, child: V) -> Result<Self, W>
-    where
-        T: 'a,
-    {
-        let parent_ptr: *const _ = &parent;
-        let child = (child)(unsafe { &*parent_ptr })?;
+    pub fn try_new<W, V: FnOnce(&T) -> Result<U, W>>(parent: T, child: V) -> Result<Self, W> {
+        let child = (child)(&parent)?;
         Ok(Self {
             _parent: parent,
             child,
         })
     }
 
-    pub fn maybe_new<'a, V: FnOnce(&'a T) -> Option<U>>(parent: T, child: V) -> Option<Self>
-    where
-        T: 'a,
-    {
-        let parent_ptr: *const _ = &parent;
-        let child = (child)(unsafe { &*parent_ptr })?;
+    pub fn maybe_new<V: FnOnce(&T) -> Option<U>>(parent: T, child: V) -> Option<Self> {
+        let child = (child)(&parent)?;
         Some(Self {
             _parent: parent,
             child,
@@ -52,40 +45,70 @@ impl<T, U> BorrowExtender<T, U> {
 }
 
 #[cfg(feature = "async")]
+#[derive(Debug)]
+/// Pointer wrapper that is Send/Sync if it wraps a Send/Sync type.
+///
+/// Pointers are necessary for dealing with lifetimes in futures, and do not
+/// auto-impl Send/Sync if the underlying type does. This exists to enable a
+/// boundary cross reference that is Send/Sync.
+pub struct ExtenderPtr<T>(*const T);
+
+#[cfg(feature = "async")]
+unsafe impl<T: Send> Send for ExtenderPtr<T> {}
+
+#[cfg(feature = "async")]
+unsafe impl<T: Sync> Sync for ExtenderPtr<T> {}
+
+#[cfg(feature = "async")]
+impl<T> From<&T> for ExtenderPtr<T> {
+    fn from(value: &T) -> Self {
+        Self(value)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T> From<ExtenderPtr<T>> for *const T {
+    fn from(val: ExtenderPtr<T>) -> Self {
+        val.0
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T> ExtenderPtr<T> {
+    pub fn ptr(self) -> *const T {
+        self.0
+    }
+}
+
+#[cfg(feature = "async")]
 impl<T, U> BorrowExtender<T, U> {
-    pub async fn a_new<F: Future<Output = U>, V: FnOnce(&T) -> F>(parent: T, child: V) -> Self {
-        let parent_ptr: *const _ = &parent;
-        let child = (child)(unsafe { &*parent_ptr }).await;
+    pub async fn a_new<F: Future<Output = U>, V: FnOnce(ExtenderPtr<T>) -> F>(
+        parent: T,
+        child: V,
+    ) -> Self {
+        let child = (child)((&parent).into()).await;
         Self {
             _parent: parent,
             child,
         }
     }
 
-    pub async fn a_try_new<'a, W, F: Future<Output = Result<U, W>>, V: FnOnce(&'a T) -> F>(
+    pub async fn a_try_new<W, F: Future<Output = Result<U, W>>, V: FnOnce(ExtenderPtr<T>) -> F>(
         parent: T,
         child: V,
-    ) -> Result<Self, W>
-    where
-        T: 'a,
-    {
-        let parent_ptr: *const _ = &parent;
-        let child = (child)(unsafe { &*parent_ptr }).await?;
+    ) -> Result<Self, W> {
+        let child = (child)((&parent).into()).await?;
         Ok(Self {
             _parent: parent,
             child,
         })
     }
 
-    pub async fn a_maybe_new<'a, F: Future<Output = Option<U>>, V: FnOnce(&'a T) -> F>(
+    pub async fn a_maybe_new<F: Future<Output = Option<U>>, V: FnOnce(ExtenderPtr<T>) -> F>(
         parent: T,
         child: V,
-    ) -> Option<Self>
-    where
-        T: 'a,
-    {
-        let parent_ptr: *const _ = &parent;
-        let child = (child)(unsafe { &*parent_ptr }).await?;
+    ) -> Option<Self> {
+        let child = (child)((&parent).into()).await?;
         Some(Self {
             _parent: parent,
             child,
@@ -106,15 +129,42 @@ impl<T, U> DerefMut for BorrowExtender<T, U> {
     }
 }
 
-impl<T, U> AsRef<U> for BorrowExtender<T, U> {
-    fn as_ref(&self) -> &U {
-        &self.child
+impl<T, U: AsRef<V>, V> AsRef<V> for BorrowExtender<T, U> {
+    fn as_ref(&self) -> &V {
+        self.child.as_ref()
     }
 }
 
 impl<T, U> AsMut<U> for BorrowExtender<T, U> {
     fn as_mut(&mut self) -> &mut U {
         &mut self.child
+    }
+}
+
+impl<'a, T, U> PartialEq<&'a U> for BorrowExtender<T, U>
+where
+    U: PartialEq<&'a U>,
+{
+    fn eq(&self, other: &&'a U) -> bool {
+        self.child == other
+    }
+}
+
+impl<T, U> PartialEq<U> for BorrowExtender<T, U>
+where
+    U: PartialEq<U>,
+{
+    fn eq(&self, other: &U) -> bool {
+        self.child == *other
+    }
+}
+
+impl<T, U> PartialOrd<U> for BorrowExtender<T, U>
+where
+    U: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &U) -> Option<std::cmp::Ordering> {
+        self.child.partial_cmp(other)
     }
 }
 

@@ -1,6 +1,7 @@
 use std::{
     fmt::Debug,
     iter::{FusedIterator, Peekable},
+    mem::transmute,
     ops::{Deref, DerefMut, Range},
     sync::{Arc, Mutex},
 };
@@ -10,16 +11,16 @@ use crate::{
         sync_impl::{BackedEntryMut, BackedEntryRead, BackedEntryWrite},
         BackedEntry,
     },
-    utils::{BorrowExtender, BorrowExtenderMut},
+    utils::{BorrowExtender, BorrowExtenderMut, BorrowNest},
 };
 
 use super::{
     container::{
-        open_mut, open_ref, BackedEntryContainer, BackedEntryContainerNested,
-        BackedEntryContainerNestedAll, BackedEntryContainerNestedRead,
-        BackedEntryContainerNestedWrite, Container, ResizingContainer,
+        open_mut, BackedEntryContainer, BackedEntryContainerNested, BackedEntryContainerNestedAll,
+        BackedEntryContainerNestedRead, BackedEntryContainerNestedWrite, Container,
+        ResizingContainer,
     },
-    internal_idx, multiple_internal_idx_strict, BackedArray, BackedArrayError,
+    internal_idx, BackedArray, BackedArrayError,
 };
 
 impl<K, E: BackedEntryContainerNested> BackedArray<K, E> {
@@ -76,60 +77,64 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNested> BackedArr
 
 /// Read implementations
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> BackedArray<K, E> {
-    /// Return a value (potentially loading its backing array).
-    ///
-    /// Backing arrays stay in memory until freed.
-    pub fn get(
+    /// Implementor for [`Self::get`] that retains type information.
+    #[allow(clippy::type_complexity)]
+    fn internal_get(
         &self,
         idx: usize,
-    ) -> Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::ReadError>> {
+    ) -> Result<
+        BorrowNest<E::Ref<'_>, &E::Unwrapped, <E::Unwrapped as Container>::Ref<'_>>,
+        BackedArrayError<E::ReadError>,
+    > {
         let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
             .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
 
-        let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
-            entries
-                .c_get(loc.entry_idx)
+        let wrapped_container = self
+            .entries
+            .c_get(loc.entry_idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+
+        // Need to keep the handle to the container alive, in case it
+        // invalidates borrowed content when dropped.
+        let entry = BorrowExtender::try_new(wrapped_container, |wrapped_container| {
+            // Opening layers of abstraction, no transformations.
+            let wrapped_container: &BackedEntry<_, _, _> =
+                BackedEntryContainer::get_ref(wrapped_container.as_ref());
+
+            // Use the wrapped_container pointer once, to load the backing.
+            let inner_container = wrapped_container.load().map_err(BackedArrayError::Coder)?;
+
+            // `wrapped_container` is borrowed from self.entries, and held
+            // for the entire returned `'a` lifetime by BorrowExtender. The
+            // pointer that load is called against is only used once, to get an
+            // inner container value that is valid as long as
+            // `wrapped_container` is held. Transmute can then be used to
+            // extend the validity of this reference, which is valid for the
+            // lifetime of this struct.
+            //
+            // This is actually unsafe until function return. I have not found
+            // a way to make the compiler enforce the second borrow extending
+            // block.
+            Ok(unsafe { transmute::<&E::Unwrapped, &'_ E::Unwrapped>(inner_container) })
+        })?;
+
+        // Also need to keep this handle to an unwrapped container alive in
+        // the return.
+        BorrowExtender::try_new(entry, |entry| {
+            entry
+                .c_get(loc.inside_entry_idx)
                 .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-        })?;
-        let entry = BorrowExtender::try_new(entry_container, |entry_container| {
-            BackedEntryContainer::get_ref(open_ref!(entry_container))
-                .load()
-                .map_err(BackedArrayError::Coder)
-        })?;
-        entry
-            .c_get(loc.inside_entry_idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))
+        })
     }
 
-    /// Produces a vector for all requested indicies.
+    /// Return a value (potentially loading its backing array).
     ///
-    /// Loads all necessary backing arrays into memory until freed.
-    /// Returns Errors for invalid idx and load issues.
-    pub fn get_multiple<'a, I>(
-        &'a self,
-        idxs: I,
-    ) -> impl Iterator<Item = Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::ReadError>>>
-    where
-        I: IntoIterator<Item = usize> + Clone + 'a,
-    {
-        multiple_internal_idx_strict(self.keys.c_ref(), idxs.clone())
-            .zip(idxs)
-            .map(|(loc, idx)| {
-                let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-                let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
-                    entries
-                        .c_get(loc.entry_idx)
-                        .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-                })?;
-                let entry = BorrowExtender::try_new(entry_container, |entry_container| {
-                    BackedEntryContainer::get_ref(open_ref!(entry_container))
-                        .load()
-                        .map_err(BackedArrayError::Coder)
-                })?;
-                entry
-                    .c_get(loc.inside_entry_idx)
-                    .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-            })
+    /// Backing arrays stay in memory until freed by a mutable function.
+    pub fn get(
+        &self,
+        idx: usize,
+    ) -> Result<impl AsRef<E::InnerData> + '_, BackedArrayError<E::ReadError>> {
+        self.internal_get(idx)
     }
 }
 
@@ -316,7 +321,10 @@ impl<'a, K, E> BackedArrayIter<'a, K, E> {
 impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Iterator
     for BackedArrayIter<'a, K, E>
 {
-    type Item = Result<<E::Unwrapped as Container>::Ref<'a>, E::ReadError>;
+    type Item = Result<
+        BorrowNest<E::Ref<'a>, &'a E::Unwrapped, <E::Unwrapped as Container>::Ref<'a>>,
+        E::ReadError,
+    >;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.nth(0)
@@ -324,7 +332,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> I
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         self.pos += n;
-        match self.backed.get(self.pos) {
+        match self.backed.internal_get(self.pos) {
             Ok(val) => {
                 self.pos += 1;
                 Some(Ok(val))
@@ -428,12 +436,16 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll>
         let len = backed.keys.c_ref().as_ref().last().unwrap_or(&(0..0)).end;
         let mut handles = Vec::with_capacity(backed.chunks_len());
         let keys = BorrowExtender::new(backed.keys.c_ref(), |keys| {
-            let keys_ptr: *const _ = keys;
-            unsafe { &*keys_ptr }.as_ref().iter().peekable()
+            // The keys reference is valid as long for the life of this struct,
+            // which is valid as long as `Self` is valid.
+            let keys = unsafe { transmute::<&K::RefSlice<'_>, &'a K::RefSlice<'a>>(keys) };
+            keys.as_ref().iter().peekable()
         });
         let mut entries = BorrowExtenderMut::new(backed.entries.c_mut(), |ent| {
-            let ent_ptr: *mut _ = ent;
-            unsafe { &mut *ent_ptr }.as_mut().iter_mut()
+            // The entries reference is valid as long for the life of this
+            // struct, which is valid as long as `Self` is valid.
+            let ent = unsafe { transmute::<&mut E::MutSlice<'_>, &'a mut E::MutSlice<'a>>(ent) };
+            ent.as_mut().iter_mut()
         });
 
         if let Some(entry) = entries.by_ref().next() {
@@ -523,14 +535,20 @@ where
         }
 
         // This actually extends lifetimes too long, beyond lifetime of struct
-        let handle_ptr: *mut _ = self.handles.last_mut().unwrap();
-        let handle = unsafe { &mut *handle_ptr };
+        let handle = self.handles.last_mut().unwrap().clone();
         let mut handle_locked = handle.lock().unwrap();
 
         match &mut *handle_locked {
             Ok(h) => {
-                let h: *mut _ = h;
-                unsafe { &mut *h }.c_get_mut(inner_pos).map(|h| {
+                // The data is valid for the lifetime of the underlying
+                // handle, which is guarded by an Arc, not the iterator struct.
+                let h = unsafe {
+                    transmute::<
+                        &mut BackedEntryMut<'a, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>,
+                        &'a mut BackedEntryMut<'a, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>,
+                    >(h)
+                };
+                h.c_get_mut(inner_pos).map(|h| {
                     Ok(CountedHandle {
                         handle: handle.clone(),
                         value: h,
@@ -538,8 +556,10 @@ where
                 })
             }
             Err(e) => {
-                let e: *const _ = e;
-                Some(Err(unsafe { &*e }))
+                // The error is valid for the lifetime of the underlying
+                // handle, which is guarded by an Arc, not the iterator struct.
+                let e = unsafe { transmute::<&E::ReadError, &'a E::ReadError>(e) };
+                Some(Err(e))
             }
         }
     }
@@ -571,13 +591,15 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedRead> Backe
     /// All chunks loaded earlier in the iteration will remain loaded.
     pub fn chunk_iter(
         &self,
-    ) -> impl Iterator<Item = Result<impl AsRef<&E::Unwrapped>, E::ReadError>> {
+    ) -> impl Iterator<Item = Result<impl Deref<Target = &E::Unwrapped>, E::ReadError>> {
         self.entries.ref_iter().map(|arr| {
-            BorrowExtender::new(arr, |arr| {
-                let arr_ptr: *const _ = arr;
-                unsafe { &*arr_ptr }.as_ref().get_ref().load()
+            BorrowExtender::try_new(arr, |arr| {
+                let loaded_entry = arr.as_ref().get_ref().load()?;
+
+                // The loaded value is valid as long as the BorrowExtender is
+                // valid, since it keeps the entry alive.
+                Ok(unsafe { transmute::<&E::Unwrapped, &'_ E::Unwrapped>(loaded_entry) })
             })
-            .open_result()
         })
     }
 }
@@ -607,18 +629,13 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Backed
     > {
         self.entries.mut_iter().map(|arr| {
             let arr = BorrowExtenderMut::new(arr, |arr| {
-                let arr: *mut _ = arr.as_mut();
+                let arr: *mut _ = arr.as_mut().get_mut();
                 unsafe { &mut *arr }
             });
-            let arr = BorrowExtenderMut::new(arr, |arr| {
-                let arr: *mut _ = arr.get_mut().get_mut();
-                unsafe { &mut *arr }
-            });
-            BorrowExtenderMut::new(arr, |arr| {
-                let arr: *mut _ = arr.get_mut();
+            BorrowExtenderMut::try_new(arr, |arr| {
+                let arr: *mut _ = arr;
                 unsafe { &mut *arr }.mut_handle()
             })
-            .open_result()
         })
     }
 }
@@ -663,6 +680,7 @@ mod tests {
 
         const INPUT_0: [u8; 3] = [0, 1, 1];
         const INPUT_1: [u8; 3] = [2, 3, 5];
+        let combined = [INPUT_0, INPUT_1].concat();
 
         let mut backed = VecBackedArray::new();
         backed
@@ -682,20 +700,9 @@ mod tests {
             (&0, &3)
         );
 
-        assert_eq!(
-            backed
-                .get_multiple([0, 2, 4, 5])
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap(),
-            [&0, &1, &3, &5]
-        );
-        assert_eq!(
-            backed
-                .get_multiple([5, 2, 0, 5])
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap(),
-            [&5, &1, &0, &5]
-        );
+        [0, 2, 4, 5, 5, 1, 0, 5]
+            .into_iter()
+            .for_each(|x| assert_eq!(backed.get(x).unwrap().as_ref(), &combined[x]));
     }
 
     #[test]
@@ -712,18 +719,6 @@ mod tests {
 
         assert!(backed.get(0).is_ok());
         assert!(backed.get(10).is_err());
-        assert!(backed
-            .get_multiple([0, 10])
-            .collect::<Result<Vec<_>, _>>()
-            .is_err());
-        assert_eq!(
-            backed.get_multiple([0, 10]).filter(|x| x.is_ok()).count(),
-            1
-        );
-        assert_eq!(
-            backed.get_multiple([20, 10]).filter(|x| x.is_ok()).count(),
-            0
-        );
     }
 
     #[test]
@@ -749,8 +744,8 @@ mod tests {
             .unwrap();
 
         let collected = backed.chunk_iter().collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(collected[0].as_ref().as_ref(), INPUT_0);
-        assert_eq!(collected[1].as_ref().as_ref(), INPUT_1);
+        assert_eq!(collected[0].as_ref(), INPUT_0);
+        assert_eq!(collected[1].as_ref(), INPUT_1);
         assert_eq!(collected.len(), 2);
     }
 
@@ -776,8 +771,8 @@ mod tests {
             .append(INPUT_1, back_vector_1, BincodeCoder {})
             .unwrap();
         let collected = backed.iter().collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(collected[5], &7);
-        assert_eq!(collected[2], &1);
+        assert_eq!(collected[5].as_ref(), &7);
+        assert_eq!(collected[2].as_ref(), &1);
         assert_eq!(collected.len(), 6);
     }
 
@@ -836,10 +831,11 @@ mod tests {
         }
 
         drop(handle_vec);
-        assert_eq!(
-            backed.iter().collect::<Result<Vec<_>, _>>().unwrap(),
-            [&20, &1, &30, &5, &7, &40, &5, &7]
-        );
+
+        backed
+            .iter()
+            .zip([20, 1, 30, 5, 7, 40, 5, 7])
+            .for_each(|(back, x)| assert_eq!(back.unwrap().as_ref(), &x));
     }
 
     #[test]
@@ -972,7 +968,7 @@ mod tests {
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_chunk(0);
         assert_eq!(backed.loaded_len(), 0);
-        backed.get_multiple([0, 4]).collect_vec();
+        [0, 4].into_iter().map(|x| backed.get(x)).collect_vec();
         assert_eq!(backed.loaded_len(), 6);
         backed.shrink_to_query(&[4]);
         assert_eq!(backed.loaded_len(), 3);

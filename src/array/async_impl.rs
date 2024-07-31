@@ -1,6 +1,13 @@
-use std::{iter::FusedIterator, ops::Range, pin::Pin, sync::Arc};
+use std::{
+    borrow::Borrow,
+    iter::FusedIterator,
+    mem::transmute,
+    ops::{Deref, Range},
+    pin::Pin,
+    sync::Arc,
+};
 
-use futures::{stream, Future, Stream, StreamExt};
+use futures::Future;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -15,7 +22,7 @@ use crate::{
 
 use super::{
     container::{BackedEntryContainer, Container, ResizingContainer},
-    internal_idx, multiple_internal_idx_strict, BackedArray, BackedArrayError,
+    internal_idx, BackedArray, BackedArrayError,
 };
 
 /// A [`BackedEntryContainer`] inside a [`Container`].
@@ -137,75 +144,59 @@ impl<T> BackedEntryContainerNestedAsyncAll for T where
 {
 }
 
-/// Immutable open for a reference to a [`BackedEntryContainer`].
-macro_rules! a_open_ref {
-    ($x:expr) => {
-        $x.as_ref().as_ref().as_ref()
-    };
-}
-
-pub(crate) use a_open_ref;
-
 pub type AsyncVecBackedArray<T, Disk, Coder> =
     BackedArray<Vec<Range<usize>>, Vec<BackedEntryAsync<Box<[T]>, Disk, Coder>>>;
 
 /// Read implementations
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
+    /// Implementor for [`Self::a_get`] that retains type information.
+    #[allow(clippy::type_complexity)]
+    async fn internal_a_get(
+        &self,
+        idx: usize,
+    ) -> Result<
+        BorrowExtender<
+            BorrowExtender<E::Ref<'_>, &E::Unwrapped>,
+            <E::Unwrapped as Container>::Ref<'_>,
+        >,
+        BackedArrayError<E::AsyncReadError>,
+    > {
+        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+
+        let wrapped_container = self
+            .entries
+            .c_get(loc.entry_idx)
+            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+
+        let entry = BorrowExtender::a_try_new(wrapped_container, |wrapped_container| async move {
+            // Open up wrapped type.
+            let wrapped_container: &BackedEntryAsync<_, _, _> =
+                unsafe { &*wrapped_container.ptr() }.as_ref().as_ref();
+
+            let inner_container = wrapped_container
+                .a_load()
+                .await
+                .map_err(BackedArrayError::Coder)?;
+
+            // See [`Self::internal_get`] comments for why this holds.
+            Ok(unsafe { transmute::<&E::Unwrapped, &'_ E::Unwrapped>(inner_container) })
+        })
+        .await?;
+
+        BorrowExtender::try_new(entry, |entry| {
+            entry
+                .c_get(loc.inside_entry_idx)
+                .ok_or(BackedArrayError::OutsideEntryBounds(idx))
+        })
+    }
+
     /// Async version of [`Self::get`].
     pub async fn a_get(
         &self,
         idx: usize,
-    ) -> Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::AsyncReadError>> {
-        let loc = internal_idx(self.keys.c_ref().as_ref(), idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-
-        let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
-            entries
-                .c_get(loc.entry_idx)
-                .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-        })?;
-        let entry = BorrowExtender::a_try_new(entry_container, |entry_container| async {
-            a_open_ref!(entry_container)
-                .a_load()
-                .await
-                .map_err(BackedArrayError::Coder)
-        })
-        .await?;
-        entry
-            .c_get(loc.inside_entry_idx)
-            .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-    }
-
-    /// Async version of [`Self::get_multiple`].
-    pub fn a_get_multiple<'a, I>(
-        &'a self,
-        idxs: I,
-    ) -> impl Stream<
-        Item = Result<<E::Unwrapped as Container>::Ref<'_>, BackedArrayError<E::AsyncReadError>>,
-    >
-    where
-        I: IntoIterator<Item = usize> + Clone + 'a,
-    {
-        stream::iter(multiple_internal_idx_strict(self.keys.c_ref(), idxs.clone()).zip(idxs)).then(
-            move |(loc, idx)| async move {
-                let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
-                let entry_container = BorrowExtender::try_new(&self.entries, |entries| {
-                    entries
-                        .c_get(loc.entry_idx)
-                        .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-                })?;
-                let entry = BorrowExtender::a_try_new(entry_container, |entry_container| async {
-                    a_open_ref!(entry_container)
-                        .a_load()
-                        .await
-                        .map_err(BackedArrayError::Coder)
-                })
-                .await?;
-                entry
-                    .c_get(loc.inside_entry_idx)
-                    .ok_or(BackedArrayError::OutsideEntryBounds(idx))
-            },
-        )
+    ) -> Result<impl AsRef<E::InnerData> + '_, BackedArrayError<E::AsyncReadError>> {
+        self.internal_a_get(idx).await
     }
 }
 
@@ -374,8 +365,15 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRe
 {
     type Item = Pin<
         Box<
-            dyn Future<Output = Result<<E::Unwrapped as Container>::Ref<'a>, E::AsyncReadError>>
-                + 'a,
+            dyn Future<
+                    Output = Result<
+                        BorrowExtender<
+                            BorrowExtender<E::Ref<'a>, &'a E::Unwrapped>,
+                            <E::Unwrapped as Container>::Ref<'a>,
+                        >,
+                        E::AsyncReadError,
+                    >,
+                > + 'a,
         >,
     >;
 
@@ -386,7 +384,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRe
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let cur_pos = self.pos + n;
         self.pos += n + 1;
-        let fut = self.backed.a_get(cur_pos);
+        let fut = self.backed.internal_a_get(cur_pos);
         if cur_pos < self.backed.len() {
             Some(Box::pin(async move {
                 match fut.await {
@@ -426,7 +424,13 @@ where
     type Item = Pin<
         Box<
             dyn Future<
-                    Output = Result<<E::Unwrapped as Container>::Ref<'static>, E::AsyncReadError>,
+                    Output = Result<
+                        BorrowExtender<
+                            BorrowExtender<E::Ref<'static>, &'static E::Unwrapped>,
+                            <E::Unwrapped as Container>::Ref<'static>,
+                        >,
+                        E::AsyncReadError,
+                    >,
                 > + Send
                 + 'static,
         >,
@@ -448,8 +452,10 @@ where
                 // Lifetime shenanigans: since this uses an owned Arc and the
                 // underlying data is static, this data will be valid for this
                 // future. But the compiler can't solve for that.
-                let backed_ptr: *const _ = &backed;
-                let fut = unsafe { &*backed_ptr }.a_get(cur_pos);
+                let backed = unsafe {
+                    transmute::<&BackedArray<K, E>, &'static BackedArray<K, E>>(backed.borrow())
+                };
+                let fut = backed.internal_a_get(cur_pos);
 
                 match fut.await {
                     Ok(val) => Ok(val),
@@ -500,11 +506,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     /// that allow efficient implementations.
     ///
     /// Use [`Self::stream_send`] for `+ Send` bounds.
-    pub fn stream(
-        &self,
-    ) -> impl Iterator<
-        Item = impl Future<Output = Result<<E::Unwrapped as Container>::Ref<'_>, E::AsyncReadError>>,
-    > + '_ {
+    pub fn stream(&self) -> BackedArrayFutIter<K, E> {
         BackedArrayFutIter::new(self)
     }
 
@@ -513,13 +515,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     /// If this type owns the disk (all library disks are owned), wrapping
     /// in an Arc and calling with `BackedArray::stream_send(&this)` satisfies
     /// all of the bounds.
-    pub fn stream_send(
-        this: &Arc<Self>,
-    ) -> impl Iterator<
-        Item = impl Future<
-            Output = Result<<E::Unwrapped as Container>::Ref<'static>, E::AsyncReadError>,
-        > + Send,
-    > + '_
+    pub fn stream_send(this: &Arc<Self>) -> BackedArrayFutIterSend<K, E>
     where
         K: Send + Sync + 'static,
         for<'b> K::Ref<'b>: Send + Sync,
@@ -541,17 +537,21 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     /// that allow efficient implementations.
     pub fn chunk_stream(
         &self,
-    ) -> impl Iterator<Item = impl Future<Output = Result<&E::Unwrapped, E::AsyncReadError>>> {
-        self.entries.ref_iter().map(|ent| {
-            let ent = BorrowExtender::new(ent, |ent| {
-                let ent_ptr: *const _ = ent;
-                let ent = unsafe { &*ent_ptr }.as_ref();
-                BorrowExtender::new(ent, |ent| {
-                    let ent_ptr: *const _ = ent;
-                    unsafe { &*ent_ptr }.as_ref()
-                })
-            });
-            ent.a_load()
+    ) -> impl Iterator<
+        Item = impl Future<Output = Result<impl Deref<Target = &E::Unwrapped>, E::AsyncReadError>>,
+    > {
+        self.entries.ref_iter().map(|arr| {
+            BorrowExtender::a_try_new(arr, |arr| async move {
+                // Open up wrapped type.
+                let wrapped_entry: &BackedEntryAsync<_, _, _> =
+                    unsafe { &*arr.ptr() }.as_ref().as_ref();
+
+                let loaded_entry = wrapped_entry.as_ref().get_ref().a_load().await?;
+
+                // The loaded value is valid as long as the BorrowExtender is
+                // valid, since it keeps the entry alive.
+                Ok(unsafe { transmute::<&E::Unwrapped, &'_ E::Unwrapped>(loaded_entry) })
+            })
         })
     }
 }
@@ -559,9 +559,9 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
 #[cfg(test)]
 #[cfg(feature = "async_bincode")]
 mod tests {
-    use std::{future, io::Cursor, sync::Mutex};
+    use std::{io::Cursor, sync::Mutex};
 
-    use stream::TryStreamExt;
+    use futures::{stream, StreamExt, TryStreamExt};
     use tokio::join;
 
     use crate::{
@@ -584,6 +584,7 @@ mod tests {
 
         const INPUT_0: [u8; 3] = [0, 1, 1];
         const INPUT_1: [u8; 3] = [2, 3, 5];
+        let combined = [INPUT_0, INPUT_1].concat();
 
         let mut backed = AsyncVecBackedArray::new();
         backed
@@ -603,22 +604,9 @@ mod tests {
         });
         assert_eq!((first.as_ref(), second.as_ref()), (&0, &3));
 
-        assert_eq!(
-            backed
-                .a_get_multiple([0, 2, 4, 5])
-                .try_collect::<Vec<_>>()
-                .await
-                .unwrap(),
-            [&0, &1, &3, &5]
-        );
-        assert_eq!(
-            backed
-                .a_get_multiple([5, 2, 0, 5])
-                .try_collect::<Vec<_>>()
-                .await
-                .unwrap(),
-            [&5, &1, &0, &5]
-        );
+        for x in [0, 2, 4, 5, 5, 2, 0, 5] {
+            assert_eq!(backed.a_get(x).await.unwrap().as_ref(), &combined[x])
+        }
     }
 
     #[tokio::test]
@@ -638,27 +626,6 @@ mod tests {
 
         assert!(backed.a_get(0).await.is_ok());
         assert!(backed.a_get(10).await.is_err());
-        assert!(backed
-            .a_get_multiple([0, 10])
-            .try_collect::<Vec<_>>()
-            .await
-            .is_err());
-        assert_eq!(
-            backed
-                .a_get_multiple([0, 10])
-                .filter(|x| future::ready(x.is_ok()))
-                .count()
-                .await,
-            1
-        );
-        assert_eq!(
-            backed
-                .a_get_multiple([20, 10])
-                .filter(|x| future::ready(x.is_ok()))
-                .count()
-                .await,
-            0
-        );
     }
 
     #[tokio::test]
@@ -723,8 +690,8 @@ mod tests {
             .try_collect::<Vec<_>>()
             .await
             .unwrap();
-        assert_eq!(collected[5], &7);
-        assert_eq!(collected[2], &1);
+        assert_eq!(collected[5].as_ref(), &7);
+        assert_eq!(collected[2].as_ref(), &1);
         assert_eq!(collected.len(), 6);
     }
 
@@ -760,8 +727,8 @@ mod tests {
                     .try_collect::<Vec<_>>()
                     .await
                     .unwrap();
-                assert_eq!(collected[5], &7);
-                assert_eq!(collected[2], &1);
+                assert_eq!(collected[5].as_ref(), &7);
+                assert_eq!(collected[2].as_ref(), &1);
                 assert_eq!(collected.len(), 6);
             });
     }
@@ -800,11 +767,18 @@ mod tests {
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_chunk(0);
         assert_eq!(backed.loaded_len(), 0);
-        backed.a_get_multiple([0, 4]).collect::<Vec<_>>().await;
+        for x in [0, 4] {
+            backed.a_get(x).await.unwrap();
+        }
         assert_eq!(backed.loaded_len(), 6);
         backed.shrink_to_query(&[4]);
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_memory();
         assert_eq!(backed.loaded_len(), 0);
+
+        // Future should not load anything until actually executed.
+        let fut = backed.a_get(0);
+        assert_eq!(backed.loaded_len(), 0);
+        fut.await.unwrap();
     }
 }
