@@ -379,7 +379,8 @@ impl MmapWriter {
     // Windows cannot handle an mmap of length zero, if the file is empty we
     // cannot read mmap's len.
     fn get_reserved_len(
-        mmap: &memmap2::MmapMut,
+        #[cfg(not(target_os = "windows"))] mmap: &memmap2::MmapMut,
+        #[cfg(target_os = "windows")] mmap: &Option<memmap2::MmapMut>,
         #[cfg(target_os = "windows")] file: &File,
     ) -> std::io::Result<usize> {
         let len;
@@ -648,10 +649,18 @@ impl MmapWriter {
     fn get_map(&mut self) -> std::io::Result<memmap2::MmapMut> {
         self.flush()?;
 
-        let file = self.file()?;
-        Ok(std::mem::replace(&mut self.mmap, unsafe {
-            MmapOptions::new().map_mut(&file)
-        }?))
+        let stub_mmap;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            stub_mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            stub_mmap = Some(unsafe { MmapOptions::new().map_mut(&self.file()?) }?);
+        }
+
+        Ok(std::mem::replace(&mut self.mmap, stub_mmap))
     }
 
     /// Remap to the current reserved len.
@@ -668,7 +677,14 @@ impl MmapWriter {
 
         #[cfg(not(target_os = "linux"))]
         {
-            self.mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
+            #[cfg(not(target_os = "windows"))]
+            {
+                self.mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
+            }
+            #[cfg(target_os = "windows")]
+            {
+                self.mmap = Some(unsafe { MmapOptions::new().map_mut(&self.file()?) }?);
+            }
         }
 
         Ok(())
@@ -698,7 +714,18 @@ impl Write for MmapWriter {
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.truncate()?;
-        self.mmap.flush()
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            self.mmap.flush()?;
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            self.mmap.as_mut().unwrap().flush()?;
+        }
+
+        Ok(())
     }
 }
 
@@ -723,13 +750,35 @@ impl Drop for MmapWriter {
 
 impl AsRef<[u8]> for MmapWriter {
     fn as_ref(&self) -> &[u8] {
-        &self.mmap[0..self.written_len]
+        let ret;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            ret = &self.mmap[0..self.written_len];
+        }
+        #[cfg(target_os = "windows")]
+        {
+            ret = self.mmap.as_ref()[0..self.written_len];
+        }
+
+        ret
     }
 }
 
 impl AsMut<[u8]> for MmapWriter {
     fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.mmap[0..self.written_len]
+        let ret;
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            ret = &mut self.mmap[0..self.written_len];
+        }
+        #[cfg(target_os = "windows")]
+        {
+            ret = self.mmap.as_mut()[0..self.written_len];
+        }
+
+        ret
     }
 }
 
