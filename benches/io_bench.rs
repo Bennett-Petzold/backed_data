@@ -2,6 +2,7 @@ use std::{
     env::temp_dir,
     fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
     io::{Seek, Write},
+    iter::repeat,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::Duration,
@@ -15,6 +16,7 @@ use chrono::Local;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fs_extra::dir::get_size;
 use humansize::{format_size, BINARY};
+use tokio::runtime;
 
 #[cfg(feature = "async")]
 use {
@@ -22,9 +24,9 @@ use {
         directory::async_impl::DirectoryBackedArray as AsyncDirBacked,
         meta::async_impl::BackedArrayWrapper as AsyncWrapper,
     },
-    futures::{stream, StreamExt},
+    futures::StreamExt,
     std::pin::pin,
-    tokio::{fs::File as AsyncFile, runtime::Runtime},
+    tokio::fs::File as AsyncFile,
 };
 
 #[cfg(feature = "async-zstd")]
@@ -96,21 +98,23 @@ async fn create_plainfiles_async(path: PathBuf, data: &[String]) -> AsyncDirBack
 
 #[cfg(feature = "async")]
 async fn create_plainfiles_async_parallel(path: PathBuf, data: &[String]) -> AsyncDirBacked<u8> {
-    use std::iter::repeat;
+    let mut handles = data
+        .iter()
+        .map(|data| data.clone().into_bytes())
+        .zip(repeat(path.clone()))
+        .map(|(point, path)| {
+            tokio::spawn(async move {
+                let mut arr: AsyncDirBacked<u8> = AsyncDirBacked::new(path).await.unwrap();
+                arr.append(point).await.unwrap();
+                arr
+            })
+        });
 
-    let gen = stream::iter(data.iter().zip(repeat(path.clone()))).map(|(point, path)| async move {
-        let mut arr: AsyncDirBacked<u8> = AsyncDirBacked::new(path).await.unwrap();
-        arr.append(point.as_ref()).await.unwrap();
-        arr
-    });
-    let mut gen = gen.buffer_unordered(data.len());
-
-    let combined = gen.next().await.unwrap();
-    gen.fold(combined, |mut combined, next| async move {
-        combined.append_array(next).await.unwrap();
-        combined
-    })
-    .await
+    let mut combined = handles.next().unwrap().await.unwrap();
+    for next in handles {
+        combined.append_array(next.await.unwrap()).await.unwrap();
+    }
+    combined
 }
 
 #[cfg(feature = "async")]
@@ -132,21 +136,23 @@ async fn create_zstdfiles_async_parallel(
     data: &[String],
     level: Option<i32>,
 ) -> AsyncZstdBacked<u8> {
-    use std::iter::repeat;
+    let mut handles = data
+        .iter()
+        .map(|data| data.clone().into_bytes())
+        .zip(repeat(path.clone()))
+        .map(|(point, path)| {
+            tokio::spawn(async move {
+                let mut arr: AsyncZstdBacked<u8> = AsyncZstdBacked::new(path, level).await.unwrap();
+                arr.append(point).await.unwrap();
+                arr
+            })
+        });
 
-    let gen = stream::iter(data.iter().zip(repeat(path.clone()))).map(|(point, path)| async move {
-        let mut arr: AsyncZstdBacked<u8> = AsyncZstdBacked::new(path, level).await.unwrap();
-        arr.append(point.as_ref()).await.unwrap();
-        arr
-    });
-    let mut gen = gen.buffer_unordered(data.len());
-
-    let combined = gen.next().await.unwrap();
-    gen.fold(combined, |mut combined, next| async move {
-        combined.append_array(next).await.unwrap();
-        combined
-    })
-    .await
+    let mut combined = handles.next().unwrap().await.unwrap();
+    for next in handles {
+        combined.append_array(next.await.unwrap()).await.unwrap();
+    }
+    combined
 }
 
 fn file_creation_bench(c: &mut Criterion) {
@@ -195,7 +201,10 @@ fn file_creation_bench(c: &mut Criterion) {
 
     #[cfg(feature = "async")]
     {
-        let rt = Runtime::new().unwrap();
+        let rt = runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
         group.bench_function("async_create_plainfiles", |b| {
             let _ = remove_dir_all(path.clone());
@@ -259,8 +268,9 @@ fn file_creation_bench(c: &mut Criterion) {
             group.bench_function("async_create_zstdfiles_parallel", |b| {
                 let _ = remove_dir_all(path.clone());
                 create_dir(path.clone()).unwrap();
-                b.to_async(&rt).iter(|| {
+                b.to_async(&rt).iter(|| async {
                     create_zstdfiles_async_parallel(black_box(path.clone()), black_box(data), None)
+                        .await
                 })
             });
 
@@ -276,6 +286,8 @@ fn file_creation_bench(c: &mut Criterion) {
             )
             .unwrap();
         }
+
+        rt.shutdown_background();
     }
 
     remove_dir_all(path.clone()).unwrap();
@@ -375,7 +387,10 @@ fn file_load_bench(c: &mut Criterion) {
 
     #[cfg(feature = "async")]
     {
-        let rt = Runtime::new().unwrap();
+        let rt = runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
         let _ = remove_dir_all(path.clone());
         create_dir(path.clone()).unwrap();
@@ -421,6 +436,8 @@ fn file_load_bench(c: &mut Criterion) {
                     .iter(|| black_box(read_zstdfiles_async(black_box(path.join("CONFIG")))))
             });
         }
+
+        rt.shutdown_background()
     }
 
     remove_dir_all(path.clone()).unwrap();
@@ -438,7 +455,10 @@ fn zstd_setting_benches(c: &mut Criterion) {
     let path = temp_dir().join("file_creation_bench");
 
     #[cfg(feature = "async-zstd")]
-    let rt = Runtime::new().unwrap();
+    let rt = runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
     let mut group = c.benchmark_group("zstd_setting_benches");
     for zstd_level in 0..22 {
@@ -598,6 +618,9 @@ fn zstd_setting_benches(c: &mut Criterion) {
         }
     }
     group.finish();
+
+    #[cfg(feature = "async-zstd")]
+    rt.shutdown_background();
 
     remove_dir_all(path.clone()).unwrap();
 }

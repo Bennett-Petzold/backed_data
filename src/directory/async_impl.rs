@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// [`BackedArray`] that uses a directory of plain files
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DirectoryBackedArray<T> {
     array: BackedArray<T, PathBuf>,
     directory_root: PathBuf,
