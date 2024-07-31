@@ -137,12 +137,20 @@ pub type BackedEntryArrLock<T, Disk, Coder> = BackedEntryBoxLock<[T], Disk, Code
 // ----- Initializations ----- //
 
 impl<T: Once, Disk, Coder> BackedEntry<T, Disk, Coder> {
+    /// See [`Self::with_disk`] when `Coder` implements default.
     pub fn new(disk: Disk, coder: Coder) -> Self {
         Self {
             value: T::new(),
             disk,
             coder,
         }
+    }
+}
+
+impl<T: Once, Disk, Coder: Default> BackedEntry<T, Disk, Coder> {
+    /// [`Self::new`], but builds `Coder` from default.
+    pub fn with_disk(disk: Disk) -> Self {
+        Self::new(disk, Coder::default())
     }
 }
 
