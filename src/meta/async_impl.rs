@@ -6,7 +6,10 @@ use futures::{SinkExt, StreamExt};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use crate::array::async_impl::BackedArray;
+use crate::{
+    array::async_impl::BackedArray,
+    entry::async_impl::{AsyncReadDisk, AsyncWriteDisk},
+};
 
 #[async_trait]
 pub trait BackedArrayWrapper<T>:
@@ -18,7 +21,7 @@ pub trait BackedArrayWrapper<T>:
     + Send
 {
     // Underlying storage struct
-    type Storage;
+    type Storage: AsyncWriteDisk + AsyncReadDisk;
 
     // Serial handling wrappers
     /// Wraps [`BackedArray::save_to_disk`] to include its own metadata.

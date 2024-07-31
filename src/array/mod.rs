@@ -4,6 +4,8 @@ pub mod sync_impl;
 
 use std::ops::Range;
 
+use derive_getters::Getters;
+
 #[derive(Debug)]
 pub enum BackedArrayError {
     OutsideEntryBounds(usize),
@@ -14,6 +16,21 @@ pub enum BackedArrayError {
 struct ArrayLoc {
     pub entry_idx: usize,
     pub inside_entry_idx: usize,
+}
+
+#[derive(Debug, Getters)]
+pub struct BackedArrayEntry<'a, T> {
+    range: &'a Range<usize>,
+    entry: &'a T,
+}
+
+impl<'a, T> From<(&'a Range<usize>, &'a T)> for BackedArrayEntry<'a, T> {
+    fn from(value: (&'a Range<usize>, &'a T)) -> Self {
+        Self {
+            range: value.0,
+            entry: value.1,
+        }
+    }
 }
 
 fn internal_idx(keys: &[Range<usize>], idx: usize) -> Option<ArrayLoc> {

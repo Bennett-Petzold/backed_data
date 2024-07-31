@@ -1,154 +1,29 @@
 use std::{
     ops::{Deref, DerefMut},
     path::PathBuf,
-    pin::Pin,
 };
 
 use async_trait::async_trait;
-use futures::executor::block_on;
 
 use itertools::Itertools;
 use serde::{
     de::{DeserializeOwned, Error},
     Deserialize, Serialize,
 };
+use tokio::fs::{create_dir_all, remove_file};
 use tokio::{
     fs::{copy, remove_dir_all, rename},
-    io::{AsyncRead, AsyncWrite, BufReader, BufWriter},
     spawn,
     task::JoinSet,
-};
-use tokio::{
-    fs::{create_dir_all, remove_file, File},
-    io::AsyncSeek,
 };
 use uuid::Uuid;
 
 use crate::{array::async_impl::BackedArray, meta::async_impl::BackedArrayWrapper};
 
-use super::PathBufVisitor;
-
-/// File, but serializes based on path string
-#[derive(Debug)]
-pub struct SerialFile {
-    read_file: BufReader<File>,
-    write_file: BufWriter<File>,
-    path: PathBuf,
-}
-
-impl SerialFile {
-    pub async fn new(path: PathBuf) -> Result<Self, tokio::io::Error> {
-        let file = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path.clone())
-            .await?;
-        Ok(Self {
-            read_file: BufReader::new(file.try_clone().await?),
-            write_file: BufWriter::new(file),
-            path,
-        })
-    }
-}
-
-impl AsyncWrite for SerialFile {
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).write_file).poll_shutdown(cx)
-    }
-    fn poll_write_vectored(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).write_file).poll_write_vectored(cx, bufs)
-    }
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).write_file).poll_flush(cx)
-    }
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut (self.get_mut()).write_file).poll_write(cx, buf)
-    }
-    fn is_write_vectored(&self) -> bool {
-        self.write_file.is_write_vectored()
-    }
-}
-
-impl AsyncRead for SerialFile {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut (self.get_mut()).read_file).poll_read(cx, buf)
-    }
-}
-
-impl AsyncSeek for SerialFile {
-    fn poll_complete(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<u64>> {
-        Pin::new(&mut (self.get_mut()).read_file).poll_complete(cx)
-    }
-    fn start_seek(
-        self: std::pin::Pin<&mut Self>,
-        position: std::io::SeekFrom,
-    ) -> std::io::Result<()> {
-        Pin::new(&mut (self.get_mut()).read_file).start_seek(position)
-    }
-}
-
-impl Serialize for SerialFile {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(self.path.to_str().unwrap())
-    }
-}
-
-impl<'de> Deserialize<'de> for SerialFile {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        block_on(async {
-            let path = deserializer.deserialize_str(PathBufVisitor)?;
-            let file = File::options()
-                .read(true)
-                .write(true)
-                .open(path.clone())
-                .await
-                .map_err(|err| D::Error::custom(format!("{:#?}", err)))?;
-            Ok(Self {
-                read_file: BufReader::new(
-                    file.try_clone()
-                        .await
-                        .map_err(|err| D::Error::custom(format!("{:#?}", err)))?,
-                ),
-                write_file: BufWriter::new(file),
-                path,
-            })
-        })
-    }
-}
-
 /// [`BackedArray`] that uses a directory of plain files
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DirectoryBackedArray<T> {
-    array: BackedArray<T, SerialFile>,
+    array: BackedArray<T, PathBuf>,
     directory_root: PathBuf,
 }
 
@@ -156,11 +31,11 @@ pub struct DirectoryBackedArray<T> {
 impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
     for DirectoryBackedArray<T>
 {
-    type Storage = SerialFile;
+    type Storage = PathBuf;
     type BackingError = std::io::Error;
 
     async fn remove(&mut self, entry_idx: usize) -> Result<&mut Self, std::io::Error> {
-        remove_file(self.get_disks()[entry_idx].path.clone()).await?;
+        remove_file(self.get_disks()[entry_idx].clone()).await?;
         self.array.remove(entry_idx);
         Ok(self)
     }
@@ -180,12 +55,7 @@ impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
     async fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
         let mut copy_futures = JoinSet::new();
 
-        let disks: Vec<PathBuf> = rhs
-            .array
-            .get_disks()
-            .into_iter()
-            .map(|x| x.path.clone())
-            .collect_vec();
+        let disks: Vec<PathBuf> = rhs.array.get_disks().into_iter().cloned().collect_vec();
         disks.into_iter().for_each(|path| {
             let new_root_clone = self.directory_root.clone();
             copy_futures.spawn(async move {
@@ -206,7 +76,7 @@ impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
 }
 
 impl<T> Deref for DirectoryBackedArray<T> {
-    type Target = BackedArray<T, SerialFile>;
+    type Target = BackedArray<T, PathBuf>;
 
     fn deref(&self) -> &Self::Target {
         &self.array
@@ -236,7 +106,7 @@ impl<T> DirectoryBackedArray<T> {
     /// Does not move any files or directories, just changes pointers.
     pub fn update_root(&mut self, new_root: PathBuf) -> &mut Self {
         self.array.get_disks_mut().iter_mut().for_each(|disk| {
-            disk.path = new_root.join(disk.path.file_name().unwrap());
+            **disk = new_root.join(disk.file_name().unwrap());
         });
         self.directory_root = new_root;
         self
@@ -252,12 +122,7 @@ impl<T> DirectoryBackedArray<T> {
         {
             create_dir_all(new_root.clone()).await?;
 
-            let disks: Vec<PathBuf> = self
-                .array
-                .get_disks()
-                .into_iter()
-                .map(|x| x.path.clone())
-                .collect_vec();
+            let disks: Vec<PathBuf> = self.array.get_disks().into_iter().cloned().collect_vec();
             disks.into_iter().for_each(|path| {
                 let new_root_clone = new_root.clone();
                 copy_futures.spawn(async move {
@@ -275,8 +140,8 @@ impl<T> DirectoryBackedArray<T> {
 }
 
 impl<T: Serialize> DirectoryBackedArray<T> {
-    async fn next_target(&self) -> std::io::Result<SerialFile> {
-        SerialFile::new(self.directory_root.join(Uuid::new_v4().to_string())).await
+    async fn next_target(&self) -> std::io::Result<PathBuf> {
+        Ok(self.directory_root.join(Uuid::new_v4().to_string()))
     }
 }
 
@@ -285,7 +150,7 @@ mod tests {
     use std::env::temp_dir;
 
     use itertools::Itertools;
-    use tokio::fs::remove_dir_all;
+    use tokio::fs::{remove_dir_all, File};
 
     use super::*;
 
