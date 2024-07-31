@@ -97,6 +97,7 @@ pub mod sync_impl {
             Self::default()
         }
     }
+
     impl<T, Disk> BackedArray<T, Disk> {
         /// Move all backing arrays out of memory
         pub fn clear_memory(&mut self) {
@@ -388,18 +389,19 @@ pub mod sync_impl {
 
 #[cfg(feature = "async")]
 pub mod async_impl {
-    use {
-        crate::entry::BackedEntryArr,
-        async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter},
-        derive_getters::Getters,
-        futures::{SinkExt, StreamExt},
-        serde::{Deserialize, Serialize},
-        std::ops::{Deref, DerefMut, Range},
-        tokio::{
-            io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt},
-            task::JoinSet,
-        },
+    use crate::entry::{BackedEntryArr, BackedEntryArrAsync, BackedEntryUnload};
+    use async_bincode::tokio::{AsyncBincodeReader, AsyncBincodeWriter};
+    use derive_getters::Getters;
+    use futures::{SinkExt, StreamExt};
+    use itertools::Itertools;
+    use serde::{de::DeserializeOwned, Deserialize, Serialize};
+    use std::ops::{Deref, DerefMut, Range};
+    use tokio::{
+        io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt},
+        task::JoinSet,
     };
+
+    use super::{internal_idx, multiple_internal_idx, BackedArrayError};
 
     #[derive(Debug, Clone, Serialize, Deserialize, Getters)]
     pub struct BackedArray<T, Disk> {
@@ -409,7 +411,7 @@ pub mod async_impl {
         entries: Vec<BackedEntryArrAsync<T, Disk>>,
     }
 
-    impl<T, Disk> Default for BackedArrayAsync<T, Disk> {
+    impl<T, Disk> Default for BackedArray<T, Disk> {
         fn default() -> Self {
             Self {
                 keys: vec![],
@@ -418,9 +420,16 @@ pub mod async_impl {
         }
     }
 
-    impl<T, Disk> BackedArrayAsync<T, Disk> {
+    impl<T, Disk> BackedArray<T, Disk> {
         pub fn new() -> Self {
             Self::default()
+        }
+    }
+
+    impl<T, Disk> BackedArray<T, Disk> {
+        /// Move all backing arrays out of memory
+        pub fn clear_memory(&mut self) {
+            self.entries.iter_mut().for_each(|entry| entry.unload());
         }
     }
 
@@ -428,13 +437,12 @@ pub mod async_impl {
     impl<
             T: DeserializeOwned + Send + Sync + 'static,
             Disk: AsyncRead + AsyncSeek + Unpin + Send + Sync,
-        > BackedArrayAsync<T, Disk>
+        > BackedArray<T, Disk>
     {
         /// Async version of [`BackedArray::get`].
         pub async fn get(&mut self, idx: usize) -> Result<&T, BackedArrayError> {
-            let loc = self
-                .internal_idx(idx)
-                .ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+            let loc =
+                internal_idx(&self.keys, idx).ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
             Ok(&self.entries[loc.entry_idx]
                 .load()
                 .await
@@ -451,8 +459,7 @@ pub mod async_impl {
             let mut load_futures: JoinSet<Result<Vec<(usize, &'static T)>, bincode::Error>> =
                 JoinSet::new();
             let mut total_size = 0;
-            let translated_idxes = self
-                .multiple_internal_idx(idxs)
+            let translated_idxes = multiple_internal_idx(&self.keys, idxs)
                 .map(|x| {
                     total_size += 1;
                     x
@@ -470,8 +477,9 @@ pub mod async_impl {
                 for (key, group) in translated_idxes.into_iter() {
                     let group = group.into_iter().collect_vec();
                     load_futures.spawn(async move {
-                        let entry = &mut *(entries_ptr as *mut BackedEntryArr<T, Disk>).add(key);
-                        let arr = entry.load_async().await?;
+                        let entry =
+                            &mut *(entries_ptr as *mut BackedEntryArrAsync<T, Disk>).add(key);
+                        let arr = entry.load().await?;
                         let arr_ptr = arr.as_ptr();
                         Ok(group
                             .into_iter()
@@ -503,7 +511,7 @@ pub mod async_impl {
     #[cfg(feature = "async")]
     impl<T: Serialize, Disk: AsyncWrite + Unpin> BackedArray<T, Disk> {
         /// Async version of [`Self::append`]
-        pub async fn append_async(
+        pub async fn append(
             &mut self,
             values: &[T],
             backing_store: Disk,
@@ -511,14 +519,14 @@ pub mod async_impl {
             // End of a range is exclusive
             let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
             self.keys.push(start_idx..(start_idx + values.len()));
-            let mut entry = BackedEntryArr::new(backing_store);
-            entry.write_unload_async(values).await?;
+            let mut entry = BackedEntryArrAsync::new(backing_store, None);
+            entry.write_unload(values).await?;
             self.entries.push(entry);
             Ok(self)
         }
 
         /// Async version of [`Self::append_memory`]
-        pub async fn append_memory_async(
+        pub async fn append_memory(
             &mut self,
             values: Box<[T]>,
             backing_store: Disk,
@@ -526,14 +534,14 @@ pub mod async_impl {
             // End of a range is exclusive
             let start_idx = self.keys.last().map(|key_range| key_range.end).unwrap_or(0);
             self.keys.push(start_idx..(start_idx + values.len()));
-            let mut entry = BackedEntryArr::new(backing_store);
-            entry.write_async(values).await?;
+            let mut entry = BackedEntryArrAsync::new(backing_store, None);
+            entry.write(values).await?;
             self.entries.push(entry);
             Ok(self)
         }
     }
 
-    impl<T, Disk> BackedArrayAsync<T, Disk> {
+    impl<T, Disk> BackedArray<T, Disk> {
         /// Removes an entry with the internal index, shifting ranges.
         ///
         /// The getter functions can be used to indentify the target index.
@@ -568,7 +576,7 @@ pub mod async_impl {
 
     impl<T: Serialize, Disk: Serialize> BackedArray<T, Disk> {
         /// Async version of [`Self::save_to_disk`]
-        pub async fn save_to_disk_async<W: AsyncWrite + Unpin>(
+        pub async fn save_to_disk<W: AsyncWrite + Unpin>(
             &mut self,
             writer: &mut W,
         ) -> bincode::Result<()> {
@@ -582,7 +590,7 @@ pub mod async_impl {
 
     impl<T: DeserializeOwned, Disk: DeserializeOwned> BackedArray<T, Disk> {
         /// Async version of [`Self::load`]
-        pub async fn load_async<R: AsyncRead + Unpin>(
+        pub async fn load<R: AsyncRead + Unpin>(
             &mut self,
             writer: &mut R,
         ) -> bincode::Result<Self> {
@@ -609,7 +617,7 @@ pub mod async_impl {
             const INPUT: [u8; 3] = [2, 3, 5];
 
             let mut backed = BackedArray::new();
-            backed.append_async(&INPUT, &mut back_vector).await.unwrap();
+            backed.append(&INPUT, &mut back_vector).await.unwrap();
             assert_eq!(back_vector[back_vector.len() - 3..], [2, 3, 5]);
             assert_eq!(back_vector[back_vector.len() - 4], 3);
         }
@@ -623,38 +631,26 @@ pub mod async_impl {
             const INPUT_2: [u8; 3] = [2, 3, 5];
 
             let mut backed = BackedArray::new();
-            backed.append_async(&INPUT_1, back_vector_1).await.unwrap();
+            backed.append(&INPUT_1, back_vector_1).await.unwrap();
             backed
-                .append_memory_async(Box::new(INPUT_2), back_vector_2)
+                .append_memory(Box::new(INPUT_2), back_vector_2)
                 .await
                 .unwrap();
 
-            assert_eq!(backed.get_async(0).await.unwrap(), &0);
-            assert_eq!(backed.get_async(4).await.unwrap(), &3);
-            /*
+            assert_eq!(backed.get(0).await.unwrap(), &0);
+            assert_eq!(backed.get(4).await.unwrap(), &3);
             assert_eq!(
-                backed
-                    .get_multiple_async([0, 2, 4, 5])
-                    .await
-                    .into_iter()
-                    .collect::<bincode::Result<Vec<_>>>()
-                    .unwrap(),
+                backed.get_multiple([0, 2, 4, 5]).await.unwrap(),
                 [&0, &1, &3, &5]
             );
             assert_eq!(
-                backed
-                    .get_multiple_async([5, 2, 0, 5])
-                    .await
-                    .into_iter()
-                    .collect::<bincode::Result<Vec<_>>>()
-                    .unwrap(),
+                backed.get_multiple([5, 2, 0, 5]).await.unwrap(),
                 [&5, &1, &0, &5]
             );
             assert_eq!(
-                backed.get_multiple_async([5, 2, 0, 5]).await.unwrap(),
+                backed.get_multiple([5, 2, 0, 5]).await.unwrap(),
                 [&5, &1, &0, &5]
             );
-            */
         }
     }
 }
