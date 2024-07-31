@@ -149,12 +149,12 @@ pub mod sync_impl {
             // The code is safe: iterators execute sequentially, so loads to the
             // same entry will not interleave, and the resultant borrowing follows
             // the usual rules.
-            unsafe {
-                let entries_ptr = self.entries.as_mut_ptr();
-                multiple_internal_idx(&self.keys, idxs)
-                    .map(|loc| Ok(&(*entries_ptr.add(loc.entry_idx)).load()?[loc.inside_entry_idx]))
-                    .collect()
-            }
+            let entries_ptr = self.entries.as_mut_ptr();
+            multiple_internal_idx(&self.keys, idxs)
+                .map(|loc| unsafe {
+                    Ok(&(*entries_ptr.add(loc.entry_idx)).load()?[loc.inside_entry_idx])
+                })
+                .collect()
         }
 
         /// [`Self::get_multiple`], but returns Errors for invalid idx
@@ -166,18 +166,18 @@ pub mod sync_impl {
             I: IntoIterator<Item = usize> + 'a,
         {
             // See [`Self::get_multiple_entries`] note.
-            unsafe {
-                let entries_ptr = self.entries.as_mut_ptr();
-                multiple_internal_idx_strict(&self.keys, idxs)
-                    .enumerate()
-                    .map(|(idx, loc)| {
-                        let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+            let entries_ptr = self.entries.as_mut_ptr();
+            multiple_internal_idx_strict(&self.keys, idxs)
+                .enumerate()
+                .map(|(idx, loc)| {
+                    let loc = loc.ok_or(BackedArrayError::OutsideEntryBounds(idx))?;
+                    unsafe {
                         Ok(&(*entries_ptr.add(loc.entry_idx))
                             .load()
                             .map_err(BackedArrayError::Bincode)?[loc.inside_entry_idx])
-                    })
-                    .collect()
-            }
+                    }
+                })
+                .collect()
         }
     }
 
@@ -376,7 +376,7 @@ pub mod sync_impl {
                 .entries
                 .get_mut(self.pos)
                 .map(move |x| x.load().map(|y| y as *const [T]));
-            unsafe { val_ptr.map(|y| y.map(|x| &*x)) }
+            val_ptr.map(|y| y.map(|x| unsafe { &*x }))
         }
 
         fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -451,7 +451,7 @@ pub mod sync_impl {
             });
 
             // Deref to pointer to make lifetimes resolve
-            unsafe { val_ptr.map(|y| y.map(|x| &*x)) }
+            val_ptr.map(|y| y.map(|x| unsafe { &*x }))
         }
     }
 
@@ -629,7 +629,7 @@ pub mod async_impl {
     /// Async Read implementations
     impl<
             T: DeserializeOwned + Send + Sync + 'static,
-            Disk: AsyncRead + AsyncSeek + Unpin + Send + Sync,
+            Disk: AsyncRead + AsyncSeek + Unpin + Send + Sync + 'static,
         > BackedArray<T, Disk>
     {
         /// Async version of [`BackedArray::get`].
@@ -661,28 +661,24 @@ pub mod async_impl {
                 .sorted_by(|(_, a_loc), (_, b_loc)| Ord::cmp(&a_loc.entry_idx, &b_loc.entry_idx))
                 .group_by(|(_, loc)| loc.entry_idx);
 
-            // TODO: add explanation
-            // I'm not crazy, this pointer witchcraft is safe
-            unsafe {
-                // Evade sync checks by casting to a safe type for pointers
-                let entries_ptr = self.entries.as_mut_ptr() as usize;
+            // Can't use the wrapper pattern with <T, Disk> generics inline.
+            let entries_ptr = self.entries.as_mut_ptr() as usize;
 
-                for (key, group) in translated_idxes.into_iter() {
-                    let group = group.into_iter().collect_vec();
-                    load_futures.spawn(async move {
-                        let entry =
-                            &mut *(entries_ptr as *mut BackedEntryArrAsync<T, Disk>).add(key);
-                        let arr = entry.load().await?;
-                        let arr_ptr = arr.as_ptr();
-                        Ok(group
-                            .into_iter()
-                            .map(|(ordering, loc)| {
-                                Some((ordering, arr_ptr.add(loc.inside_entry_idx).as_ref()?))
-                            })
-                            .collect::<Option<Vec<_>>>()
-                            .ok_or(bincode::ErrorKind::Custom("Missing an entry".to_string()))?)
-                    });
-                }
+            for (key, group) in translated_idxes.into_iter() {
+                let group = group.into_iter().collect_vec();
+
+                // Grab mutable handle to guaranteed unique key
+                let entry =
+                    unsafe { &mut *(entries_ptr as *mut BackedEntryArrAsync<T, Disk>).add(key) };
+                load_futures.spawn(async move {
+                    let arr = entry.load().await?;
+
+                    Ok(group
+                        .into_iter()
+                        .map(|(ordering, loc)| Some((ordering, arr.get(loc.inside_entry_idx)?)))
+                        .collect::<Option<Vec<_>>>()
+                        .ok_or(bincode::ErrorKind::Custom("Missing an entry".to_string()))?)
+                });
             }
 
             let mut results = Vec::with_capacity(total_size);
