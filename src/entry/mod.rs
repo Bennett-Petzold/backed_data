@@ -2,7 +2,7 @@ use std::{cell::OnceCell, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-use crate::utils::{InternalUse, Once};
+use crate::utils::Once;
 
 #[cfg(feature = "async")]
 pub mod async_impl;
@@ -178,9 +178,7 @@ impl<T, Disk, Coder> AsMut<BackedEntry<T, Disk, Coder>> for BackedEntry<T, Disk,
 /// [`BackedEntry`] is always this.
 /// Only [`BackedEntry`] is this.
 #[allow(private_bounds)]
-pub trait BackedEntryTrait:
-    InternalUse<Internal = BackedEntry<Self::T, Self::Disk, Self::Coder>>
-{
+pub trait BackedEntryTrait {
     type T;
     type Disk;
     type Coder;

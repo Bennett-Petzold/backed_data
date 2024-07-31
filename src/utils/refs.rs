@@ -199,3 +199,7 @@ where
         self.0.partial_cmp(other)
     }
 }
+
+/// Combined trait for types with both [`AsRef`] and [`AsMut`].
+pub trait AsRefMut<T>: AsRef<T> + AsMut<T> {}
+impl<T, U> AsRefMut<T> for U where U: AsRef<T> + AsMut<T> {}
