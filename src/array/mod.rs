@@ -3,8 +3,6 @@ pub mod async_impl;
 pub mod container;
 pub mod sync_impl;
 
-pub mod slice_sync_impl;
-
 use std::ops::Range;
 
 use container::Container;

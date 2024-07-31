@@ -371,7 +371,7 @@ macro_rules! read_dir {
                 .map(|x| async { spawn(x).await.unwrap() })
                 // Lesser buffer, in the interest of completing the bench
                 .buffered(arr.entries().len())
-                .try_collect::<Vec<_>>()
+                .try_collect::<Vec<&u8>>()
                 .await.unwrap().len()
         }
     };
@@ -381,9 +381,8 @@ macro_rules! read_dir {
             use futures::stream;
 
             let arr: $($type)+ = DirectoryBackedArray::a_load(path).await.unwrap();
-            //stream::iter(arr.stream()).buffered(arr.len()).try_collect::<Vec<_>>().await.unwrap().len()
             // Lesser buffer, in the interest of completing the bench
-            stream::iter(arr.stream()).buffered(arr.entries().len()).try_collect::<Vec<_>>().await.unwrap().len()
+            stream::iter(arr.stream()).buffered(arr.entries().len()).try_collect::<Vec<&u8>>().await.unwrap().len()
         }
     };
     (async $fn_name: ident, $( $type: tt )+) => {
@@ -392,7 +391,15 @@ macro_rules! read_dir {
             use futures::stream;
 
             let arr: $($type)+ = DirectoryBackedArray::a_load(path).await.unwrap();
-            stream::iter(arr.stream()).then(|x| x).try_collect::<Vec<_>>().await.unwrap().len()
+            stream::iter(arr.stream()).then(|x| x).try_collect::<Vec<&u8>>().await.unwrap().len()
+        }
+    };
+    (generic $fn_name: ident, $( $type: tt )+) => {
+        fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
+            use backed_data::directory::DirectoryBackedArray;
+
+            let arr: $($type)+ = DirectoryBackedArray::load(path).unwrap();
+            arr.generic_iter().collect::<Result<Vec<_>, _>>().unwrap().len()
         }
     };
     ($fn_name: ident, $( $type: tt )+) => {

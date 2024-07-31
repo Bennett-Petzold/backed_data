@@ -8,148 +8,23 @@ use std::{
 };
 
 use futures::Future;
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    entry::{
-        async_impl::OnceCellWrap,
-        disks::{AsyncReadDisk, AsyncWriteDisk},
-        formats::{AsyncDecoder, AsyncEncoder},
-        BackedEntryAsync,
-    },
+    entry::{disks::AsyncReadDisk, BackedEntryAsync},
     utils::{BorrowExtender, NestDeref},
 };
 
 use super::{
-    container::{BackedEntryContainer, Container, ResizingContainer},
-    internal_idx, BackedArray, BackedArrayError,
+    super::{
+        container::{BackedEntryContainer, Container},
+        internal_idx, BackedArray, BackedArrayError,
+    },
+    BackedEntryContainerNestedAsyncRead,
 };
-
-/// A [`BackedEntryContainer`] inside a [`Container`].
-///
-/// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedAsync:
-    Container<
-    Data: BackedEntryContainer<
-        Container = Self::OnceWrapper,
-        Disk = Self::Disk,
-        Coder = Self::Coder,
-    > + From<BackedEntryAsync<Self::Unwrapped, Self::Disk, Self::Coder>>
-              + AsRef<BackedEntryAsync<Self::Unwrapped, Self::Disk, Self::Coder>>
-              + AsMut<BackedEntryAsync<Self::Unwrapped, Self::Disk, Self::Coder>>,
->
-{
-    type InnerData;
-    type OnceWrapper: OnceCellWrap<T = Self::Unwrapped>;
-    type Unwrapped: Container<Data = Self::InnerData>;
-    type Disk;
-    type Coder;
-}
-
-/// Auto-implement trait to wrap intended generics.
-impl<T> BackedEntryContainerNestedAsync for T
-where
-    T: Container<Data: BackedEntryContainer>,
-    <<T as Container>::Data as BackedEntryContainer>::Container: OnceCellWrap<T: Container>,
-    <T as Container>::Data: From<
-        BackedEntryAsync<
-            <<T::Data as BackedEntryContainer>::Container as OnceCellWrap>::T,
-            <T::Data as BackedEntryContainer>::Disk,
-            <T::Data as BackedEntryContainer>::Coder,
-        >,
-    >,
-    <T as Container>::Data: AsRef<
-        BackedEntryAsync<
-            <<T::Data as BackedEntryContainer>::Container as OnceCellWrap>::T,
-            <T::Data as BackedEntryContainer>::Disk,
-            <T::Data as BackedEntryContainer>::Coder,
-        >,
-    >,
-    <T as Container>::Data: AsMut<
-        BackedEntryAsync<
-            <<T::Data as BackedEntryContainer>::Container as OnceCellWrap>::T,
-            <T::Data as BackedEntryContainer>::Disk,
-            <T::Data as BackedEntryContainer>::Coder,
-        >,
-    >,
-{
-    type InnerData =
-        <<<T::Data as BackedEntryContainer>::Container as OnceCellWrap>::T as Container>::Data;
-    type OnceWrapper = <T::Data as BackedEntryContainer>::Container;
-    type Unwrapped = <<T::Data as BackedEntryContainer>::Container as OnceCellWrap>::T;
-    type Disk = <T::Data as BackedEntryContainer>::Disk;
-    type Coder = <T::Data as BackedEntryContainer>::Coder;
-}
-
-/// [`BackedEntryContainerNested`] variant.
-///
-/// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedAsyncRead:
-    BackedEntryContainerNestedAsync<
-    Unwrapped: for<'de> Deserialize<'de> + Send + Sync,
-    Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk, Error = Self::AsyncReadError>,
->
-{
-    type AsyncReadError;
-}
-
-impl<T> BackedEntryContainerNestedAsyncRead for T
-where
-    T: BackedEntryContainerNestedAsync<
-        Unwrapped: for<'de> Deserialize<'de> + Send + Sync,
-        Disk: AsyncReadDisk,
-        Coder: AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk>,
-    >,
-{
-    type AsyncReadError =
-        <Self::Coder as AsyncDecoder<<Self::Disk as AsyncReadDisk>::ReadDisk>>::Error;
-}
-
-/// [`BackedEntryContainerNested`] variant.
-///
-/// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedAsyncWrite:
-    BackedEntryContainerNestedAsync<
-    Unwrapped: Serialize + Send + Sync,
-    Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk, Error = Self::AsyncWriteError>,
->
-{
-    type AsyncWriteError;
-}
-
-impl<T> BackedEntryContainerNestedAsyncWrite for T
-where
-    T: BackedEntryContainerNestedAsync<
-        Unwrapped: Serialize + Send + Sync,
-        Disk: AsyncWriteDisk,
-        Coder: AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk>,
-    >,
-{
-    type AsyncWriteError =
-        <Self::Coder as AsyncEncoder<<Self::Disk as AsyncWriteDisk>::WriteDisk>>::Error;
-}
-
-/// [`BackedEntryContainerNested`] variant.
-///
-/// For internal use, reduces size of generics boilerplate.
-pub trait BackedEntryContainerNestedAsyncAll:
-    BackedEntryContainerNestedAsyncRead + BackedEntryContainerNestedAsyncWrite
-{
-}
-
-impl<T> BackedEntryContainerNestedAsyncAll for T where
-    T: BackedEntryContainerNestedAsyncRead + BackedEntryContainerNestedAsyncWrite
-{
-}
-
-pub type AsyncVecBackedArray<T, Disk, Coder> =
-    BackedArray<Vec<Range<usize>>, Vec<BackedEntryAsync<Box<[T]>, Disk, Coder>>>;
 
 /// Read implementations
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> BackedArray<K, E> {
-    /// Implementor for [`Self::a_get`] that retains type information.
+    /// Implementor for [`Self::a_generic_get`] that retains type information.
     #[allow(clippy::type_complexity)]
     async fn internal_a_get(
         &self,
@@ -191,8 +66,8 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
         })
     }
 
-    /// Async version of [`Self::get`].
-    pub async fn a_get(
+    /// Async version of [`Self::generic_get`].
+    pub async fn a_generic_get(
         &self,
         idx: usize,
     ) -> Result<impl Deref<Target = E::InnerData> + '_, BackedArrayError<E::AsyncReadError>> {
@@ -200,168 +75,47 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     }
 }
 
-/// Write implementations
-impl<
-        K: ResizingContainer<Data = Range<usize>>,
-        E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
-    > BackedArray<K, E>
-{
-    /// Adds new values by writing them to the backing store.
-    ///
-    /// Does not keep the values in memory.
-    ///
-    /// # Example
-    /// ```rust
-    /// #[cfg(feature = "async_bincode")] {
-    /// use backed_data::{
-    ///     array::async_impl::AsyncVecBackedArray,
-    ///     entry::{
-    ///         disks::Plainfile,
-    ///         formats::AsyncBincodeCoder,
-    ///     }
-    /// };
-    /// use std::fs::{File, create_dir_all, remove_dir_all, OpenOptions};
-    ///
-    /// use tokio::runtime::Builder;
-    ///
-    /// let rt = Builder::new_current_thread().build().unwrap();
-    ///
-    /// let FILENAME_BASE = std::env::temp_dir().join("example_async_array_append");
-    /// let values = ([0, 1, 1],
-    ///     [2, 3, 5]);
-    ///
-    /// create_dir_all(FILENAME_BASE.clone()).unwrap();
-    /// let file_0 = FILENAME_BASE.clone().join("_0");
-    /// let file_1 = FILENAME_BASE.join("_1");
-    /// let mut array: AsyncVecBackedArray<u32, Plainfile, _> = AsyncVecBackedArray::default();
-    /// rt.block_on(array.a_append(values.0, file_0.into(), AsyncBincodeCoder {}));
-    /// rt.block_on(array.a_append(values.1, file_1.into(), AsyncBincodeCoder {}));
-    ///
-    /// assert_eq!(*rt.block_on(array.a_get(4)).unwrap(), 3);
-    /// remove_dir_all(FILENAME_BASE).unwrap();
-    /// }
-    /// ```
-    pub async fn a_append<U: Into<E::Unwrapped>>(
-        &mut self,
-        values: U,
-        backing_store: E::Disk,
-        coder: E::Coder,
-    ) -> Result<&mut Self, E::AsyncWriteError> {
-        let values = values.into();
-
-        // End of a range is exclusive
-        let start_idx = self
-            .keys
-            .c_ref()
-            .as_ref()
-            .last()
-            .map(|key_range| key_range.end)
-            .unwrap_or(0);
-        self.keys.c_push(start_idx..(start_idx + values.c_len()));
-
-        let mut entry = BackedEntryAsync::new(backing_store, coder);
-        entry.a_write_unload(values).await?;
-        self.entries.c_push(entry.into());
-        Ok(self)
-    }
-
-    /// [`Self::append`], but keeps values in memory.
-    ///
-    /// # Example
-    /// ```rust
-    /// #[cfg(feature = "async_bincode")] {
-    ///     use backed_data::{
-    ///         array::async_impl::AsyncVecBackedArray,
-    ///         entry::{
-    ///             disks::Plainfile,
-    ///             formats::AsyncBincodeCoder,
-    ///         },
-    ///     };
-    ///     use std::fs::{File, remove_file, OpenOptions};
-    ///
-    ///     use tokio::runtime::Builder;
-    ///
-    ///     let rt = Builder::new_current_thread().build().unwrap();
-    ///
-    ///     let FILENAME = std::env::temp_dir().join("example_async_array_append_memory");
-    ///     let values = ([0, 1, 1],
-    ///         [2, 3, 5]);
-    ///
-    ///     let mut array: AsyncVecBackedArray<u32, Plainfile, _> = AsyncVecBackedArray::default();
-    ///     rt.block_on(array.a_append_memory(values.0, FILENAME.clone().into(), AsyncBincodeCoder {}));
-    ///
-    ///     // Overwrite file, making disk pointer for first array invalid
-    ///     rt.block_on(array.a_append_memory(values.1, FILENAME.clone().into(), AsyncBincodeCoder {}));
-    ///
-    ///     assert_eq!(*rt.block_on(array.a_get(0)).unwrap(), 0);
-    ///     remove_file(FILENAME).unwrap();
-    /// }
-    /// ```
-    pub async fn a_append_memory<U: Into<E::Unwrapped>>(
-        &mut self,
-        values: U,
-        backing_store: E::Disk,
-        coder: E::Coder,
-    ) -> Result<&mut Self, E::AsyncWriteError> {
-        let values = values.into();
-
-        // End of a range is exclusive
-        let start_idx = self
-            .keys
-            .c_ref()
-            .as_ref()
-            .last()
-            .map(|key_range| key_range.end)
-            .unwrap_or(0);
-        self.keys.c_push(start_idx..(start_idx + values.c_len()));
-        let mut entry = BackedEntryAsync::new(backing_store, coder);
-        entry.a_write(values).await?;
-        self.entries.c_push(entry.into());
-        Ok(self)
-    }
-}
-
 // ---------- Stream Returns ---------- //
 
 /// Iterates over a backed array, returning each item future in order.
 ///
-/// See [`BackedArrayFutIterSend`] for the Send + Sync version.
+/// See [`BackedArrayFutIterGenericSend`] for the Send + Sync version.
 ///
 /// To keep an accurate size count, failed reads will not be retried.
 /// This will keep each disk loaded after pulling data from it.
 /// Stepping by > 1 with `nth` implementation may skip loading a disk.
 #[derive(Debug)]
-pub struct BackedArrayFutIter<'a, K, E> {
+pub struct BackedArrayFutIterGeneric<'a, K, E> {
     backed: &'a BackedArray<K, E>,
     pos: usize,
 }
 
-/// [`BackedArrayFutIter`], but returns are `+ Send`.
+/// [`BackedArrayFutIterGeneric`], but returns are `+ Send`.
 ///
 /// Since closure returns are anonymous, and Iterator requires a concrete type,
 /// the future is returned as a Box<dyn Future>. This strips type information,
 /// so having a `+ Send` version requires a different return type than a
 /// `Send?` version.
 #[derive(Debug)]
-pub struct BackedArrayFutIterSend<K, E> {
+pub struct BackedArrayFutIterGenericSend<K, E> {
     backed: Arc<BackedArray<K, E>>,
     pos: usize,
 }
 
-impl<'a, K, E> BackedArrayFutIter<'a, K, E> {
+impl<'a, K, E> BackedArrayFutIterGeneric<'a, K, E> {
     fn new(backed: &'a BackedArray<K, E>) -> Self {
         Self { backed, pos: 0 }
     }
 }
 
-impl<K, E> BackedArrayFutIterSend<K, E> {
+impl<K, E> BackedArrayFutIterGenericSend<K, E> {
     fn new(backed: Arc<BackedArray<K, E>>) -> Self {
         Self { backed, pos: 0 }
     }
 }
 
 impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
-    for BackedArrayFutIter<'a, K, E>
+    for BackedArrayFutIterGeneric<'a, K, E>
 {
     type Item = Pin<
         Box<
@@ -409,7 +163,7 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRe
 }
 
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> Iterator
-    for BackedArrayFutIterSend<K, E>
+    for BackedArrayFutIterGenericSend<K, E>
 where
     K: Send + Sync + 'static,
     for<'b> K::Ref<'b>: Send + Sync,
@@ -479,12 +233,12 @@ where
 }
 
 impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
-    for BackedArrayFutIter<'a, K, E>
+    for BackedArrayFutIterGeneric<'a, K, E>
 {
 }
 
 impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> FusedIterator
-    for BackedArrayFutIterSend<K, E>
+    for BackedArrayFutIterGenericSend<K, E>
 where
     K: Send + Sync + 'static,
     for<'b> K::Ref<'b>: Send + Sync,
@@ -506,8 +260,8 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     /// that allow efficient implementations.
     ///
     /// Use [`Self::stream_send`] for `+ Send` bounds.
-    pub fn stream(&self) -> BackedArrayFutIter<K, E> {
-        BackedArrayFutIter::new(self)
+    pub fn generic_stream(&self) -> BackedArrayFutIterGeneric<K, E> {
+        BackedArrayFutIterGeneric::new(self)
     }
 
     /// Version of [`Self::stream`] with `+ Send` bounds.
@@ -515,7 +269,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     /// If this type owns the disk (all library disks are owned), wrapping
     /// in an Arc and calling with `BackedArray::stream_send(&this)` satisfies
     /// all of the bounds.
-    pub fn stream_send(this: &Arc<Self>) -> BackedArrayFutIterSend<K, E>
+    pub fn generic_stream_send(this: &Arc<Self>) -> BackedArrayFutIterGenericSend<K, E>
     where
         K: Send + Sync + 'static,
         for<'b> K::Ref<'b>: Send + Sync,
@@ -527,7 +281,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
         for<'b> E::Ref<'b>: Send + Sync,
         for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
     {
-        BackedArrayFutIterSend::new(this.clone())
+        BackedArrayFutIterGenericSend::new(this.clone())
     }
 
     /// Future iterator over each chunk.
@@ -535,7 +289,7 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
     /// Can be converted to a [`Stream`] with [`stream::iter`]. This is not a
     /// stream by default because [`Stream`] does not have the iterator methods
     /// that allow efficient implementations.
-    pub fn chunk_stream(
+    pub fn generic_chunk_stream(
         &self,
     ) -> impl Iterator<
         Item = impl Future<Output = Result<impl Deref<Target = &E::Unwrapped>, E::AsyncReadError>>,
@@ -559,7 +313,10 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAsyncRead> 
 #[cfg(test)]
 #[cfg(feature = "async_bincode")]
 mod tests {
-    use std::{io::Cursor, sync::Mutex};
+    use std::{
+        io::Cursor,
+        sync::{Arc, Mutex},
+    };
 
     use futures::{stream, StreamExt, TryStreamExt};
     use tokio::join;
@@ -569,7 +326,7 @@ mod tests {
         test_utils::{CursorVec, OwnedCursorVec},
     };
 
-    use super::*;
+    use super::super::*;
 
     #[tokio::test]
     async fn multiple_retrieve() {
@@ -596,16 +353,16 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(*backed.a_get(0).await.unwrap(), 0);
-        assert_eq!(*backed.a_get(4).await.unwrap(), 3);
+        assert_eq!(*backed.a_generic_get(0).await.unwrap(), 0);
+        assert_eq!(*backed.a_generic_get(4).await.unwrap(), 3);
 
-        let (first, second) = join!(async { backed.a_get(0).await.unwrap() }, async {
-            backed.a_get(4).await.unwrap()
+        let (first, second) = join!(async { backed.a_generic_get(0).await.unwrap() }, async {
+            backed.a_generic_get(4).await.unwrap()
         });
         assert_eq!((*first, *second), (0, 3));
 
         for x in [0, 2, 4, 5, 5, 2, 0, 5] {
-            assert_eq!(*backed.a_get(x).await.unwrap(), combined[x])
+            assert_eq!(*backed.a_generic_get(x).await.unwrap(), combined[x])
         }
     }
 
@@ -624,8 +381,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(backed.a_get(0).await.is_ok());
-        assert!(backed.a_get(10).await.is_err());
+        assert!(backed.a_generic_get(0).await.is_ok());
+        assert!(backed.a_generic_get(10).await.is_err());
     }
 
     #[tokio::test]
@@ -652,7 +409,7 @@ mod tests {
             .await
             .unwrap();
 
-        let collected = stream::iter(backed.chunk_stream())
+        let collected = stream::iter(backed.generic_chunk_stream())
             .then(|x| x)
             .try_collect::<Vec<_>>()
             .await
@@ -685,7 +442,7 @@ mod tests {
             .a_append(INPUT_1, back_vector_1, AsyncBincodeCoder {})
             .await
             .unwrap();
-        let collected = stream::iter(backed.stream())
+        let collected = stream::iter(backed.generic_stream())
             .then(|x| x)
             .try_collect::<Vec<_>>()
             .await
@@ -721,7 +478,7 @@ mod tests {
                     .await
                     .unwrap();
                 let backed = Arc::new(backed);
-                let collected = stream::iter(BackedArray::stream_send(&backed))
+                let collected = stream::iter(BackedArray::generic_stream_send(&backed))
                     .map(|x| async { tokio::task::spawn(x).await.unwrap() })
                     .buffered(backed.len())
                     .try_collect::<Vec<_>>()
@@ -761,14 +518,14 @@ mod tests {
         assert_eq!(backed.loaded_len(), 3);
         backed.shrink_to_query(&[0]);
         assert_eq!(backed.loaded_len(), 0);
-        backed.a_get(0).await.unwrap();
+        backed.a_generic_get(0).await.unwrap();
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_chunk(1);
         assert_eq!(backed.loaded_len(), 3);
         backed.clear_chunk(0);
         assert_eq!(backed.loaded_len(), 0);
         for x in [0, 4] {
-            backed.a_get(x).await.unwrap();
+            backed.a_generic_get(x).await.unwrap();
         }
         assert_eq!(backed.loaded_len(), 6);
         backed.shrink_to_query(&[4]);
@@ -777,7 +534,7 @@ mod tests {
         assert_eq!(backed.loaded_len(), 0);
 
         // Future should not load anything until actually executed.
-        let fut = backed.a_get(0);
+        let fut = backed.a_generic_get(0);
         assert_eq!(backed.loaded_len(), 0);
         fut.await.unwrap();
     }
