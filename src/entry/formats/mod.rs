@@ -18,20 +18,22 @@ pub trait Encoder<Target: ?Sized + Write> {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncDecoder<Source: AsyncRead> {
+pub trait AsyncDecoder<Source: ?Sized + AsyncRead> {
     type Error: From<std::io::Error>;
-    fn decode<T: for<'de> Deserialize<'de> + Send + Sync>(
+    type T: for<'de> Deserialize<'de> + Send + Sync;
+    fn decode(
         &self,
         source: &mut Source,
-    ) -> impl std::future::Future<Output = Result<T, Self::Error>> + Send;
+    ) -> impl std::future::Future<Output = Result<Self::T, Self::Error>> + Send;
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncEncoder<Target: AsyncWrite>: Unpin {
+pub trait AsyncEncoder<Target: ?Sized + AsyncWrite>: Unpin {
     type Error: From<std::io::Error>;
-    fn encode<T: Serialize + Send + Sync>(
+    type T: Serialize + Send + Sync;
+    fn encode(
         &self,
-        data: &T,
+        data: &Self::T,
         target: &mut Target,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
 }
@@ -56,10 +58,12 @@ mod simd_json;
 #[cfg(feature = "simd_json")]
 pub use simd_json::*;
 
-#[cfg(any(feature = "csv", feature = "async_csv"))]
-mod csv;
-#[cfg(any(feature = "csv", feature = "async_csv"))]
-pub use csv::*;
-
 #[cfg(feature = "csv")]
-mod async_csv;
+pub mod csv;
+#[cfg(feature = "csv")]
+pub use csv::CsvCoder;
+
+#[cfg(feature = "async_csv")]
+pub mod async_csv;
+#[cfg(feature = "async_csv")]
+pub use async_csv::AsyncCsvCoder;

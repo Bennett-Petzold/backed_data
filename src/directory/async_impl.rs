@@ -181,14 +181,18 @@ where
     K: Send + Sync + Serialize,
     E: Send + Sync + Serialize,
     E::Disk: From<PathBuf>,
-    E::Coder: Default,
-    E::AsyncWriteError: From<std::io::Error>,
 {
     /// Async version of [`Self::save`].
-    pub async fn a_save(&self) -> Result<&Self, E::AsyncWriteError> {
+    pub async fn a_save<C>(&self, coder: &C) -> Result<&Self, C::Error>
+    where
+        C: AsyncEncoder<
+            <E::Disk as AsyncWriteDisk>::WriteDisk,
+            Error: From<std::io::Error>,
+            T = Self,
+        >,
+    {
         let disk: E::Disk = self.directory_root.join(META_FILE).into();
         let mut disk = disk.async_write_disk().await?;
-        let coder = E::Coder::default();
         coder.encode(self, &mut disk).await?;
         disk.flush().await?;
         disk.shutdown().await?;
@@ -201,14 +205,18 @@ where
     K: Send + Sync + for<'de> Deserialize<'de>,
     E: Send + Sync + for<'de> Deserialize<'de>,
     E::Disk: From<PathBuf>,
-    E::Coder: Default,
-    E::AsyncReadError: From<std::io::Error>,
 {
     /// Async version of [`Self::load`].
-    pub async fn a_load<P: AsRef<Path>>(root: P) -> Result<Self, E::AsyncReadError> {
+    pub async fn a_load<P: AsRef<Path>, C>(root: P, coder: &C) -> Result<Self, C::Error>
+    where
+        C: AsyncDecoder<
+            <E::Disk as AsyncReadDisk>::ReadDisk,
+            Error: From<std::io::Error>,
+            T = Self,
+        >,
+    {
         let disk: E::Disk = root.as_ref().join(META_FILE).into();
         let mut disk = disk.async_read_disk().await?;
-        let coder = E::Coder::default();
         coder.decode(&mut disk).await
     }
 }
@@ -269,7 +277,7 @@ mod tests {
                 let directory = temp_dir().join("async_directory_write");
                 let _ = remove_dir_all(directory.clone());
                 let mut arr =
-                    AsyncStdDirBackedArray::<String, AsyncBincodeCoder>::new(directory.clone())
+                    AsyncStdDirBackedArray::<String, AsyncBincodeCoder<_>>::new(directory.clone())
                         .unwrap();
                 let (values, second_values) = values();
 
@@ -292,7 +300,8 @@ mod tests {
                 let directory = temp_dir().join("async_directory_write_and_read");
                 let _ = remove_dir_all(directory.clone());
                 let mut arr =
-                    AsyncStdDirBackedArray::<_, AsyncBincodeCoder>::new(directory.clone()).unwrap();
+                    AsyncStdDirBackedArray::<_, AsyncBincodeCoder<_>>::new(directory.clone())
+                        .unwrap();
                 let (values, second_values) = values();
 
                 arr.a_append(values).await.unwrap();
@@ -306,7 +315,7 @@ mod tests {
                     .unwrap();
                 drop(arr);
 
-                let arr: AsyncStdDirBackedArray<String, AsyncBincodeCoder> =
+                let arr: AsyncStdDirBackedArray<String, AsyncBincodeCoder<_>> =
                     AsyncBincodeCoder::default()
                         .decode(&mut File::open(directory.join("meta.data")).await.unwrap())
                         .await

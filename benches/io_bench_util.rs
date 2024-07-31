@@ -130,20 +130,23 @@ where
 #[cfg(feature = "async")]
 pub async fn a_create<K, E, P: AsRef<Path>>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
 where
-    K: Default + Serialize + Send + Sync,
-    E: Default + Serialize + Send + Sync,
+    K: Default + Serialize + Send + Sync + Unpin,
+    E: Default + Serialize + Send + Sync + Unpin,
     K: ResizingContainer<Data = Range<usize>>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf>,
+    <E::Disk as AsyncWriteDisk>::WriteDisk: Send + Sync,
     E::AsyncWriteError: From<std::io::Error> + Debug,
     E::Unwrapped: for<'u> From<&'u [u8]>,
 {
+    use backed_data::entry::formats::AsyncBincodeCoder;
+
     let mut arr = DirectoryBackedArray::<K, E>::new(path.as_ref().to_path_buf()).unwrap();
     for inner_data in data {
         arr.a_append(inner_data.as_ref()).await.unwrap();
     }
-    if arr.a_save().await.is_err() {
+    if arr.a_save(&AsyncBincodeCoder::default()).await.is_err() {
         panic!()
     };
     arr
@@ -153,15 +156,17 @@ where
 pub async fn a_create_concurrent<K, E, P>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
 where
     P: AsRef<Path>,
-    K: Default + Serialize + Send + Sync,
-    E: Default + Serialize + Send + Sync,
+    K: Default + Serialize + Send + Sync + Unpin,
+    E: Default + Serialize + Send + Sync + Unpin,
     K: ResizingContainer<Data = Range<usize>>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
     E::Disk: From<PathBuf> + AsRef<Path>,
+    <E::Disk as AsyncWriteDisk>::WriteDisk: Send + Sync,
     E::AsyncWriteError: From<std::io::Error> + Debug,
     E::Unwrapped: for<'a> From<&'a [u8]>,
 {
+    use backed_data::entry::formats::AsyncBincodeCoder;
     use futures::{stream, StreamExt};
     use std::iter::repeat;
 
@@ -178,7 +183,11 @@ where
         combined.a_append_dir(next).await.unwrap();
     }
 
-    if combined.a_save().await.is_err() {
+    if combined
+        .a_save(&AsyncBincodeCoder::default())
+        .await
+        .is_err()
+    {
         panic!()
     };
     combined
@@ -188,8 +197,8 @@ where
 pub async fn a_create_parallel<K, E, P>(path: P, data: &[String]) -> DirectoryBackedArray<K, E>
 where
     P: AsRef<Path> + Send + Sync + 'static,
-    K: Default + Serialize + Send + Sync + 'static,
-    E: Default + Serialize + Send + Sync + 'static,
+    K: Default + Serialize + Send + Sync + Unpin + 'static,
+    E: Default + Serialize + Send + Sync + Unpin + 'static,
     K: ResizingContainer<Data = Range<usize>>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default + Send + Sync,
@@ -199,6 +208,8 @@ where
     E::Unwrapped: for<'a> From<&'a [u8]>,
 {
     use std::iter::repeat;
+
+    use backed_data::entry::formats::AsyncBincodeCoder;
 
     let mut handles = data
         .iter()
@@ -219,7 +230,11 @@ where
         combined.a_append_dir(next.await.unwrap()).await.unwrap();
     }
 
-    if combined.a_save().await.is_err() {
+    if combined
+        .a_save(&AsyncBincodeCoder::default())
+        .await
+        .is_err()
+    {
         panic!()
     };
     combined
@@ -363,12 +378,13 @@ macro_rules! read_dir {
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::{
                 array::BackedArray,
+                entry::formats::AsyncBincodeCoder,
                 directory::DirectoryBackedArray
             };
             use futures::stream;
             use tokio::task::spawn;
 
-            let arr: $($type)+ = DirectoryBackedArray::a_load(path).await.unwrap();
+            let arr: $($type)+ = DirectoryBackedArray::a_load(path, &AsyncBincodeCoder::default()).await.unwrap();
             let (arr, _) = arr.deconstruct();
             stream::iter(BackedArray::stream_send(&arr))
                 .map(|x| async { spawn(x).await.unwrap() })
@@ -380,20 +396,26 @@ macro_rules! read_dir {
     };
     (async concurrent $fn_name: ident, $( $type: tt )+) => {
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
-            use backed_data::directory::DirectoryBackedArray;
+            use backed_data::{
+                entry::formats::AsyncBincodeCoder,
+                directory::DirectoryBackedArray,
+            };
             use futures::stream;
 
-            let arr: $($type)+ = DirectoryBackedArray::a_load(path).await.unwrap();
+            let arr: $($type)+ = DirectoryBackedArray::a_load(path, &AsyncBincodeCoder::default()).await.unwrap();
             // Lesser buffer, in the interest of completing the bench
             stream::iter(arr.stream()).buffered(arr.entries().len()).try_collect::<Vec<&u8>>().await.unwrap().len()
         }
     };
     (async $fn_name: ident, $( $type: tt )+) => {
         async fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
-            use backed_data::directory::DirectoryBackedArray;
+            use backed_data::{
+                entry::formats::AsyncBincodeCoder,
+                directory::DirectoryBackedArray,
+            };
             use futures::stream;
 
-            let arr: $($type)+ = DirectoryBackedArray::a_load(path).await.unwrap();
+            let arr: $($type)+ = DirectoryBackedArray::a_load(path, &AsyncBincodeCoder::default()).await.unwrap();
             stream::iter(arr.stream()).then(|x| x).try_collect::<Vec<&u8>>().await.unwrap().len()
         }
     };

@@ -176,7 +176,6 @@ name = "backed_data"
 version = "0.2.0"
 dependencies = [
  "aes-gcm",
- "anyhow",
  "async-bincode",
  "async-compression",
  "async-scoped",
@@ -186,10 +185,12 @@ dependencies = [
  "csv",
  "csv-async",
  "derive-getters",
+ "either",
+ "error-stack",
  "fs_extra",
  "futures",
  "humansize",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "mmap",
  "num-traits",
  "pprof",
@@ -577,6 +578,16 @@ checksum = "534c5cf6194dfab3db3242765c03bbe257cf92f22b38f6bc0c58d59108a820ba"
 dependencies = [
  "libc 0.2.155",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "error-stack"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe413319145d1063f080f27556fd30b1d70b01e2ba10c2a6e40d4be982ffc5d1"
+dependencies = [
+ "anyhow",
+ "rustc_version",
 ]
 
 [[package]]
@@ -1051,9 +1062,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -1734,6 +1745,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "719b953e2095829ee67db738b3bfa9fa368c94900df327b3f07fe6e794d2fe1f"
 
 [[package]]
+name = "rustc_version"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
+dependencies = [
+ "semver",
+]
+
+[[package]]
 name = "rustix"
 version = "0.38.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1848,6 +1868,12 @@ dependencies = [
  "core-foundation-sys",
  "libc 0.2.155",
 ]
+
+[[package]]
+name = "semver"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
 
 [[package]]
 name = "seq-macro"
@@ -2171,6 +2197,7 @@ checksum = "9cf6b47b3771c49ac75ad09a6162f53ad4b8088b76ac60e8ec1455b31a189fe1"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",

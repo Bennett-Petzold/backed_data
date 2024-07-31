@@ -10,7 +10,7 @@ use super::{Decoder, Encoder};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BincodeCoder<T: ?Sized> {
-    pub _phantom_data: PhantomData<T>,
+    _phantom_data: PhantomData<T>,
 }
 
 impl<T: ?Sized> Default for BincodeCoder<T> {

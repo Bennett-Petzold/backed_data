@@ -3,8 +3,8 @@ use std::{
     sync::Arc,
 };
 
+use either::Either;
 use futures::Future;
-use itertools::Either;
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, sync::OnceCell};
 
@@ -16,8 +16,9 @@ use super::{
     BackedEntry, BackedEntryAsync, BackedEntryTrait,
 };
 
-impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
-    BackedEntryAsync<T, Disk, Coder>
+impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder> BackedEntryAsync<T, Disk, Coder>
+where
+    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
 {
     /// See [`Self::update`].
     pub async fn a_update(&mut self) -> Result<(), Coder::Error> {
@@ -49,11 +50,10 @@ impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk:
     }
 }
 
-impl<
-        T: for<'de> Deserialize<'de> + Send + Sync,
-        Disk: AsyncReadDisk,
-        Coder: AsyncDecoder<Disk::ReadDisk>,
-    > BackedEntryAsync<T, Disk, Coder>
+impl<T: for<'de> Deserialize<'de> + Send + Sync, Disk: AsyncReadDisk, Coder>
+    BackedEntryAsync<T, Disk, Coder>
+where
+    Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
 {
     /// See [`Self::load`].
     pub async fn a_load(&self) -> Result<&T, Coder::Error> {
@@ -66,8 +66,9 @@ impl<
     }
 }
 
-impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
-    BackedEntryAsync<T, Disk, Coder>
+impl<T: Serialize + Send + Sync, Disk: AsyncWriteDisk, Coder> BackedEntryAsync<T, Disk, Coder>
+where
+    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
 {
     /// [`Self::write_unload`].
     pub async fn a_write_unload<U: Into<T>>(&mut self, new_value: U) -> Result<(), Coder::Error> {
@@ -110,6 +111,7 @@ pub trait BackedEntryAsyncWrite:
     Disk: AsyncWriteDisk,
     Coder: AsyncEncoder<
         <<Self as BackedEntryTrait>::Disk as AsyncWriteDisk>::WriteDisk,
+        T = <Self::T as OnceCellWrap>::T,
         Error = Self::WriteError,
     >,
 >
@@ -125,7 +127,7 @@ impl<
         E: BackedEntryTrait<
             T = OnceCell<U>,
             Disk: AsyncWriteDisk,
-            Coder: AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk>,
+            Coder: AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk, T = U>,
         >,
     > BackedEntryAsyncWrite for E
 {
@@ -143,6 +145,7 @@ pub trait BackedEntryAsyncRead:
     Coder: AsyncDecoder<
         <<Self as BackedEntryTrait>::Disk as AsyncReadDisk>::ReadDisk,
         Error = Self::ReadError,
+        T = <Self::T as OnceCellWrap>::T,
     >,
 >
 {
@@ -157,7 +160,7 @@ impl<
         E: BackedEntryTrait<
             T = OnceCell<U>,
             Disk: AsyncReadDisk,
-            Coder: AsyncDecoder<<E::Disk as AsyncReadDisk>::ReadDisk>,
+            Coder: AsyncDecoder<<E::Disk as AsyncReadDisk>::ReadDisk, T = U>,
         >,
     > BackedEntryAsyncRead for E
 {
@@ -241,7 +244,7 @@ impl<'a, E: BackedEntryAsyncRead> BackedEntryAsyncMut<'a, E> {
 impl<
         T: Serialize + for<'de> Deserialize<'de> + Send + Sync,
         Disk: AsyncWriteDisk + AsyncReadDisk,
-        Coder: AsyncEncoder<Disk::WriteDisk> + AsyncDecoder<Disk::ReadDisk>,
+        Coder: AsyncEncoder<Disk::WriteDisk, T = T> + AsyncDecoder<Disk::ReadDisk, T = T>,
     > BackedEntryAsync<T, Disk, Coder>
 {
     /// Convenience wrapper for [`BackedEntryAsyncMut::mut_handle`]
@@ -255,7 +258,7 @@ impl<
 impl<
         T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
         Disk: AsyncReadDisk,
-        Coder: AsyncDecoder<Disk::ReadDisk>,
+        Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
     > BackedEntryAsync<T, Disk, Coder>
 {
     /// See [`Self::change_backing`].
@@ -266,7 +269,7 @@ impl<
     ) -> Result<BackedEntryAsync<T, OtherDisk, OtherCoder>, Either<Coder::Error, OtherCoder::Error>>
     where
         OtherDisk: AsyncWriteDisk,
-        OtherCoder: AsyncEncoder<OtherDisk::WriteDisk>,
+        OtherCoder: AsyncEncoder<OtherDisk::WriteDisk, T = T>,
     {
         self.a_load().await.map_err(Either::Left)?;
         let mut other = BackedEntryAsync::<T, OtherDisk, OtherCoder> {
@@ -312,7 +315,7 @@ impl<
     ///     let rt = Builder::new_current_thread().build().unwrap();
     ///     rt.block_on(async {
     ///     cursor_vec!(backing);
-    ///     let mut disk: BackedEntryAsync<Box<[u8]>, _, AsyncBincodeCoder> = BackedEntryAsync::with_disk(backing);
+    ///     let mut disk: BackedEntryAsync<Box<[u8]>, _, AsyncBincodeCoder<_>> = BackedEntryAsync::with_disk(backing);
     ///     disk.a_write_unload(VALUES).await;
     ///
     ///     cursor_vec!(sync_backing);
@@ -355,7 +358,7 @@ impl<
 impl<
         T: Serialize + for<'de> Deserialize<'de> + Sync + Send,
         Disk: AsyncWriteDisk,
-        Coder: AsyncEncoder<Disk::WriteDisk>,
+        Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
     > BackedEntryAsync<T, Disk, Coder>
 {
     /// Converts from a synchronous backing into [`self`].
@@ -395,7 +398,7 @@ impl<
     ///     let rt = Builder::new_multi_thread().build().unwrap();
     ///     rt.block_on(async {
     ///     cursor_vec!(backing);
-    ///     let mut disk: BackedEntryAsync<Box<[u8]>, _, AsyncBincodeCoder> = BackedEntryAsync::with_disk(backing);
+    ///     let mut disk: BackedEntryAsync<Box<[u8]>, _, AsyncBincodeCoder<_>> = BackedEntryAsync::with_disk(backing);
     ///     disk.a_write_unload(VALUES).await;
     ///
     ///     cursor_vec!(sync_backing);
@@ -416,7 +419,7 @@ impl<
     where
         U: Once<Inner = T>,
         OtherDisk: ReadDisk,
-        OtherCoder: Decoder<OtherDisk::ReadDisk>,
+        OtherCoder: Decoder<OtherDisk::ReadDisk, T = T>,
         F: FnOnce(LoadBlocking<U, OtherDisk, OtherCoder>) -> R,
         R: Future<Output = Result<BackedEntry<U, OtherDisk, OtherCoder>, OtherCoder::Error>>,
     {
