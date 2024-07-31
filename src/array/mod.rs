@@ -2,25 +2,17 @@
 //pub mod async_impl;
 pub mod sync_impl;
 
-use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::{Ref, RefMut},
-    ops::{Deref, Index, IndexMut, Range},
-    slice::{Iter, IterMut, SliceIndex},
-    sync::{Mutex, MutexGuard},
-};
+use std::ops::Range;
 
 use derive_getters::Getters;
 
-#[cfg(feature = "encrypted")]
-use secrets::traits::Bytes;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     entry::{
         disks::{ReadDisk, WriteDisk},
         formats::{Decoder, Encoder},
-        BackedEntry, BackedEntryTrait,
+        BackedEntry,
     },
     utils::{Once, ToMut, ToRef},
 };

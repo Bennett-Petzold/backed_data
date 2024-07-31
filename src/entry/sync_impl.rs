@@ -1,15 +1,12 @@
 use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-    marker::PhantomData,
+    io::Write,
     ops::{Deref, DerefMut},
-    path::PathBuf,
 };
 
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::{InternalUse, Once, ToMut};
+use crate::utils::Once;
 
 use super::{
     disks::{ReadDisk, WriteDisk},
@@ -296,19 +293,10 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::{OnceCell, UnsafeCell},
-        collections::HashMap,
-        io::Cursor,
-        sync::{Arc, Mutex},
-        thread::{scope, spawn},
-    };
+    use std::{cell::UnsafeCell, collections::HashMap, io::Cursor, sync::Arc, thread::scope};
 
     use crate::{
-        entry::{
-            formats::BincodeCoder, BackedEntryArr, BackedEntryArrLock, BackedEntryBox,
-            BackedEntryCell,
-        },
+        entry::{formats::BincodeCoder, BackedEntryArr, BackedEntryArrLock, BackedEntryCell},
         test_utils::CursorVec,
     };
 
@@ -399,13 +387,13 @@ mod tests {
 
         backed_entry.write_unload(VALUE).unwrap();
         assert!(!backed_entry.is_loaded());
-        let back_vec_inner = unsafe { (&mut *back_vec.get()).get_mut() };
+        let back_vec_inner = unsafe { (*back_vec.get()).get_mut() };
         assert_eq!(&back_vec_inner[back_vec_inner.len() - VALUE.len()..], VALUE);
         assert_eq!(backed_entry.load().unwrap().as_ref(), VALUE);
 
         backed_entry.write(NEW_VALUE.into()).unwrap();
         assert!(backed_entry.is_loaded());
-        let back_vec_inner = unsafe { (&mut *back_vec.get()).get_mut() };
+        let back_vec_inner = unsafe { (*back_vec.get()).get_mut() };
         assert_eq!(
             &back_vec_inner[back_vec_inner.len() - NEW_VALUE.len()..],
             NEW_VALUE
