@@ -292,12 +292,11 @@ impl<T: Serialize + Clone, Disk: AsyncWriteDisk + Clone> BackedArray<T, Disk> {
     }
 }
 
-impl<T: Serialize + Clone, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
+impl<T: Serialize, Disk: AsyncWriteDisk> BackedArray<T, Disk> {
     /// Converts into a sync array
     pub async fn to_sync_array(self) -> bincode::Result<SyncBackedArray<T, Disk>> {
         let mut entry_vec = Vec::with_capacity(self.entries.len());
         for entry in self.entries {
-            println!("PUSH TO ENTRY VEC");
             entry_vec.push(entry.into_sync_entry().await?);
         }
 

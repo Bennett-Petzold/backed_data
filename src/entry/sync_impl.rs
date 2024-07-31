@@ -256,6 +256,19 @@ impl<T: Serialize + DeserializeOwned, Disk: WriteDisk + ReadDisk> BackedEntryOpt
     }
 }
 
+impl<T, Disk: for<'de> Deserialize<'de>> BackedEntry<T, Disk> {
+    pub fn replace_disk<OtherDisk>(self) -> BackedEntry<T, OtherDisk>
+    where
+        OtherDisk: for<'de> Deserialize<'de>,
+        Disk: Into<OtherDisk>,
+    {
+        BackedEntry::<T, OtherDisk> {
+            value: self.value,
+            disk: self.disk.into(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;

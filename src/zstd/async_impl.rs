@@ -26,6 +26,8 @@ use crate::{
     array::async_impl::BackedArray,
     entry::async_impl::{AsyncReadDisk, AsyncWriteDisk},
     meta::async_impl::BackedArrayWrapper,
+    zstd::sync_impl::ZstdDirBackedArray as SyncBackedArray,
+    zstd::sync_impl::ZstdFile as SyncZstdFile,
 };
 
 #[cfg(feature = "async-zstdmt")]
@@ -52,6 +54,12 @@ impl ZstdFile {
             ));
         };
         Ok(Self { path, zstd_level })
+    }
+}
+
+impl From<ZstdFile> for SyncZstdFile<'_> {
+    fn from(value: ZstdFile) -> Self {
+        SyncZstdFile::new(value.path, value.zstd_level)
     }
 }
 
@@ -167,7 +175,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
                 ZstdFile::new(
                     self.directory_root
                         .clone()
-                        .join(Uuid::new_v4().to_string() + ".zstd"),
+                        .join(Uuid::new_v4().to_string() + ".zst"),
                     self.zstd_level,
                 )
                 .await?,
@@ -253,6 +261,15 @@ impl<T: Serialize> ZstdDirBackedArray<T> {
         bincode_writer.send(&self).await?;
         bincode_writer.get_mut().flush().await?;
         Ok(())
+    }
+
+    /// Convert to synchronous version
+    pub async fn conv_to_sync<'a>(self) -> bincode::Result<SyncBackedArray<'a, T>> {
+        Ok(SyncBackedArray::from_existing_array(
+            self.array.to_sync_array().await?.replace_disk(),
+            self.directory_root,
+            self.zstd_level,
+        ))
     }
 }
 

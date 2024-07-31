@@ -469,6 +469,19 @@ impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
     }
 }
 
+impl<T, Disk: for<'de> Deserialize<'de>> BackedArray<T, Disk> {
+    pub fn replace_disk<OtherDisk>(self) -> BackedArray<T, OtherDisk>
+    where
+        OtherDisk: for<'de> Deserialize<'de>,
+        Disk: Into<OtherDisk>,
+    {
+        BackedArray::<T, OtherDisk> {
+            keys: self.keys,
+            entries: self.entries.into_iter().map(|x| x.replace_disk()).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;

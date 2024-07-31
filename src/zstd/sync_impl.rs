@@ -116,6 +116,18 @@ impl<T> ZstdDirBackedArray<'_, T> {
     pub fn set_level(&mut self, zstd_level: i32) {
         self.zstd_level = Some(zstd_level);
     }
+
+    pub fn from_existing_array<'a>(
+        array: BackedArray<T, ZstdFile<'a>>,
+        directory_root: PathBuf,
+        zstd_level: Option<i32>,
+    ) -> ZstdDirBackedArray<'a, T> {
+        ZstdDirBackedArray::<'a, T> {
+            array,
+            directory_root,
+            zstd_level,
+        }
+    }
 }
 
 impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBackedArray<'a, T> {
@@ -147,7 +159,7 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
             ZstdFile::new(
                 self.directory_root
                     .clone()
-                    .join(Uuid::new_v4().to_string() + ".zstd"),
+                    .join(Uuid::new_v4().to_string() + ".zst"),
                 self.zstd_level.unwrap_or(0),
             ),
         )?;
