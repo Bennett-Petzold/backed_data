@@ -301,6 +301,8 @@ mod tests {
 
         #[cfg(not(miri))]
         assert_eq!(unsafe { **val_ptr }, 32);
+
+        assert_eq!(*array.generic_get(0).unwrap(), 32);
     }
 
     // Miri can't handle the FFI calls

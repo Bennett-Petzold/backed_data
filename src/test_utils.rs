@@ -240,3 +240,46 @@ impl<'a> AsyncWriteDisk for OwnedCursorVec<'a> {
         unsafe { Ok(&mut *this) }
     }
 }
+
+pub mod csv_data {
+    use std::sync::LazyLock;
+
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
+    pub struct IouZipcodes {
+        zip: u32,
+        eiaid: u32,
+        utility_name: String,
+        state: String,
+        service_type: String,
+        ownership: String,
+        comm_rate: f64,
+        ind_rate: f64,
+        res_rate: f64,
+    }
+
+    pub static FIRST_ENTRY: LazyLock<IouZipcodes> = LazyLock::new(|| IouZipcodes {
+        zip: 85321,
+        eiaid: 176,
+        utility_name: "Ajo Improvement Co".to_string(),
+        state: "AZ".to_string(),
+        service_type: "Bundled".to_string(),
+        ownership: "Investor Owned".to_string(),
+        comm_rate: 0.08789049919484701,
+        ind_rate: 0.0,
+        res_rate: 0.09388714733542321,
+    });
+
+    pub static LAST_ENTRY: LazyLock<IouZipcodes> = LazyLock::new(|| IouZipcodes {
+        zip: 96107,
+        eiaid: 57483,
+        utility_name: "Liberty Utilities".to_string(),
+        state: "CA".to_string(),
+        service_type: "Bundled".to_string(),
+        ownership: "Investor Owned".to_string(),
+        comm_rate: 0.14622411551676107,
+        ind_rate: 0.0,
+        res_rate: 0.14001899277463484,
+    });
+}
