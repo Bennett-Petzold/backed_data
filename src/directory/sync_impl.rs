@@ -1,5 +1,5 @@
 use std::{
-    fs::{copy, create_dir_all, remove_file, rename, File},
+    fs::{copy, create_dir_all, remove_dir_all, remove_file, rename, File},
     io::{BufReader, BufWriter, Read, Seek, Write},
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -133,6 +133,10 @@ impl<T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for DirectoryBackedA
         rhs.move_root(self.directory_root.clone())?;
         self.array.append_array(rhs.array);
         Ok(self)
+    }
+
+    fn delete(self) -> Result<(), Self::BackingError> {
+        remove_dir_all(self.directory_root)
     }
 }
 

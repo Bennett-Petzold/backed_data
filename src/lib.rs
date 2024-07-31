@@ -8,4 +8,5 @@ pub mod meta;
 #[cfg(any(feature = "zstd", feature = "async-zstd"))]
 pub mod zstd;
 
+#[cfg(test)]
 mod test_utils;
