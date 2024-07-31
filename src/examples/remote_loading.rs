@@ -4,7 +4,7 @@
 )]
 #![cfg_attr(
     any(miri, not(feature = "async_csv"), not(feature = "network")),
-    doc = "```ignore"
+    doc = "```no_run"
 )]
 #![doc = include_str!("../../examples/remote_loading.rs")]
 //! ```
