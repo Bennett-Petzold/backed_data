@@ -116,7 +116,7 @@ mod tests {
         append_wrapper(&mut first_store, &mut second_store).unwrap();
         assert_eq!(
             first_store
-                .item_iter_default()
+                .item_iter(0)
                 .map(|x| x.unwrap().to_owned())
                 .collect_vec(),
             [first_sequence, second_sequence].concat()
@@ -132,7 +132,7 @@ mod tests {
 
         assert_eq!(
             second_store
-                .item_iter_default()
+                .item_iter(0)
                 .map(|x| x.unwrap().to_owned())
                 .collect_vec(),
             second_sequence
@@ -149,7 +149,7 @@ mod tests {
         second_store.delete().unwrap();
         assert_eq!(
             first_store
-                .item_iter_default()
+                .item_iter(0)
                 .map(|x| x.unwrap().to_owned())
                 .collect_vec(),
             [first_sequence, second_sequence].concat()
@@ -183,7 +183,7 @@ mod tests {
         append_wrapper_destructive(&mut first_store, second_store).unwrap();
         assert_eq!(
             first_store
-                .item_iter_default()
+                .item_iter(0)
                 .map(|x| x.unwrap().to_owned())
                 .collect_vec(),
             [first_sequence, second_sequence].concat()

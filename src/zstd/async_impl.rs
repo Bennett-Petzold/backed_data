@@ -151,7 +151,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
                 ZstdFile::new(
                     self.directory_root
                         .clone()
-                        .join(Uuid::new_v4().to_string() + ".zstd"),
+                        .join(Uuid::new_v4().to_string() + ".zst"),
                     self.zstd_level,
                 )
                 .await?,
@@ -179,22 +179,20 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> BackedArrayWrapper<T>
     async fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
         let mut copy_futures = JoinSet::new();
 
-        let remove = self.directory_root != rhs.directory_root;
-
-        let disks: Vec<PathBuf> = rhs
-            .array
-            .get_disks()
-            .into_iter()
-            .map(|x| x.path.clone())
-            .collect_vec();
-        disks.into_iter().for_each(|path| {
-            let new_root_clone = self.directory_root.clone();
-            copy_futures.spawn(async move {
-                copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
+        if self.directory_root != rhs.directory_root {
+            let disks: Vec<PathBuf> = rhs
+                .array
+                .get_disks()
+                .into_iter()
+                .map(|x| x.path.clone())
+                .collect_vec();
+            disks.into_iter().for_each(|path| {
+                let new_root_clone = self.directory_root.clone();
+                copy_futures.spawn(async move {
+                    copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
+                });
             });
-        });
 
-        if remove {
             remove_dir_all(rhs.directory_root).await?;
         }
 

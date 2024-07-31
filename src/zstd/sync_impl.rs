@@ -134,7 +134,7 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
             ZstdFile::new(
                 self.directory_root
                     .clone()
-                    .join(Uuid::new_v4().to_string() + ".zstd"),
+                    .join(Uuid::new_v4().to_string() + ".zst"),
                 self.zstd_level.unwrap_or(0),
             ),
         )?;
@@ -155,17 +155,17 @@ impl<'a, T: Serialize + DeserializeOwned> BackedArrayWrapper<T> for ZstdDirBacke
     }
 
     fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
-        rhs.array
-            .get_disks()
-            .iter()
-            .map(|disk| {
-                copy(
-                    disk.path.clone(),
-                    self.directory_root.join(disk.path.file_name().unwrap()),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
         if self.directory_root != rhs.directory_root {
+            rhs.array
+                .get_disks()
+                .iter()
+                .map(|disk| {
+                    copy(
+                        disk.path.clone(),
+                        self.directory_root.join(disk.path.file_name().unwrap()),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             remove_dir_all(rhs.directory_root)?;
         }
         self.array.append_array(rhs.array);

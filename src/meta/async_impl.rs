@@ -32,7 +32,7 @@ pub trait BackedArrayWrapper<T>:
         self.clear_memory();
         let mut bincode_writer = AsyncBincodeWriter::from(writer).for_async();
         bincode_writer.send(&self).await?;
-        bincode_writer.get_mut().flush().await?;
+        bincode_writer.get_mut().shutdown().await?;
         Ok(())
     }
     /// Wraps [`BackedArray::load`] to include its own metadata.

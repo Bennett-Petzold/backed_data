@@ -54,17 +54,15 @@ impl<T: Serialize + DeserializeOwned + Sync + Send> BackedArrayWrapper<T>
     async fn append_array(&mut self, rhs: Self) -> Result<&mut Self, Self::BackingError> {
         let mut copy_futures = JoinSet::new();
 
-        let remove = self.directory_root != rhs.directory_root;
-
-        let disks: Vec<PathBuf> = rhs.array.get_disks().into_iter().cloned().collect_vec();
-        disks.into_iter().for_each(|path| {
-            let new_root_clone = self.directory_root.clone();
-            copy_futures.spawn(async move {
-                copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
+        if self.directory_root != rhs.directory_root {
+            let disks: Vec<PathBuf> = rhs.array.get_disks().into_iter().cloned().collect_vec();
+            disks.into_iter().for_each(|path| {
+                let new_root_clone = self.directory_root.clone();
+                copy_futures.spawn(async move {
+                    copy(path.clone(), new_root_clone.join(path.file_name().unwrap())).await
+                });
             });
-        });
 
-        if remove {
             remove_dir_all(rhs.directory_root).await?;
         }
 
@@ -183,6 +181,32 @@ mod tests {
         arr.append(&second_values).await.unwrap();
         assert_eq!(arr.get(100).await.unwrap(), &"TEST STRING");
         assert_eq!(arr.get(15_000).await.unwrap(), &"OTHER VALUE");
+
+        remove_dir_all(directory).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn write_and_read() {
+        let directory = temp_dir().join("directory_write_and_read_async");
+        let _ = remove_dir_all(directory.clone()).await;
+        let mut arr = DirectoryBackedArray::new(directory.clone()).await.unwrap();
+        let (values, second_values) = values();
+
+        arr.append(&values).await.unwrap();
+        arr.append_memory(second_values.into()).await.unwrap();
+        arr.save_to_disk(&mut File::create(directory.join("directory")).await.unwrap())
+            .await
+            .unwrap();
+        drop(arr);
+
+        let mut arr: DirectoryBackedArray<String> =
+            DirectoryBackedArray::load(&mut File::open(directory.join("directory")).await.unwrap())
+                .await
+                .unwrap();
+        assert_eq!(arr.get(100).await.unwrap(), &"TEST STRING");
+        assert_eq!(arr.get(15_000).await.unwrap(), &"OTHER VALUE");
+        assert_eq!(arr.get(200).await.unwrap(), &"TEST STRING");
+        assert_eq!(arr.get(1).await.unwrap(), &"TEST STRING");
 
         remove_dir_all(directory).await.unwrap();
     }
