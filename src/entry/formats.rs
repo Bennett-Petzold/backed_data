@@ -2,6 +2,9 @@ use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "async")]
+use tokio::io::{AsyncRead, AsyncWrite};
+
 pub trait Decoder<Source: Read> {
     type Error: From<std::io::Error>;
     fn decode<T: for<'de> Deserialize<'de>>(&self, source: &mut Source) -> Result<T, Self::Error>;
@@ -10,6 +13,25 @@ pub trait Decoder<Source: Read> {
 pub trait Encoder<Target: Write> {
     type Error: From<std::io::Error>;
     fn encode<T: Serialize>(&self, data: &T, target: &mut Target) -> Result<(), Self::Error>;
+}
+
+#[cfg(feature = "async")]
+pub trait AsyncDecoder<Source: AsyncRead> {
+    type Error: From<std::io::Error>;
+    fn decode<T: for<'de> Deserialize<'de>>(
+        &self,
+        source: &mut Source,
+    ) -> impl std::future::Future<Output = Result<T, Self::Error>> + Send;
+}
+
+#[cfg(feature = "async")]
+pub trait AsyncEncoder<Target: AsyncWrite>: Unpin {
+    type Error: From<std::io::Error>;
+    fn encode<T: Serialize>(
+        &self,
+        data: &T,
+        target: &mut Target,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
 }
 
 #[cfg(feature = "bincode")]

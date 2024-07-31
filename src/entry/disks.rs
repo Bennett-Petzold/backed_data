@@ -12,27 +12,27 @@ use {
     tokio::io::{AsyncRead, AsyncWrite},
 };
 
-pub trait ReadDisk: Serialize + for<'de> Deserialize<'de> {
+pub trait ReadDisk {
     type ReadDisk: Read;
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk>;
 }
 
-pub trait WriteDisk: Serialize + for<'de> Deserialize<'de> {
+pub trait WriteDisk {
     type WriteDisk: Write;
     fn write_disk(&self) -> std::io::Result<Self::WriteDisk>;
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncReadDisk: Unpin + Serialize + for<'de> Deserialize<'de> {
-    type ReadDisk: AsyncRead;
+pub trait AsyncReadDisk: Unpin {
+    type ReadDisk: AsyncRead + Unpin;
     fn async_read_disk(
         &self,
     ) -> impl Future<Output = std::io::Result<Self::ReadDisk>> + Send + Sync;
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncWriteDisk: Unpin + Serialize + for<'de> Deserialize<'de> {
-    type WriteDisk: AsyncWrite;
+pub trait AsyncWriteDisk: Unpin {
+    type WriteDisk: AsyncWrite + Unpin;
     fn async_write_disk(
         &self,
     ) -> impl Future<Output = std::io::Result<Self::WriteDisk>> + Send + Sync;
@@ -388,7 +388,7 @@ mod zstd_disks {
 
     #[cfg(test)]
     mod tests {
-        use std::{env::temp_dir, io::Cursor, sync::Mutex};
+        use std::{io::Cursor, sync::Mutex};
 
         use crate::test_utils::CursorVec;
 
