@@ -24,13 +24,15 @@ directory = ["array", "dep:uuid"]
 async = ["dep:tokio", "dep:tokio-util", "dep:futures", "dep:async-scoped"]
 
 # START FORMATS
-all_formats = ["bincode", "serde_json", "simd_json", "async_bincode"]
+all_formats = ["bincode", "serde_json", "simd_json", "csv", "async_bincode", "async_csv"]
 
 bincode = ["dep:bincode"]
 serde_json = ["dep:serde_json"]
 simd_json = ["dep:simd-json"]
+csv = ["dep:csv"]
 
 async_bincode = ["async", "dep:async-bincode", "dep:bincode"]
+async_csv = ["dep:csv-async"]
 
 # END FORMATS
 
@@ -66,6 +68,7 @@ num-traits = { version = "0.2.19", optional = true }
 bincode = { version = "1.3.3", optional = true }
 serde_json = { version = "1.0.120", optional = true }
 simd-json = { version = "0.13.10", optional = true }
+csv = { version = "1.3.0", optional = true }
 
 # Disk dependencies
 mmap = { version = "0.1.1", optional = true }
@@ -82,6 +85,7 @@ async-scoped = { version = "0.9.0", optional = true, features = ["use-tokio"] }
 
 # Async format dependencies
 async-bincode = { version = "0.7.2", optional = true }
+csv-async = { version = "1.3.0", optional = true }
 
 [dev-dependencies]
 # Multithread test runtime

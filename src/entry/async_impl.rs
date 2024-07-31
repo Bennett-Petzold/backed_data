@@ -316,9 +316,9 @@ impl<
     ///     disk.a_write_unload(VALUES).await;
     ///
     ///     cursor_vec!(sync_backing);
-    ///     let sync_disk: BackedEntryCell<_, _, _> = disk.to_sync(
+    ///     let sync_disk: BackedEntryCell<_, _, BincodeCoder<Box<[u8]>>> = disk.to_sync(
     ///         sync_backing,
-    ///         BincodeCoder {},
+    ///         BincodeCoder::default(),
     ///         |f| async { f.call() }
     ///     ).await.unwrap();
     ///     });
@@ -399,9 +399,9 @@ impl<
     ///     disk.a_write_unload(VALUES).await;
     ///
     ///     cursor_vec!(sync_backing);
-    ///     let sync_disk: BackedEntryLock<_, _, _> = disk.to_sync(
+    ///     let sync_disk: BackedEntryLock<_, _, BincodeCoder<Box<[u8]>>> = disk.to_sync(
     ///         sync_backing,
-    ///         BincodeCoder {},
+    ///         BincodeCoder::default(),
     ///         |x| unsafe { tokio_blocking(x) }
     ///     ).await.unwrap();
     ///     });
@@ -443,7 +443,7 @@ impl<U, Disk, Coder> BlockingFn for LoadBlocking<U, Disk, Coder>
 where
     U: Once<Inner: for<'de> Deserialize<'de>>,
     Disk: ReadDisk,
-    Coder: Decoder<<Disk as ReadDisk>::ReadDisk>,
+    Coder: Decoder<<Disk as ReadDisk>::ReadDisk, T = <U as Once>::Inner>,
 {
     type Output = Result<(), Coder::Error>;
     fn call(self) -> Self::Output {
@@ -461,7 +461,7 @@ impl<U, Disk, Coder> BlockingFn for UpdateBlocking<U, Disk, Coder>
 where
     U: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<<Disk as WriteDisk>::WriteDisk>,
+    Coder: Encoder<<Disk as WriteDisk>::WriteDisk, T = U::Inner>,
 {
     type Output = Result<BackedEntry<U, Disk, Coder>, Coder::Error>;
     fn call(mut self) -> Self::Output {

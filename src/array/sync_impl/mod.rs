@@ -103,8 +103,8 @@ impl<
     /// let file_0 = FILENAME_BASE.clone().join("_0");
     /// let file_1 = FILENAME_BASE.join("_1");
     /// let mut array: VecBackedArray<u32, Plainfile, _> = VecBackedArray::default();
-    /// array.append(values.0, file_0.into(), BincodeCoder {});
-    /// array.append(values.1, file_1.into(), BincodeCoder {});
+    /// array.append(values.0, file_0.into(), BincodeCoder::default());
+    /// array.append(values.1, file_1.into(), BincodeCoder::default());
     ///
     /// assert_eq!(*array.get(4).unwrap(), 3);
     /// remove_dir_all(FILENAME_BASE).unwrap();
@@ -153,10 +153,10 @@ impl<
     ///         [2, 3, 5]);
     ///
     ///     let mut array: VecBackedArray<u32, Plainfile, _> = VecBackedArray::default();
-    ///     array.append_memory(values.0, FILENAME.clone().into(), BincodeCoder {});
+    ///     array.append_memory(values.0, FILENAME.clone().into(), BincodeCoder::default());
     ///
     ///     // Overwrite file, making disk pointer for first array invalid
-    ///     array.append_memory(values.1, FILENAME.clone().into(), BincodeCoder {});
+    ///     array.append_memory(values.1, FILENAME.clone().into(), BincodeCoder::default());
     ///
     ///     assert_eq!(*array.get(0).unwrap(), 0);
     ///     remove_file(FILENAME).unwrap();

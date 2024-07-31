@@ -13,6 +13,7 @@ use std::{
 use backed_data::{
     array::container::{BackedEntryContainerNestedWrite, ResizingContainer},
     directory::DirectoryBackedArray,
+    entry::formats::BincodeCoder,
 };
 use chrono::Local;
 use fs_extra::dir::get_size;
@@ -79,7 +80,7 @@ where
     for inner_data in data {
         arr.append(inner_data.as_ref()).unwrap();
     }
-    if arr.save().is_err() {
+    if arr.save(&BincodeCoder::default()).is_err() {
         panic!()
     };
     arr
@@ -120,7 +121,7 @@ where
         arr.append_dir(next).unwrap();
     }
 
-    if arr.save().is_err() {
+    if arr.save(&BincodeCoder::default()).is_err() {
         panic!()
     };
     arr
@@ -400,7 +401,7 @@ macro_rules! read_dir {
         fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::directory::DirectoryBackedArray;
 
-            let arr: $($type)+ = DirectoryBackedArray::load(path).unwrap();
+            let arr: $($type)+ = DirectoryBackedArray::load(path, &BincodeCoder::default()).unwrap();
             arr.generic_iter().collect::<Result<Vec<_>, _>>().unwrap().len()
         }
     };
@@ -408,7 +409,7 @@ macro_rules! read_dir {
         fn $fn_name<P: AsRef<Path>>(path: P) -> usize {
             use backed_data::directory::DirectoryBackedArray;
 
-            let arr: $($type)+ = DirectoryBackedArray::load(path).unwrap();
+            let arr: $($type)+ = DirectoryBackedArray::load(path, &BincodeCoder::default()).unwrap();
             arr.iter().collect::<Result<Vec<_>, _>>().unwrap().len()
         }
     };

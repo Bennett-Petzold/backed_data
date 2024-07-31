@@ -400,10 +400,10 @@ mod tests {
 
         let mut backed = VecBackedArray::new();
         backed
-            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .append(INPUT_0, back_vector_0, BincodeCoder::default())
             .unwrap();
         backed
-            .append_memory(INPUT_1, back_vector_1, BincodeCoder {})
+            .append_memory(INPUT_1, back_vector_1, BincodeCoder::default())
             .unwrap();
 
         assert_eq!(*backed.generic_get(0).unwrap(), 0);
@@ -431,7 +431,9 @@ mod tests {
         const INPUT: &[u8] = &[0, 1, 1];
 
         let mut backed = VecBackedArray::new();
-        backed.append(INPUT, back_vector, BincodeCoder {}).unwrap();
+        backed
+            .append(INPUT, back_vector, BincodeCoder::default())
+            .unwrap();
 
         assert!(backed.generic_get(0).is_ok());
         assert!(backed.generic_get(10).is_err());
@@ -453,10 +455,10 @@ mod tests {
 
         let mut backed = VecBackedArray::new();
         backed
-            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .append(INPUT_0, back_vector_0, BincodeCoder::default())
             .unwrap();
         backed
-            .append(INPUT_1, back_vector_1, BincodeCoder {})
+            .append(INPUT_1, back_vector_1, BincodeCoder::default())
             .unwrap();
 
         let collected = backed
@@ -484,10 +486,10 @@ mod tests {
 
         let mut backed = VecBackedArray::new();
         backed
-            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .append(INPUT_0, back_vector_0, BincodeCoder::default())
             .unwrap();
         backed
-            .append(INPUT_1, back_vector_1, BincodeCoder {})
+            .append(INPUT_1, back_vector_1, BincodeCoder::default())
             .unwrap();
         let collected = backed
             .generic_iter()
@@ -510,7 +512,7 @@ mod tests {
         let mut backed = VecBackedArray::new();
         unsafe {
             backed
-                .append(FIB, &mut *back_vec_0.get(), BincodeCoder {})
+                .append(FIB, &mut *back_vec_0.get(), BincodeCoder::default())
                 .unwrap();
         }
         #[cfg(not(miri))]
@@ -519,7 +521,7 @@ mod tests {
         // Intentional unsafe access to later peek underlying storage
         unsafe {
             backed
-                .append(INPUT_1, &mut *back_vec_1.get(), BincodeCoder {})
+                .append(INPUT_1, &mut *back_vec_1.get(), BincodeCoder::default())
                 .unwrap();
         }
         #[cfg(not(miri))]
@@ -577,7 +579,11 @@ mod tests {
 
         let mut backed = VecBackedArray::new();
         backed
-            .append(FIB, unsafe { &mut *back_vec.get() }, BincodeCoder {})
+            .append(
+                FIB,
+                unsafe { &mut *back_vec.get() },
+                BincodeCoder::default(),
+            )
             .unwrap();
 
         // Read checks
@@ -662,7 +668,11 @@ mod tests {
         );
 
         backed
-            .append(INPUT_1, unsafe { &mut *back_vec_2.get() }, BincodeCoder {})
+            .append(
+                INPUT_1,
+                unsafe { &mut *back_vec_2.get() },
+                BincodeCoder::default(),
+            )
             .unwrap();
 
         // Correctly crosses multiple storage disks
@@ -691,10 +701,10 @@ mod tests {
 
         let mut backed = VecBackedArray::new();
         backed
-            .append(INPUT_0, back_vector_0, BincodeCoder {})
+            .append(INPUT_0, back_vector_0, BincodeCoder::default())
             .unwrap();
         backed
-            .append_memory(INPUT_1, back_vector_1, BincodeCoder {})
+            .append_memory(INPUT_1, back_vector_1, BincodeCoder::default())
             .unwrap();
 
         assert_eq!(backed.len(), 6);

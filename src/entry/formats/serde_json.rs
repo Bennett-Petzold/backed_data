@@ -1,4 +1,7 @@
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    marker::PhantomData,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -25,27 +28,32 @@ impl From<std::io::Error> for SerdeJsonErr {
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
-pub struct SerdeJsonCoder {}
+pub struct SerdeJsonCoder<T: ?Sized> {
+    _phantom_data: PhantomData<T>,
+}
 
-impl<Source: Read> Decoder<Source> for SerdeJsonCoder {
+impl<T: ?Sized + for<'de> serde::Deserialize<'de>, Source: Read> Decoder<Source>
+    for SerdeJsonCoder<T>
+{
     type Error = SerdeJsonErr;
-    fn decode<T: for<'de> serde::Deserialize<'de>>(
-        &self,
-        source: &mut Source,
-    ) -> Result<T, Self::Error> {
+    type T = T;
+    fn decode(&self, source: &mut Source) -> Result<Self::T, Self::Error> {
         serde_json::from_reader(source).map_err(|e| e.into())
     }
 }
-impl<Target: Write> Encoder<Target> for SerdeJsonCoder {
+impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for SerdeJsonCoder<T> {
     type Error = SerdeJsonErr;
-    fn encode<T: Serialize>(&self, data: &T, target: &mut Target) -> Result<(), Self::Error> {
+    type T = T;
+    fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
         serde_json::to_writer_pretty(target, data).map_err(|e| e.into())
     }
 }
 
 #[cfg(feature = "simd_json")]
-impl From<SimdJsonCoder> for SerdeJsonCoder {
-    fn from(_value: SimdJsonCoder) -> Self {
-        Self {}
+impl<T> From<SimdJsonCoder<T>> for SerdeJsonCoder<T> {
+    fn from(_value: SimdJsonCoder<T>) -> Self {
+        Self {
+            _phantom_data: PhantomData,
+        }
     }
 }

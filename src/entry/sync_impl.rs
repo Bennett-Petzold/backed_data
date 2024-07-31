@@ -14,8 +14,9 @@ use super::{
     BackedEntry, BackedEntryTrait,
 };
 
-impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>>
-    BackedEntry<T, Disk, Coder>
+impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder> BackedEntry<T, Disk, Coder>
+where
+    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
 {
     /// Updates underlying storage with the current entry
     pub fn update(&mut self) -> Result<(), Coder::Error> {
@@ -45,6 +46,8 @@ impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>
 
 impl<T: Once<Inner: for<'de> Deserialize<'de>>, Disk: ReadDisk, Coder: Decoder<Disk::ReadDisk>>
     BackedEntry<T, Disk, Coder>
+where
+    Coder: Decoder<Disk::ReadDisk, T = T::Inner>,
 {
     /// Returns the entry, loading from disk if not in memory.
     ///
@@ -86,8 +89,9 @@ impl<T: Once, Disk, Coder> BackedEntry<T, Disk, Coder> {
     }
 }
 
-impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>>
-    BackedEntry<T, Disk, Coder>
+impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder> BackedEntry<T, Disk, Coder>
+where
+    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
 {
     /// Write the value to disk only, unloading current memory.
     ///
@@ -108,6 +112,7 @@ pub trait BackedEntryWrite:
     Disk: WriteDisk,
     Coder: Encoder<
         <<Self as BackedEntryTrait>::Disk as WriteDisk>::WriteDisk,
+        T = <Self::T as Once>::Inner,
         Error = Self::WriteError,
     >,
 >
@@ -120,7 +125,7 @@ impl<
         E: BackedEntryTrait<
             T: Once<Inner: Serialize>,
             Disk: WriteDisk,
-            Coder: Encoder<<E::Disk as WriteDisk>::WriteDisk>,
+            Coder: Encoder<<E::Disk as WriteDisk>::WriteDisk, T = <Self::T as Once>::Inner>,
         >,
     > BackedEntryWrite for E
 {
@@ -137,6 +142,7 @@ pub trait BackedEntryRead:
     Disk: ReadDisk,
     Coder: Decoder<
         <<Self as BackedEntryTrait>::Disk as ReadDisk>::ReadDisk,
+        T = <Self::T as Once>::Inner,
         Error = Self::ReadError,
     >,
 >
@@ -149,7 +155,7 @@ impl<
         E: BackedEntryTrait<
             T: Once<Inner: for<'de> Deserialize<'de>>,
             Disk: ReadDisk,
-            Coder: Decoder<<E::Disk as ReadDisk>::ReadDisk>,
+            Coder: Decoder<<E::Disk as ReadDisk>::ReadDisk, T = <Self::T as Once>::Inner>,
         >,
     > BackedEntryRead for E
 {
@@ -234,7 +240,7 @@ impl<'a, E: BackedEntryRead + BackedEntryWrite> BackedEntryMut<'a, E> {
 impl<
         T: Once<Inner: Serialize + for<'de> Deserialize<'de>>,
         Disk: WriteDisk + ReadDisk,
-        Coder: Encoder<Disk::WriteDisk> + Decoder<Disk::ReadDisk>,
+        Coder: Encoder<Disk::WriteDisk, T = T::Inner> + Decoder<Disk::ReadDisk, T = T::Inner>,
     > BackedEntry<T, Disk, Coder>
 {
     /// Convenience wrapper for [`BackedEntryMut::mut_handle`]
@@ -248,7 +254,7 @@ impl<
 impl<
         T: Once<Inner: for<'de> Deserialize<'de> + Serialize>,
         Disk: ReadDisk,
-        Coder: Decoder<Disk::ReadDisk>,
+        Coder: Decoder<Disk::ReadDisk, T = T::Inner>,
     > BackedEntry<T, Disk, Coder>
 {
     /// Converts [`self`] to another disk and encoding representation.
@@ -268,7 +274,7 @@ impl<
     ) -> Result<BackedEntry<T, OtherDisk, OtherCoder>, Either<Coder::Error, OtherCoder::Error>>
     where
         OtherDisk: WriteDisk,
-        OtherCoder: Encoder<OtherDisk::WriteDisk>,
+        OtherCoder: Encoder<OtherDisk::WriteDisk, T = T::Inner>,
     {
         self.load().map_err(Either::Left)?;
         let mut other = BackedEntry::<T, OtherDisk, OtherCoder> {
@@ -327,7 +333,7 @@ mod tests {
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
-            unsafe { BackedEntryArr::new(&mut *back_vec.get(), BincodeCoder {}) };
+            unsafe { BackedEntryArr::new(&mut *back_vec.get(), BincodeCoder::default()) };
         backed_entry.write_unload(FIB).unwrap();
 
         assert_eq!(backed_entry.load().unwrap().as_ref(), FIB);
@@ -371,7 +377,7 @@ mod tests {
         };
 
         // Intentional unsafe access to later peek underlying storage
-        let mut backed_entry = BackedEntryCell::new(&mut back_vec, BincodeCoder {});
+        let mut backed_entry = BackedEntryCell::new(&mut back_vec, BincodeCoder::default());
         backed_entry.write_unload(input.clone()).unwrap();
 
         assert_eq!(&input, backed_entry.load().unwrap());
@@ -397,7 +403,7 @@ mod tests {
         cursor_vec!(back_vec, back_vec_inner);
 
         let mut backed_entry =
-            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder {});
+            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder::default());
 
         backed_entry.write_unload(VALUE).unwrap();
         assert!(!backed_entry.is_loaded());
@@ -431,7 +437,7 @@ mod tests {
             inner: (&mut binding).into(),
         };
 
-        let mut backed_entry = BackedEntryArrLock::new(&mut back_vec, BincodeCoder {});
+        let mut backed_entry = BackedEntryArrLock::new(&mut back_vec, BincodeCoder::default());
 
         backed_entry.write_unload(VALUES).unwrap();
         assert!(!backed_entry.is_loaded());
@@ -467,7 +473,7 @@ mod tests {
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
-            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder {});
+            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder::default());
         backed_entry.write(VALUES.into()).unwrap();
 
         // Check for valid bincode encoding
@@ -475,7 +481,7 @@ mod tests {
         assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
 
         let mut backed_entry = backed_entry
-            .change_backing(unsafe { &mut *back_vec_2.get() }, SerdeJsonCoder {})
+            .change_backing(unsafe { &mut *back_vec_2.get() }, SerdeJsonCoder::default())
             .unwrap();
 
         // Check for valid json encoding
@@ -500,14 +506,14 @@ mod tests {
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
-            unsafe { BackedEntryArr::new(&mut *back_vec.get(), SerdeJsonCoder {}) };
+            unsafe { BackedEntryArr::new(&mut *back_vec.get(), SerdeJsonCoder::default()) };
         backed_entry.write(VALUES.into()).unwrap();
 
         // Check for valid serde json encoding
         #[cfg(not(miri))]
         assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
 
-        let mut backed_entry = backed_entry.encoder_into::<SimdJsonCoder>();
+        let mut backed_entry = backed_entry.encoder_into::<SimdJsonCoder<_>>();
 
         // Check for valid simd json encoding
         #[cfg(not(miri))]

@@ -38,6 +38,9 @@ pub use plainfile::*;
 mod write_unbuffered;
 pub use write_unbuffered::*;
 
+mod unbuffered;
+pub use unbuffered::*;
+
 mod custom;
 pub use custom::*;
 

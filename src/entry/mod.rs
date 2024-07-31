@@ -89,14 +89,14 @@ pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<tokio::sync::OnceCell<T>
 ///     let FILENAME = std::env::temp_dir().join("example_box");
 ///     let file = Plainfile::new(FILENAME.clone());
 ///
-///     // Write array to file
-///     let mut writer: BackedEntryBox<str, _, BincodeCoder> =
+///     // Write string to file
+///     let mut writer: BackedEntryBox<str, _, BincodeCoder<Box<str>>> =
 ///         BackedEntryBox::with_disk(file.clone());
 ///     writer.write_unload("HELLO I AM A STRING").unwrap();
 ///     drop(writer);
 ///
-///     // Read array from file
-///     let mut sparse: BackedEntryBox<str, _, BincodeCoder> =
+///     // Read string from file
+///     let mut sparse: BackedEntryBox<str, _, BincodeCoder<_>> =
 ///         BackedEntryBox::with_disk(file.clone());
 ///     assert_eq!(sparse.load().unwrap().as_ref(), "HELLO I AM A STRING");
 ///
@@ -124,14 +124,14 @@ pub type BackedEntryBoxLock<T, Disk, Coder> = BackedEntryLock<Box<T>, Disk, Code
 ///     let file = Plainfile::new(FILENAME.clone());
 ///    
 ///     // Write array to file
-///     let mut writer: BackedEntryArr<u8, _, _> = BackedEntryArr::new(file.clone(),
-///         BincodeCoder{});
+///     let mut writer: BackedEntryArr<u8, _, BincodeCoder<_>> = BackedEntryArr::new(file.clone(),
+///         BincodeCoder::default());
 ///     writer.write_unload([1, 2, 3]).unwrap();
 ///     drop(writer);
 ///    
 ///     // Read array from file
 ///     let mut sparse: BackedEntryArr<u8, _, _> = BackedEntryArr::new(file.clone(),
-///         BincodeCoder{});
+///         BincodeCoder::default());
 ///     assert_eq!(sparse.load().unwrap().as_ref(), [1, 2, 3]);
 ///    
 ///     // Cleanup
@@ -177,7 +177,6 @@ impl<T, Disk, Coder> AsMut<BackedEntry<T, Disk, Coder>> for BackedEntry<T, Disk,
 ///
 /// [`BackedEntry`] is always this.
 /// Only [`BackedEntry`] is this.
-#[allow(private_bounds)]
 pub trait BackedEntryTrait {
     type T;
     type Disk;
