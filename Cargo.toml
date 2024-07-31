@@ -99,6 +99,11 @@ csv-async = { version = "1.3.0", optional = true, features = ["with_serde"] }
 uuid = { version = "1.8.0", features = ["v4"], optional = true }
 http-serde = { version = "2.1.1", optional = true }
 cfg-if = { version = "1.0.0", optional = true }
+nix = "0.29.0"
+
+# Linux OS call dependency, used for mmap
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.29.0", features = ["fs"] }
 
 [build-dependencies]
 cfg_aliases = "0.2.1" # Reducing cfg boilerplate

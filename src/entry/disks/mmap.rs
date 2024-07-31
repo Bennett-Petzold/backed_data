@@ -43,7 +43,12 @@ impl SwitchingMmap {
     fn conv_to_read(self) -> std::io::Result<Self> {
         match self {
             Self::ReadMmap(x) => Ok(Self::ReadMmap(x)),
-            Self::WriteMmap(mut x) => Ok(Self::ReadMmap(x.get_map()?.make_read_only()?)),
+            Self::WriteMmap(mut x) => {
+                let mmap = x.get_map()?.make_read_only()?;
+                let _ = mmap.advise(Advice::PopulateRead);
+
+                Ok(Self::ReadMmap(mmap))
+            }
         }
     }
 
@@ -327,26 +332,29 @@ impl ReadDisk for Mmap {
 #[derive(Debug)]
 /// Wraps a mutable mmap,
 pub struct MmapWriter {
-    file: File,
+    path: PathBuf,
     mmap: memmap2::MmapMut,
     written_len: usize,
     reserved_len: usize,
+    #[cfg(target_os = "linux")]
+    // True if this is a sparse file, to avoid excessive checks on failure
+    sparse_file: bool,
 }
 
 impl MmapWriter {
     fn from_args<P: AsRef<Path>>(path: P, mmap: memmap2::MmapMut) -> std::io::Result<Self> {
-        let file = open_mmap(path)?;
-
         let _ = mmap.advise(Advice::Sequential);
         let _ = mmap.advise(Advice::PopulateWrite);
 
         let reserved_len = mmap.len();
 
         Ok(MmapWriter {
-            file,
+            path: path.as_ref().to_path_buf(),
             mmap,
             written_len: 0,
             reserved_len,
+            #[cfg(target_os = "linux")]
+            sparse_file: true,
         })
     }
 
@@ -358,11 +366,107 @@ impl MmapWriter {
         let reserved_len = mmap.len();
 
         Ok(MmapWriter {
-            file,
+            path: path.as_ref().to_path_buf(),
             mmap,
             written_len: 0,
             reserved_len,
+            #[cfg(target_os = "linux")]
+            sparse_file: true,
         })
+    }
+
+    fn file(&self) -> std::io::Result<File> {
+        open_mmap(&self.path)
+    }
+
+    /// Test if a newly `ftruncate`-allocated file as a hole in it, to
+    /// determine if this filesystem supports holes.
+    ///
+    /// Returns true if there is a hole before the end, false otherwise.
+    /// May return an I/O failure instead of a result.
+    #[cfg(target_os = "linux")]
+    fn test_for_hole(file: &File) -> std::io::Result<bool> {
+        use std::os::fd::AsRawFd;
+
+        use nix::unistd::{lseek, Whence};
+
+        let hole_pos = lseek(file.as_raw_fd(), 0, Whence::SeekHole)?;
+        let end_pos = lseek(file.as_raw_fd(), 0, Whence::SeekEnd)?;
+        Ok(hole_pos != end_pos)
+    }
+
+    /// Use an ftruncate call on Linux, to attempt a small sparse insert.
+    #[cfg(target_os = "linux")]
+    #[inline]
+    fn reserve_ftruncate(&mut self, file: &File, new_reserved_len: usize) -> std::io::Result<()> {
+        use std::os::fd::AsFd;
+
+        use nix::unistd::ftruncate;
+
+        // Make sure the reservation length is on filesystem blocks
+        let new_reserved_len_i64: i64 = new_reserved_len.try_into().map_err(|e| {
+            std::io::Error::new(
+                ErrorKind::OutOfMemory,
+                format!("Cannot convert {} to an i64: {:#?}", self.reserved_len, e),
+            )
+        })?;
+
+        ftruncate(file.as_fd(), new_reserved_len_i64)?;
+
+        self.reserved_len = new_reserved_len;
+
+        Ok(())
+    }
+
+    /// Linux optimization for reserve, when the filesystem has holes.
+    ///
+    /// Takes the chance to make a much larger reservation, knowing that holes
+    /// will prevent all that space from actually being allocated until used.
+    #[cfg(target_os = "linux")]
+    #[inline]
+    fn reserve_sparse(&mut self, file: &File) -> std::io::Result<()> {
+        use std::os::fd::AsFd;
+
+        use nix::unistd::ftruncate;
+
+        // Chosen based on smallest max file size for largest EXT3.
+        // This library does not support filesystems with less available space
+        // than EXT3.
+        const EIGHT_GIB: i64 = 8 * 1024 * 1024 * 1024;
+
+        match Self::test_for_hole(file) {
+            // Found a hole, try to add a much larger hole to
+            // perform fewer file resizes during mmap write.
+            Ok(true) => {
+                // If the previous step succeeded, this must be valid.
+                let reserved_len_i64: i64 = self.reserved_len as i64;
+
+                let add_gib: i64 =
+                    reserved_len_i64
+                        .checked_add(EIGHT_GIB)
+                        .ok_or(std::io::Error::new(
+                            ErrorKind::OutOfMemory,
+                            "Reserved length + 1 TiB overflows usize: {:#?}",
+                        ))?;
+                let add_gib_usize: usize = add_gib.try_into().map_err(|e| {
+                    std::io::Error::new(
+                        ErrorKind::OutOfMemory,
+                        format!("Reserved length + 1 TiB overflows usize: {:#?}", e),
+                    )
+                })?;
+
+                ftruncate(file.as_fd(), add_gib)?;
+                self.reserved_len = add_gib_usize;
+                Ok(())
+            }
+            Ok(false) => {
+                self.sparse_file = false;
+                Ok(())
+            }
+            // May retry this test later, but the prior allocation
+            // succeeded, so no need to err out.
+            Err(_) => Ok(()),
+        }
     }
 
     /// Extend the underlying file to fit `buf_len` new bytes.
@@ -374,14 +478,37 @@ impl MmapWriter {
         if buf_len > remaining_len {
             let extend_len = buf_len - remaining_len;
 
-            // Set a minimum reallocation step size to avoid thrashing.
-            self.reserved_len += max(extend_len, MIN_RESERVE_LEN);
+            // Use a minimum reallocation step size to avoid thrashing.
+            let new_reservation = self.reserved_len + max(extend_len, MIN_RESERVE_LEN);
 
-            self.file.set_len(self.reserved_len as u64)?;
+            let file = self.file()?;
+
+            // Make one big sparse allocation, if the filesystem supports it.
+            #[cfg(target_os = "linux")]
+            {
+                let sparse_alloc = self.sparse_file
+                    && self.reserve_ftruncate(&file, new_reservation).is_ok()
+                    && self.reserve_sparse(&file).is_ok();
+                if !sparse_alloc {
+                    file.set_len(new_reservation as u64)?;
+                    self.reserved_len = new_reservation;
+                }
+            }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                file.set_len(self.reserved_len as u64)?;
+                self.reserved_len = new_reservation;
+            }
+
+            // Increase mapping size to file size and re-advise.
+            // Don't advise write, as that may produce an arbitrarily long
+            // load (especially if a huge sparse file is allocated).
             unsafe {
                 self.mmap
                     .remap(self.reserved_len, RemapOptions::new().may_move(true))
             }?;
+            let _ = self.mmap.advise(Advice::Sequential);
         }
         Ok(())
     }
@@ -400,7 +527,8 @@ impl MmapWriter {
     fn truncate(&mut self) -> std::io::Result<()> {
         // Shrink to the actually written size, discarding garbage at the end.
         if self.written_len < self.reserved_len {
-            self.file.set_len(self.written_len as u64)?;
+            self.file()?.set_len(self.written_len as u64)?;
+
             self.reserved_len = self.written_len;
             unsafe {
                 self.mmap
@@ -414,8 +542,9 @@ impl MmapWriter {
     fn get_map(&mut self) -> std::io::Result<memmap2::MmapMut> {
         self.flush()?;
 
+        let file = self.file()?;
         Ok(std::mem::replace(&mut self.mmap, unsafe {
-            MmapOptions::new().map_mut(&self.file)
+            MmapOptions::new().map_mut(&file)
         }?))
     }
 }
