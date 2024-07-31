@@ -40,7 +40,7 @@ read_dir!(async read_zstdfiles_async, AsyncZstdDirBackedArray<0, u8, AsyncBincod
 
 fn zstd_setting_benches(c: &mut Criterion) {
     #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
-    use backed_data::entry::disks::ZSTD_MULTITHREAD;
+    use backed_data::entry::disks::zstd::ZSTD_MULTITHREAD;
 
     use criterion::BenchmarkId;
 

@@ -1,11 +1,13 @@
-use std::{
-    io::{Cursor, IoSliceMut, Read, Seek, SeekFrom, Write},
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::io::{Cursor, IoSliceMut, Read, Seek, SeekFrom, Write};
 
 #[cfg(feature = "async")]
-use futures::{io::IoSlice, AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite};
+use {
+    futures::{io::IoSlice, AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite},
+    std::{
+        pin::Pin,
+        task::{Context, Poll},
+    },
+};
 
 /// [`std::io::Cursor`] wrapper that provides async methods.
 ///

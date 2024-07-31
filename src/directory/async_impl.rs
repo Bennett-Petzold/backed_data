@@ -5,8 +5,15 @@ use std::{
 
 use futures::{io::AsyncWriteExt, stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
 use uuid::Uuid;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "tokio")] {
+        use tokio::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
+    } else if #[cfg(feature = "smol")] {
+        use smol::fs::{copy, create_dir_all, remove_dir, remove_file, rename};
+    }
+}
 
 use crate::{
     array::{

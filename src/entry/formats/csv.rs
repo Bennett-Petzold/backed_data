@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Decoder, Encoder};
 
-#[cfg(feature = "csv")]
+#[cfg(feature = "async_csv")]
 use super::AsyncCsvCoder;
 
 #[derive(Deserialize, Serialize)]

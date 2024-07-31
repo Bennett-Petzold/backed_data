@@ -21,7 +21,7 @@ default = ["bincode", "directory", "zstd"]
 array = ["dep:stable_deref_trait"]
 unsafe_array = ["array"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
-async = ["dep:futures", "dep:async-scoped", "dep:cfg-if"]
+async = ["dep:futures", "dep:async-scoped", "dep:cfg-if", "tokio"]
 tokio = ["async", "dep:tokio", "dep:tokio-util"]
 smol = ["async", "dep:smol"]
 
@@ -34,7 +34,7 @@ simd_json = ["dep:simd-json"]
 csv = ["dep:csv"]
 
 async_bincode = ["async", "dep:async-bincode", "dep:bincode"]
-async_csv = ["dep:csv-async", "tokio-util/compat"]
+async_csv = ["async", "dep:csv-async"]
 
 # END FORMATS
 
@@ -43,7 +43,7 @@ all_disks = ["mmap", "zstd", "async_zstd", "encrypted"]
 
 encrypted = ["dep:secrets", "dep:aes-gcm", "dep:stable_deref_trait"]
 mmap = ["dep:mmap"]
-network = ["dep:reqwest", "dep:bytes", "dep:http-serde"]
+network = ["async", "dep:reqwest", "dep:bytes", "dep:http-serde", "dep:url"]
 
 # zstd features
 zstd = ["array", "dep:zstd", "dep:num-traits"]
@@ -87,8 +87,8 @@ futures =  { version = "0.3.30", optional = true }
 async-scoped = { version = "0.9.0", optional = true, features = ["use-tokio"] }
 
 # Async executors
-tokio = { version = "1.37.0", optional = true, features = ["rt", "io-util", "fs"] }
-tokio-util = { version = "0.7.10", optional = true, features = ["io", "io-util"] }
+tokio = { version = "1.37.0", optional = true, default-features = false, features = ["rt", "io-util", "fs"] }
+tokio-util = { version = "0.7.10", optional = true, features = ["compat"] }
 smol = { version = "2.0.0", optional = true }
 
 # Async format dependencies

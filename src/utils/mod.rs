@@ -1,9 +1,9 @@
 #[cfg(feature = "async")]
 pub mod blocking;
 
-#[cfg(feature = "array")]
+#[cfg(any(feature = "array", feature = "encrypted"))]
 mod extender;
-#[cfg(feature = "array")]
+#[cfg(any(feature = "array", feature = "encrypted"))]
 pub use extender::*;
 
 mod protected;
