@@ -171,87 +171,58 @@ where
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
-    use std::{
-        io::{Cursor, Seek},
-        sync::LazyLock,
-    };
+    use std::io::{Cursor, Seek};
+
+    use tokio::runtime::Builder;
+
+    use crate::test_utils::csv_data::{IouZipcodes, FIRST_ENTRY, LAST_ENTRY};
 
     use super::*;
-
-    #[derive(Debug, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
-    struct IouZipcodes {
-        zip: u32,
-        eiaid: u32,
-        utility_name: String,
-        state: String,
-        service_type: String,
-        ownership: String,
-        comm_rate: f64,
-        ind_rate: f64,
-        res_rate: f64,
-    }
-
-    static FIRST_ENTRY: LazyLock<IouZipcodes> = LazyLock::new(|| IouZipcodes {
-        zip: 85321,
-        eiaid: 176,
-        utility_name: "Ajo Improvement Co".to_string(),
-        state: "AZ".to_string(),
-        service_type: "Bundled".to_string(),
-        ownership: "Investor Owned".to_string(),
-        comm_rate: 0.08789049919484701,
-        ind_rate: 0.0,
-        res_rate: 0.09388714733542321,
-    });
-
-    static LAST_ENTRY: LazyLock<IouZipcodes> = LazyLock::new(|| IouZipcodes {
-        zip: 96107,
-        eiaid: 57483,
-        utility_name: "Liberty Utilities".to_string(),
-        state: "CA".to_string(),
-        service_type: "Bundled".to_string(),
-        ownership: "Investor Owned".to_string(),
-        comm_rate: 0.14622411551676107,
-        ind_rate: 0.0,
-        res_rate: 0.14001899277463484,
-    });
-
     #[test]
     fn load() {
-        let mut buf = Cursor::new(include_bytes!(
-            "../../../test_data/iou_zipcodes_2020_stub.csv"
-        ));
+        Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let mut buf = Cursor::new(include_bytes!(
+                    "../../../test_data/iou_zipcodes_2020_stub.csv"
+                ));
 
-        let coder = AsyncCsvCoder::<Vec<_>, _>::default();
+                let coder = AsyncCsvCoder::<Vec<_>, _>::default();
 
-        let vals: Vec<IouZipcodes> = coder.decode(&mut buf).unwrap();
+                let vals: Vec<IouZipcodes> = coder.decode(&mut buf).await.unwrap();
 
-        assert_eq!(vals[0], *FIRST_ENTRY);
+                assert_eq!(vals[0], *FIRST_ENTRY);
 
-        assert_eq!(vals[vals.len() - 1], *LAST_ENTRY);
+                assert_eq!(vals[vals.len() - 1], *LAST_ENTRY);
+            })
     }
 
     #[test]
     fn write_and_load() {
-        let mut buf = Cursor::new(include_bytes!(
-            "../../../test_data/iou_zipcodes_2020_stub.csv"
-        ));
-        let mut write_buf = Cursor::new(Vec::new());
+        Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let mut buf = Cursor::new(include_bytes!(
+                    "../../../test_data/iou_zipcodes_2020_stub.csv"
+                ));
+                let mut write_buf = Cursor::new(Vec::new());
 
-        let coder = AsyncCsvCoder::<Vec<_>, _>::default();
+                let coder = AsyncCsvCoder::<Vec<_>, _>::default();
 
-        let vals: Vec<IouZipcodes> = coder.decode(&mut buf).unwrap();
+                let vals: Vec<IouZipcodes> = coder.decode(&mut buf).await.unwrap();
 
-        coder.encode(&vals, &mut write_buf).unwrap();
-        write_buf.rewind().unwrap();
+                coder.encode(&vals, &mut write_buf).await.unwrap();
+                write_buf.rewind().unwrap();
 
-        let second_vals: Vec<_> = coder.decode(&mut write_buf).unwrap();
+                let second_vals: Vec<_> = coder.decode(&mut write_buf).await.unwrap();
 
-        assert_eq!(second_vals[0], *FIRST_ENTRY);
+                assert_eq!(second_vals[0], *FIRST_ENTRY);
 
-        assert_eq!(second_vals[second_vals.len() - 1], *LAST_ENTRY);
+                assert_eq!(second_vals[second_vals.len() - 1], *LAST_ENTRY);
+            })
     }
 }
-*/

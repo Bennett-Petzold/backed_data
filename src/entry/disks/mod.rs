@@ -53,3 +53,8 @@ pub use zstd::*;
 mod encrypted;
 #[cfg(feature = "encrypted")]
 pub use encrypted::*;
+
+#[cfg(feature = "network")]
+mod network;
+#[cfg(feature = "network")]
+pub use network::*;
