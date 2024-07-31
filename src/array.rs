@@ -49,10 +49,12 @@ where
 pub mod sync_impl {
     use std::{
         io::{Read, Seek, Write},
+        iter::Skip,
         ops::Range,
         ptr::{from_mut, from_ref},
     };
 
+    use anyhow::anyhow;
     use bincode::{deserialize_from, serialize_into};
     use derive_getters::Getters;
     use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -369,14 +371,17 @@ pub mod sync_impl {
         fn next(&mut self) -> Option<Self::Item> {
             // No GAT support, so we make do with pointers
             // The lifetimes work out, but the compiler doesn't know that
-            unsafe {
-                let val_ptr: Option<bincode::Result<*const [T]>> = self
-                    .backed_entry
-                    .entries
-                    .get_mut(self.pos)
-                    .map(move |x| x.load().map(|y| y as *const [T]));
-                val_ptr.map(|y| y.map(|x| &*x))
-            }
+            let val_ptr: Option<bincode::Result<*const [T]>> = self
+                .backed_entry
+                .entries
+                .get_mut(self.pos)
+                .map(move |x| x.load().map(|y| y as *const [T]));
+            unsafe { val_ptr.map(|y| y.map(|x| &*x)) }
+        }
+
+        fn nth(&mut self, n: usize) -> Option<Self::Item> {
+            self.pos += n;
+            self.next()
         }
     }
 
@@ -385,54 +390,68 @@ pub mod sync_impl {
     /// Keeps all loaded values in memory while alive.
     ///
     /// # Arguments
-    /// * `outer_pos`: Current position in entries
-    /// * `inner_pos`: Current position in entries
+    /// * `inner_pos`: Current position inside chunk
     /// * `backed_entry`: The underlying array
+    /// * `chunk_iter`: [`BackedEntryChunkIter`] used to load backing values
     pub struct BackedEntryItemIter<'a, T, Disk> {
-        outer_pos: usize,
         inner_pos: usize,
-        backed_entry: &'a mut BackedArray<T, Disk>,
+        backed_entry: Option<bincode::Result<&'a [T]>>,
+        chunk_iter: BackedEntryChunkIter<'a, T, Disk>,
+    }
+
+    impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> BackedEntryItemIter<'a, T, Disk> {
+        fn new(inner_pos: usize, mut chunk_iter: BackedEntryChunkIter<'a, T, Disk>) -> Self {
+            let backed_entry = chunk_iter.next();
+            Self {
+                inner_pos,
+                backed_entry,
+                chunk_iter,
+            }
+        }
     }
 
     impl<'a, T: DeserializeOwned + 'a, Disk: Read + Seek> Iterator
         for BackedEntryItemIter<'a, T, Disk>
     {
-        type Item = bincode::Result<&'a T>;
+        type Item = anyhow::Result<&'a T>;
 
         fn next(&mut self) -> Option<Self::Item> {
-            // TODO: explain why this is safe
-            // For now just trust me, this is a very safe function
-            unsafe {
-                let self_ptr = from_mut(self);
-                let entry: Option<bincode::Result<*const T>> = (*self_ptr)
-                    .backed_entry
-                    .entries
-                    .get_mut(self.outer_pos)
-                    .and_then(move |entry_arr| {
-                        entry_arr
-                            .load()
-                            .map(|loaded_arr| {
-                                loaded_arr
-                                    .get(self.inner_pos)
-                                    .map(|x| {
-                                        self.inner_pos += 1; // Advance iterator
-                                        Ok(from_ref(x))
-                                    })
-                                    .or_else(|| {
-                                        // Go to next chunk
-                                        self.outer_pos += 1;
-                                        self.inner_pos = 0;
-                                        self.next().map(|y| y.map(|x| from_ref(x)))
-                                    })
-                            })
-                            .transpose()
+            // No GAT support, so we make do with pointers
+            // The lifetimes work out, but the compiler doesn't know that
+            // Also need to perform a secondary borrows inside a map
+            let self_ptr: *mut Self = self;
+            let val_ptr = self
+                .backed_entry
+                .as_ref()
+                .map(|entry| {
+                    entry.as_ref().map(|loaded_entry| {
+                        loaded_entry.get(self.inner_pos).map(Ok).or_else(|| {
+                            self.inner_pos = 0;
+
+                            // Mutating the backed entry,
+                            // but the borrowed value is being discarded
+                            unsafe {
+                                (*self_ptr).backed_entry = self.chunk_iter.next();
+                            };
+
+                            // Mutating self to call method again
+                            unsafe { (*self_ptr).next() }
+                        })
                     })
-                    .map(|outer_res| match outer_res {
-                        Ok(x) => x,
-                        Err(y) => Err(y),
-                    });
-                entry.map(|y| y.map(|x| &*x))
-            }
+                })
+                .transpose()
+                .map(|x| {
+                    x.flatten()
+                        .map(|val| val.map(|checked_val| checked_val as *const T))
+                })
+                .transpose();
+            let val_ptr = val_ptr.map(move |y| match y {
+                Ok(y_inner) => y_inner,
+                Err(y_inner) => Err(anyhow!("{:?}", y_inner)),
+            });
+
+            // Deref to pointer to make lifetimes resolve
+            unsafe { val_ptr.map(|y| y.map(|x| &*x)) }
         }
     }
 
@@ -452,11 +471,7 @@ pub mod sync_impl {
                 inner_pos = loc.inside_entry_idx;
             };
 
-            BackedEntryItemIter {
-                outer_pos,
-                inner_pos,
-                backed_entry: self,
-            }
+            BackedEntryItemIter::new(inner_pos, self.chunk_iter(outer_pos))
         }
 
         /// Default for [`BackedEntryItemIter`]
