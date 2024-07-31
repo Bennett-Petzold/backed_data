@@ -29,7 +29,7 @@ impl<K, E: BackedEntryContainerNested> BackedArray<K, E> {
         self.entries
             .c_mut()
             .as_mut()
-            .into_iter()
+            .iter_mut()
             .for_each(|entry| entry.get_mut().unload());
     }
 
