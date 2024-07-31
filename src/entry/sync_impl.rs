@@ -62,7 +62,7 @@ impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>
     fn update(&mut self) -> Result<(), Coder::Error> {
         if let Some(val) = self.value.get() {
             let mut disk = self.disk.write_disk()?;
-            self.coder.encode(val, &mut disk);
+            self.coder.encode(val, &mut disk)?;
             disk.flush()?; // Make sure buffer is emptied
         }
         Ok(())
@@ -73,7 +73,7 @@ impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>
     /// See [`Self::write_unload`] to skip the memory write.
     pub fn write(&mut self, new_value: T::Inner) -> Result<(), Coder::Error> {
         let mut disk = self.disk.write_disk()?;
-        self.coder.encode(&new_value, &mut disk);
+        self.coder.encode(&new_value, &mut disk)?;
         disk.flush()?; // Make sure buffer is emptied
 
         // Drop previous value and write in new.
@@ -126,7 +126,7 @@ impl<T: Once<Inner: Serialize>, Disk: WriteDisk, Coder: Encoder<Disk::WriteDisk>
     pub fn write_unload<U: Into<T::Inner>>(&mut self, new_value: U) -> Result<(), Coder::Error> {
         self.unload();
         let mut disk = self.disk.write_disk()?;
-        self.coder.encode(&new_value.into(), &mut disk);
+        self.coder.encode(&new_value.into(), &mut disk)?;
         disk.flush()?; // Make sure buffer is emptied
         Ok(())
     }
@@ -387,6 +387,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "bincode")]
     #[test]
     fn mutate() {
         const FIB: &[u8] = &[0, 1, 1, 5, 7];
@@ -424,6 +425,7 @@ mod tests {
         assert_eq!(backed_entry.load().unwrap().as_ref(), [20, 1, 30, 5, 7]);
     }
 
+    #[cfg(feature = "bincode")]
     #[test]
     fn mutate_option() {
         let mut input: HashMap<String, u128> = HashMap::new();
@@ -453,6 +455,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "bincode")]
     #[test]
     fn write() {
         const VALUE: &[u8] = &[5];
@@ -483,6 +486,7 @@ mod tests {
         assert_eq!(backed_entry.load().unwrap().as_ref(), NEW_VALUE);
     }
 
+    #[cfg(feature = "bincode")]
     #[test]
     fn read_threaded() {
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
@@ -514,5 +518,40 @@ mod tests {
                 s.spawn(move || assert_eq!(backed_share.load().unwrap()[idx], NEW_VALUES[idx]));
             }
         });
+    }
+
+    #[cfg(all(feature = "bincode", feature = "serde_json"))]
+    #[test]
+    fn change_coder() {
+        use crate::entry::formats::SerdeJsonCoder;
+
+        const VALUES: &[u8] = &[0, 1, 3, 5, 7];
+        const VALUES_JSON: &str = "[\n  0,\n  1,\n  3,\n  5,\n  7\n]";
+        let mut binding = Cursor::new(Vec::with_capacity(10));
+        let back_vec = UnsafeCell::new(CursorVec {
+            inner: (&mut binding).into(),
+        });
+
+        // Intentional unsafe access to later peek underlying storage
+        let mut backed_entry =
+            unsafe { BackedEntryArr::new(&mut *back_vec.get(), BincodeCoder {}) };
+        backed_entry.write(VALUES.into()).unwrap();
+
+        // Check for valid bincode encoding
+        let backing_store = unsafe { &*back_vec.get() }.get_ref();
+        assert_eq!(backing_store[backing_store.len() - VALUES.len()], VALUES[0]);
+        drop(backing_store);
+
+        let mut backed_entry = backed_entry.change_encoder(SerdeJsonCoder {}).unwrap();
+
+        // Check for valid json encoding
+        let backing_store = unsafe { &*back_vec.get() }.get_ref();
+        assert_eq!(std::str::from_utf8(backing_store).unwrap(), VALUES_JSON);
+        drop(backing_store);
+
+        // Check that data is preserved with json backing
+        assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
+        backed_entry.unload();
+        assert_eq!(backed_entry.load().unwrap().as_ref(), VALUES);
     }
 }
