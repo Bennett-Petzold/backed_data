@@ -1,5 +1,5 @@
-//#[cfg(feature = "async")]
-//pub mod async_impl;
+#[cfg(feature = "async")]
+pub mod async_impl;
 pub mod container;
 pub mod sync_impl;
 
