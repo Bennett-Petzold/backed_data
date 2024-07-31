@@ -3,6 +3,7 @@
 use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
+    ptr::NonNull,
 };
 
 #[cfg(feature = "async")]
@@ -47,6 +48,36 @@ impl<T: StableDeref, U> BorrowExtender<T, U> {
             child,
         })
     }
+
+    pub fn new_mut<V: FnOnce(NonNull<T>) -> U>(mut parent: T, child: V) -> Self {
+        let child = (child)((&mut parent).into());
+        BorrowExtender {
+            _parent: parent,
+            child,
+        }
+    }
+
+    pub fn try_new_mut<W, V: FnOnce(NonNull<T>) -> Result<U, W>>(
+        mut parent: T,
+        child: V,
+    ) -> Result<Self, W> {
+        let child = (child)((&mut parent).into())?;
+        Ok(BorrowExtender {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub fn maybe_new_mut<V: FnOnce(NonNull<T>) -> Option<U>>(
+        mut parent: T,
+        child: V,
+    ) -> Option<Self> {
+        let child = (child)((&mut parent).into())?;
+        Some(BorrowExtender {
+            _parent: parent,
+            child,
+        })
+    }
 }
 
 #[cfg(feature = "async")]
@@ -86,6 +117,42 @@ impl<T> ExtenderPtr<T> {
 }
 
 #[cfg(feature = "async")]
+#[derive(Debug)]
+/// NonNull wrapper that is Send/Sync if it wraps a Send/Sync type.
+///
+/// Pointers are necessary for dealing with lifetimes in futures, and do not
+/// auto-impl Send/Sync if the underlying type does. This exists to enable a
+/// boundary cross reference that is Send/Sync.
+pub struct SendNonNull<T>(NonNull<T>);
+
+#[cfg(feature = "async")]
+unsafe impl<T: Send> Send for SendNonNull<T> {}
+
+#[cfg(feature = "async")]
+unsafe impl<T: Sync> Sync for SendNonNull<T> {}
+
+#[cfg(feature = "async")]
+impl<T> From<&mut T> for SendNonNull<T> {
+    fn from(value: &mut T) -> Self {
+        Self(value.into())
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T> From<SendNonNull<T>> for NonNull<T> {
+    fn from(val: SendNonNull<T>) -> NonNull<T> {
+        val.0
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T> SendNonNull<T> {
+    pub fn ptr(self) -> *mut T {
+        self.0.as_ptr()
+    }
+}
+
+#[cfg(feature = "async")]
 impl<T: StableDeref, U> BorrowExtender<T, U> {
     pub async fn a_new<F: Future<Output = U>, V: FnOnce(ExtenderPtr<T>) -> F>(
         parent: T,
@@ -114,6 +181,43 @@ impl<T: StableDeref, U> BorrowExtender<T, U> {
         child: V,
     ) -> Option<Self> {
         let child = (child)((&parent).into()).await?;
+        Some(Self {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub async fn a_new_mut<F: Future<Output = U>, V: FnOnce(SendNonNull<T>) -> F>(
+        mut parent: T,
+        child: V,
+    ) -> Self {
+        let child = (child)((&mut parent).into()).await;
+        Self {
+            _parent: parent,
+            child,
+        }
+    }
+
+    pub async fn a_try_new_mut<
+        W,
+        F: Future<Output = Result<U, W>>,
+        V: FnOnce(SendNonNull<T>) -> F,
+    >(
+        mut parent: T,
+        child: V,
+    ) -> Result<Self, W> {
+        let child = (child)((&mut parent).into()).await?;
+        Ok(Self {
+            _parent: parent,
+            child,
+        })
+    }
+
+    pub async fn a_maybe_new_mut<F: Future<Output = Option<U>>, V: FnOnce(SendNonNull<T>) -> F>(
+        mut parent: T,
+        child: V,
+    ) -> Option<Self> {
+        let child = (child)((&mut parent).into()).await?;
         Some(Self {
             _parent: parent,
             child,
@@ -215,24 +319,24 @@ impl<A: StableDeref, B: StableDeref, C: StableDeref + Deref<Target = D>, D> Dere
 /// This uses a pinned box. This heap allocation is undesirable, but needed
 /// for the solution as it currently stands.
 #[derive(Debug)]
-pub struct BorrowExtenderMut<T, U> {
-    _parent: Pin<Box<T>>,
+pub struct BorrowExtenderBox<T, U> {
+    _parent: Box<T>,
     child: U,
 }
 
-impl<T, U> BorrowExtenderMut<T, U> {
+impl<T, U> BorrowExtenderBox<T, U> {
     pub fn new<V: FnOnce(&mut T) -> U>(parent: T, child: V) -> Self {
-        let mut parent = Box::pin(parent);
-        let child = (child)(unsafe { parent.as_mut().get_unchecked_mut() });
-        BorrowExtenderMut {
+        let mut parent = Box::new(parent);
+        let child = (child)(&mut parent);
+        BorrowExtenderBox {
             _parent: parent,
             child,
         }
     }
 
     pub fn try_new<W, V: FnOnce(&mut T) -> Result<U, W>>(parent: T, child: V) -> Result<Self, W> {
-        let mut parent = Box::pin(parent);
-        let child = (child)(unsafe { parent.as_mut().get_unchecked_mut() })?;
+        let mut parent = Box::new(parent);
+        let child = (child)(&mut parent)?;
         Ok(Self {
             _parent: parent,
             child,
@@ -240,8 +344,8 @@ impl<T, U> BorrowExtenderMut<T, U> {
     }
 
     pub fn maybe_new<V: FnOnce(&mut T) -> Option<U>>(parent: T, child: V) -> Option<Self> {
-        let mut parent = Box::pin(parent);
-        let child = (child)(unsafe { parent.as_mut().get_unchecked_mut() })?;
+        let mut parent = Box::new(parent);
+        let child = (child)(&mut parent)?;
         Some(Self {
             _parent: parent,
             child,
@@ -250,10 +354,10 @@ impl<T, U> BorrowExtenderMut<T, U> {
 }
 
 #[cfg(feature = "async")]
-impl<T, U> BorrowExtenderMut<T, U> {
+impl<T, U> BorrowExtenderBox<T, U> {
     pub async fn a_new<F: Future<Output = U>, V: FnOnce(&mut T) -> F>(parent: T, child: V) -> Self {
-        let mut parent = Box::pin(parent);
-        let child = (child)(unsafe { parent.as_mut().get_unchecked_mut() }).await;
+        let mut parent = Box::new(parent);
+        let child = (child)(&mut parent).await;
         Self {
             _parent: parent,
             child,
@@ -264,8 +368,8 @@ impl<T, U> BorrowExtenderMut<T, U> {
         parent: T,
         child: V,
     ) -> Result<Self, W> {
-        let mut parent = Box::pin(parent);
-        let child = (child)(unsafe { parent.as_mut().get_unchecked_mut() }).await?;
+        let mut parent = Box::new(parent);
+        let child = (child)(&mut parent).await?;
         Ok(Self {
             _parent: parent,
             child,
@@ -276,8 +380,8 @@ impl<T, U> BorrowExtenderMut<T, U> {
         parent: T,
         child: V,
     ) -> Option<Self> {
-        let mut parent = Box::pin(parent);
-        let child = (child)(unsafe { parent.as_mut().get_unchecked_mut() }).await?;
+        let mut parent = Box::new(parent);
+        let child = (child)(&mut parent).await?;
         Some(Self {
             _parent: parent,
             child,
@@ -285,43 +389,43 @@ impl<T, U> BorrowExtenderMut<T, U> {
     }
 }
 
-impl<T, U> Deref for BorrowExtenderMut<T, U> {
+impl<T, U> Deref for BorrowExtenderBox<T, U> {
     type Target = U;
     fn deref(&self) -> &Self::Target {
         &self.child
     }
 }
 
-impl<T, U> DerefMut for BorrowExtenderMut<T, U> {
+impl<T, U> DerefMut for BorrowExtenderBox<T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.child
     }
 }
 
-impl<T, U> AsRef<U> for BorrowExtenderMut<T, U> {
+impl<T, U> AsRef<U> for BorrowExtenderBox<T, U> {
     fn as_ref(&self) -> &U {
         &self.child
     }
 }
 
-impl<T, U> AsMut<U> for BorrowExtenderMut<T, U> {
+impl<T, U> AsMut<U> for BorrowExtenderBox<T, U> {
     fn as_mut(&mut self) -> &mut U {
         &mut self.child
     }
 }
 
-impl<T, V, F> BorrowExtenderMut<T, Result<V, F>> {
-    pub fn open_result(self) -> Result<BorrowExtenderMut<T, V>, F> {
-        Ok(BorrowExtenderMut::<T, V> {
+impl<T, V, F> BorrowExtenderBox<T, Result<V, F>> {
+    pub fn open_result(self) -> Result<BorrowExtenderBox<T, V>, F> {
+        Ok(BorrowExtenderBox::<T, V> {
             _parent: self._parent,
             child: self.child?,
         })
     }
 }
 
-impl<T, V> BorrowExtenderMut<T, Option<V>> {
-    pub fn open_option(self) -> Option<BorrowExtenderMut<T, V>> {
-        Some(BorrowExtenderMut::<T, V> {
+impl<T, V> BorrowExtenderBox<T, Option<V>> {
+    pub fn open_option(self) -> Option<BorrowExtenderBox<T, V>> {
+        Some(BorrowExtenderBox::<T, V> {
             _parent: self._parent,
             child: self.child?,
         })

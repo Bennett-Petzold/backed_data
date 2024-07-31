@@ -7,8 +7,9 @@ use std::{
 };
 
 use crate::{
+    array::container::open_mut,
     entry::{sync_impl::BackedEntryMut, BackedEntry},
-    utils::{BorrowExtender, BorrowExtenderMut, BorrowNest, NestDeref},
+    utils::{BorrowExtender, BorrowExtenderBox, BorrowNest, NestDeref},
 };
 
 use super::{
@@ -152,7 +153,7 @@ pub struct BackedArrayGenericIterMut<'a, K: Container + 'a, E: BackedEntryContai
     pos: usize,
     len: usize,
     keys: BorrowExtender<<K as Container>::RefSlice<'a>, Peekable<std::slice::Iter<'a, K::Data>>>,
-    entries: BorrowExtenderMut<<E as Container>::MutSlice<'a>, std::slice::IterMut<'a, E::Data>>,
+    entries: BorrowExtenderBox<<E as Container>::MutSlice<'a>, std::slice::IterMut<'a, E::Data>>,
     // TODO: Rewrite this to be a box of Once or MaybeUninit type
     // Problem with once types is that either a generic needs to be introduced,
     // or this iterator needs to choose between cell/lock tradeoffs.
@@ -181,11 +182,12 @@ impl<'a, K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll>
             let keys = unsafe { transmute::<&K::RefSlice<'_>, &'a K::RefSlice<'a>>(keys) };
             keys.as_ref().iter().peekable()
         });
-        let mut entries = BorrowExtenderMut::new(backed.entries.c_mut(), |ent| {
+
+        let mut entries = BorrowExtenderBox::new(backed.entries.c_mut(), |ent| {
             // The entries reference is valid as long for the life of this
             // struct, which is valid as long as `Self` is valid.
             let ent = unsafe { transmute::<&mut E::MutSlice<'_>, &'a mut E::MutSlice<'a>>(ent) };
-            ent.as_mut().iter_mut()
+            ent.iter_mut()
         });
 
         if let Some(entry) = entries.by_ref().next() {
@@ -355,19 +357,17 @@ impl<K: Container<Data = Range<usize>>, E: BackedEntryContainerNestedAll> Backed
         &mut self,
     ) -> impl Iterator<
         Item = Result<
-            impl AsMut<BackedEntryMut<'_, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>>,
+            impl Deref<Target = BackedEntryMut<'_, BackedEntry<E::OnceWrapper, E::Disk, E::Coder>>>,
             E::ReadError,
         >,
     > {
         self.entries.mut_iter().map(|arr| {
-            let arr = BorrowExtenderMut::new(arr, |arr| {
-                let arr: *mut _ = arr.as_mut().get_mut();
-                unsafe { &mut *arr }
+            // Get AsRef type, keeping the entry itself alive to keep data validity
+            let arr = BorrowExtender::new_mut(arr, |mut arr| {
+                let arr: &mut _ = unsafe { arr.as_mut() }; // Open NonNull
+                open_mut!(arr)
             });
-            BorrowExtenderMut::try_new(arr, |arr| {
-                let arr: *mut _ = arr;
-                unsafe { &mut *arr }.mut_handle()
-            })
+            BorrowExtender::try_new_mut(arr, |mut arr| unsafe { arr.as_mut() }.mut_handle())
         })
     }
 }
