@@ -363,10 +363,7 @@ impl ReadDisk for Mmap {
 /// Wraps a mutable mmap,
 pub struct MmapWriter {
     path: PathBuf,
-    #[cfg(not(target_os = "windows"))]
     mmap: memmap2::MmapMut,
-    #[cfg(target_os = "windows")]
-    mmap: Option<memmap2::MmapMut>,
     written_len: usize,
     reserved_len: usize,
     #[cfg(target_os = "linux")]
@@ -375,51 +372,17 @@ pub struct MmapWriter {
 }
 
 impl MmapWriter {
-    // OS-dependent length reading.
-    //
-    // Windows cannot handle an mmap of length zero, if the file is empty we
-    // cannot read mmap's len.
-    fn get_reserved_len(
-        mmap: &memmap2::MmapMut,
-        #[cfg(target_os = "windows")] file: &File,
-    ) -> std::io::Result<usize> {
-        let len;
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            len = mmap.len();
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            len = if file.metadata()?.len() == 0 {
-                0
-            } else {
-                mmap.len()
-            };
-        }
-
-        Ok(len)
-    }
-
     fn from_args<P: AsRef<Path>>(path: P, mmap: memmap2::MmapMut) -> std::io::Result<Self> {
         #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::Sequential);
         #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateWrite);
 
-        let reserved_len = Self::get_reserved_len(
-            &mmap,
-            #[cfg(target_os = "windows")]
-            &open_mmap(&path)?,
-        )?;
+        let reserved_len = mmap.len();
 
         Ok(MmapWriter {
             path: path.as_ref().to_path_buf(),
-            #[cfg(not(target_os = "windows"))]
             mmap,
-            #[cfg(target_os = "windows")]
-            mmap: Some(mmap),
             written_len: 0,
             reserved_len,
             #[cfg(target_os = "linux")]
@@ -438,18 +401,11 @@ impl MmapWriter {
 
         let mmap = unsafe { MmapOptions::new().map_mut(&file) }?;
 
-        let reserved_len = Self::get_reserved_len(
-            &mmap,
-            #[cfg(target_os = "windows")]
-            &file,
-        )?;
+        let reserved_len = mmap.len();
 
         Ok(MmapWriter {
             path: path.as_ref().to_path_buf(),
-            #[cfg(not(target_os = "windows"))]
             mmap,
-            #[cfg(target_os = "windows")]
-            mmap: Some(mmap),
             written_len: 0,
             reserved_len,
             #[cfg(target_os = "linux")]
@@ -554,13 +510,7 @@ impl MmapWriter {
     /// Extend the underlying file to fit `buf_len` new bytes.
     fn reserve_for(&mut self, buf_len: usize) -> std::io::Result<()> {
         // 8 KiB, matching capacity for `std::io::BufWriter` as of 1.8.0.
-        #[cfg(not(target_os = "windows"))]
         const MIN_RESERVE_LEN: usize = 8 * 1024;
-
-        // Windows (on the GitHub runner at least), crashes with an 8 KiB
-        // reservation.
-        #[cfg(target_os = "windows")]
-        const MIN_RESERVE_LEN: usize = 512;
 
         let remaining_len = self.reserved_len - self.written_len;
         if buf_len > remaining_len {
@@ -570,12 +520,6 @@ impl MmapWriter {
             let new_reservation = self.reserved_len + max(extend_len, MIN_RESERVE_LEN);
 
             let file = self.file()?;
-
-            // Can't resize length under an active memory mapping in Windows
-            #[cfg(target_os = "windows")]
-            {
-                self.mmap = None;
-            }
 
             // Make one big sparse allocation, if the filesystem supports it.
             #[cfg(target_os = "linux")]
@@ -611,25 +555,8 @@ impl MmapWriter {
     /// beyond the length of the file/mapping.
     fn write_data(&mut self, buf: &[u8]) {
         let new_len = self.written_len + buf.len();
-        let mmap;
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            mmap = &mut self.mmap;
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            mmap = self.mmap.as_mut().unwrap();
-        }
-
-        mmap[self.written_len..new_len].copy_from_slice(buf);
+        self.mmap[self.written_len..new_len].copy_from_slice(buf);
         self.written_len = new_len;
-    }
-
-    #[cfg(target_os = "windows")]
-    fn clear_mmap(&mut self) {
-        self.mmap = None;
     }
 
     /// Shrink to the actually written size, discarding garbage at the end.
@@ -640,57 +567,23 @@ impl MmapWriter {
         );
         // Shrink to the actually written size, discarding garbage at the end.
         if self.written_len < self.reserved_len {
-            println!("CLEARING MMAP");
-            // Can't resize length under an active memory mapping in Windows
-            #[cfg(target_os = "windows")]
-            {
-                Self::clear_mmap(std::hint::black_box(self));
-            }
-            println!("CLEARED MMAP");
-
-            println!("SETTING FILE LEN");
-            println!("THIS STRUCT: {:#?}", self);
-            let file = self.file()?;
-            println!("GOT FILE");
-            file.set_len(self.written_len as u64).unwrap();
-            println!("SET FILE LEN");
+            self.file()?.set_len(self.written_len as u64).unwrap();
 
             self.reserved_len = self.written_len;
-            println!("REMAPPING");
             self.remap()?;
-            println!("REMAPPED");
         }
 
         Ok(())
     }
 
     fn get_map(&mut self) -> std::io::Result<memmap2::MmapMut> {
-        println!("Pre-flush self: {:#?}", self);
         self.flush()?;
-        println!("Post-flush self: {:#?}", self);
 
-        let stub_mmap;
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            stub_mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
-        }
-        #[cfg(target_os = "windows")]
-        {
-            stub_mmap = None;
-        }
+        let stub_mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
 
         let map = std::mem::replace(&mut self.mmap, stub_mmap);
 
-        println!("Post replacement self: {:#?}", self);
-        #[cfg(not(target_os = "windows"))]
-        {
-            Ok(map)
-        }
-        #[cfg(target_os = "windows")]
-        {
-            Ok(map.unwrap())
-        }
+        Ok(map)
     }
 
     /// Remap to the current reserved len.
@@ -707,14 +600,7 @@ impl MmapWriter {
 
         #[cfg(not(target_os = "linux"))]
         {
-            #[cfg(not(target_os = "windows"))]
-            {
-                self.mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
-            }
-            #[cfg(target_os = "windows")]
-            {
-                self.mmap = Some(unsafe { MmapOptions::new().map_mut(&self.file()?) }?);
-            }
+            self.mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
         }
 
         Ok(())
@@ -744,18 +630,7 @@ impl Write for MmapWriter {
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.truncate()?;
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            self.mmap.flush()?;
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            self.mmap.as_mut().unwrap().flush()?;
-        }
-
-        Ok(())
+        self.mmap.flush()
     }
 }
 
@@ -780,35 +655,13 @@ impl Drop for MmapWriter {
 
 impl AsRef<[u8]> for MmapWriter {
     fn as_ref(&self) -> &[u8] {
-        let ret;
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            ret = &self.mmap[0..self.written_len];
-        }
-        #[cfg(target_os = "windows")]
-        {
-            ret = &self.mmap.as_ref().unwrap()[0..self.written_len];
-        }
-
-        ret
+        &self.mmap[0..self.written_len]
     }
 }
 
 impl AsMut<[u8]> for MmapWriter {
     fn as_mut(&mut self) -> &mut [u8] {
-        let ret;
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            ret = &mut self.mmap[0..self.written_len];
-        }
-        #[cfg(target_os = "windows")]
-        {
-            ret = &mut self.mmap.as_mut().unwrap()[0..self.written_len];
-        }
-
-        ret
+        &mut self.mmap[0..self.written_len]
     }
 }
 
