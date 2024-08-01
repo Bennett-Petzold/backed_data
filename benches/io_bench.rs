@@ -14,7 +14,7 @@ use backed_data::directory::ZstdDirBackedArray;
 #[cfg(feature = "csv")]
 use backed_data::entry::formats::CsvCoder;
 
-#[cfg(feature = "mmap")]
+#[cfg(mmap_impl)]
 use backed_data::entry::disks::Mmap;
 
 #[cfg(feature = "async")]
@@ -94,12 +94,12 @@ async fn a_create_csv_with_header<P: AsRef<Path>>(
 #[cfg(feature = "csv")]
 create_fn!(parallel create_csv_par, StdDirBackedArray<u8, CsvCoder<Box<[u8]>, u8>>,);
 
-#[cfg(feature = "mmap")]
+#[cfg(mmap_impl)]
 create_fn!(
     create_mmap,
     DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>>,
 );
-#[cfg(feature = "mmap")]
+#[cfg(mmap_impl)]
 create_fn!(
     parallel create_mmap_par,
     DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>>,
@@ -129,7 +129,7 @@ read_dir!(generic read_plainfiles_generic, StdDirBackedArray<u8, BincodeCoder<_>
 read_dir!(read_zstdfiles, ZstdDirBackedArray<0, u8, BincodeCoder<_>>);
 #[cfg(feature = "csv")]
 read_dir!(read_csv, StdDirBackedArray<U8Wrapper, CsvCoder<_, _>>);
-#[cfg(feature = "mmap")]
+#[cfg(mmap_impl)]
 read_dir!(
     read_mmap,
     DirectoryBackedArray<Vec<usize>, Vec<BackedEntryArr<u8, Mmap, BincodeCoder<Box<[u8]>>>>>
@@ -215,7 +215,7 @@ fn file_creation_benches(c: &mut Criterion) {
     });
     log_created_size(&mut path_cell, "Parallel CSV");
 
-    #[cfg(feature = "mmap")]
+    #[cfg(mmap_impl)]
     group.bench_function("create_mmap", |b| {
         b.iter_batched(
             || create_path(&mut path_cell).clone(),
@@ -225,7 +225,7 @@ fn file_creation_benches(c: &mut Criterion) {
     });
     log_created_size(&mut path_cell, "mmap");
 
-    #[cfg(feature = "mmap")]
+    #[cfg(mmap_impl)]
     group.bench_function("create_mmap_parallel", |b| {
         b.iter_batched(
             || create_path(&mut path_cell).clone(),
@@ -351,7 +351,7 @@ fn file_load_benches(c: &mut Criterion) {
         }
     }
 
-    #[cfg(feature = "mmap")]
+    #[cfg(mmap_impl)]
     {
         {
             let path = create_files(create_mmap);
@@ -359,7 +359,7 @@ fn file_load_benches(c: &mut Criterion) {
         }
     }
 
-    #[cfg(feature = "mmap")]
+    #[cfg(mmap_impl)]
     {
         {
             let path = create_files(create_mmap);
