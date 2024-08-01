@@ -626,6 +626,11 @@ impl MmapWriter {
         self.written_len = new_len;
     }
 
+    #[cfg(target_os = "windows")]
+    fn clear_mmap(&mut self) {
+        self.mmap = None;
+    }
+
     /// Shrink to the actually written size, discarding garbage at the end.
     fn truncate(&mut self) -> std::io::Result<()> {
         // Shrink to the actually written size, discarding garbage at the end.
@@ -633,10 +638,8 @@ impl MmapWriter {
             // Can't resize length under an active memory mapping in Windows
             #[cfg(target_os = "windows")]
             {
-                self.mmap = None;
+                std::hint::black_box(self.clear_mmap());
             }
-
-            println!("MMAP VALUE: {:#?}", self.mmap);
 
             self.file()?.set_len(self.written_len as u64)?;
 
