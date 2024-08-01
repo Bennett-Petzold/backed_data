@@ -560,7 +560,7 @@ impl MmapWriter {
         // Windows (on the GitHub runner at least), crashes with an 8 KiB
         // reservation.
         #[cfg(target_os = "windows")]
-        const MIN_RESERVE_LEN: usize = 1024;
+        const MIN_RESERVE_LEN: usize = 512;
 
         let remaining_len = self.reserved_len - self.written_len;
         if buf_len > remaining_len {
