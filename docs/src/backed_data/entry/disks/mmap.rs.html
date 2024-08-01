@@ -949,6 +949,8 @@
 <a href="#949" id="949">949</a>
 <a href="#950" id="950">950</a>
 <a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
@@ -1586,6 +1588,8 @@
             </span>{
                 <span class="self">self</span>.mmap = <span class="prelude-val">None</span>;
             }
+
+            <span class="macro">println!</span>(<span class="string">"MMAP VALUE: {:#?}"</span>, <span class="self">self</span>.mmap);
 
             <span class="self">self</span>.file()<span class="question-mark">?</span>.set_len(<span class="self">self</span>.written_len <span class="kw">as </span>u64)<span class="question-mark">?</span>;
 
