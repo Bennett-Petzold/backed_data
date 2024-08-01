@@ -951,6 +951,9 @@
 <a href="#951" id="951">951</a>
 <a href="#952" id="952">952</a>
 <a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     fs::File,
@@ -1579,6 +1582,11 @@
         <span class="self">self</span>.written_len = new_len;
     }
 
+    <span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
+    </span><span class="kw">fn </span>clear_mmap(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="self">self</span>.mmap = <span class="prelude-val">None</span>;
+    }
+
     <span class="doccomment">/// Shrink to the actually written size, discarding garbage at the end.
     </span><span class="kw">fn </span>truncate(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
         <span class="comment">// Shrink to the actually written size, discarding garbage at the end.
@@ -1586,10 +1594,8 @@
             <span class="comment">// Can't resize length under an active memory mapping in Windows
             </span><span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
             </span>{
-                <span class="self">self</span>.mmap = <span class="prelude-val">None</span>;
+                std::hint::black_box(<span class="self">self</span>.clear_mmap());
             }
-
-            <span class="macro">println!</span>(<span class="string">"MMAP VALUE: {:#?}"</span>, <span class="self">self</span>.mmap);
 
             <span class="self">self</span>.file()<span class="question-mark">?</span>.set_len(<span class="self">self</span>.written_len <span class="kw">as </span>u64)<span class="question-mark">?</span>;
 
