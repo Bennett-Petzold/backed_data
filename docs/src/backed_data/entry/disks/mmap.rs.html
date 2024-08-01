@@ -1533,7 +1533,7 @@
         <span class="comment">// Windows (on the GitHub runner at least), crashes with an 8 KiB
         // reservation.
         </span><span class="attr">#[cfg(target_os = <span class="string">"windows"</span>)]
-        </span><span class="kw">const </span>MIN_RESERVE_LEN: usize = <span class="number">1024</span>;
+        </span><span class="kw">const </span>MIN_RESERVE_LEN: usize = <span class="number">512</span>;
 
         <span class="kw">let </span>remaining_len = <span class="self">self</span>.reserved_len - <span class="self">self</span>.written_len;
         <span class="kw">if </span>buf_len &gt; remaining_len {
