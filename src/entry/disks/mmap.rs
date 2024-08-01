@@ -638,7 +638,7 @@ impl MmapWriter {
             // Can't resize length under an active memory mapping in Windows
             #[cfg(target_os = "windows")]
             {
-                std::hint::black_box(self.clear_mmap());
+                Self::clear_mmap(std::hint::black_box(&mut self));
             }
 
             self.file()?.set_len(self.written_len as u64)?;
