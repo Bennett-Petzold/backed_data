@@ -1625,7 +1625,7 @@
             <span class="macro">println!</span>(<span class="string">"THIS STRUCT: {:#?}"</span>, <span class="self">self</span>);
             <span class="kw">let </span>file = <span class="self">self</span>.file()<span class="question-mark">?</span>;
             <span class="macro">println!</span>(<span class="string">"GOT FILE"</span>);
-            file.set_len(<span class="self">self</span>.written_len <span class="kw">as </span>u64)<span class="question-mark">?</span>;
+            file.set_len(<span class="self">self</span>.written_len <span class="kw">as </span>u64).unwrap();
             <span class="macro">println!</span>(<span class="string">"SET FILE LEN"</span>);
 
             <span class="self">self</span>.reserved_len = <span class="self">self</span>.written_len;
