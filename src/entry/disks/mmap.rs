@@ -649,7 +649,10 @@ impl MmapWriter {
             println!("CLEARED MMAP");
 
             println!("SETTING FILE LEN");
-            self.file()?.set_len(self.written_len as u64)?;
+            println!("THIS STRUCT: {:#?}", self);
+            let file = self.file()?;
+            println!("GOT FILE");
+            file.set_len(self.written_len as u64)?;
             println!("SET FILE LEN");
 
             self.reserved_len = self.written_len;
