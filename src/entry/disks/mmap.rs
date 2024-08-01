@@ -636,6 +636,8 @@ impl MmapWriter {
                 self.mmap = None;
             }
 
+            println!("MMAP VALUE: {:#?}", self.mmap);
+
             self.file()?.set_len(self.written_len as u64)?;
 
             self.reserved_len = self.written_len;
