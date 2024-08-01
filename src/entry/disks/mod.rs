@@ -58,9 +58,9 @@ mod network;
 #[cfg(feature = "network")]
 pub use network::{default_client, Network};
 
-#[cfg(feature = "mmap")]
+#[cfg(all(feature = "mmap", not(target_os = "windows")))]
 mod mmap;
-#[cfg(feature = "mmap")]
+#[cfg(all(feature = "mmap", not(target_os = "windows")))]
 pub use mmap::Mmap;
 
 #[cfg(runtime)]
