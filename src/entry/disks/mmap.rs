@@ -652,9 +652,9 @@ impl MmapWriter {
     }
 
     fn get_map(&mut self) -> std::io::Result<memmap2::MmapMut> {
-        println!("Pre-flush self: {:#?}");
+        println!("Pre-flush self: {:#?}", self);
         self.flush()?;
-        println!("Post-flush self: {:#?}");
+        println!("Post-flush self: {:#?}", self);
 
         let stub_mmap;
 
@@ -669,7 +669,7 @@ impl MmapWriter {
 
         let map = std::mem::replace(&mut self.mmap, stub_mmap);
 
-        println!("Post replacement self: {:#?}");
+        println!("Post replacement self: {:#?}", self);
         #[cfg(not(target_os = "windows"))]
         {
             Ok(map)
