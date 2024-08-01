@@ -61,6 +61,7 @@ impl SwitchingMmap {
             Self::EmptyFile => Ok(Self::EmptyFile),
             Self::ReadMmap(x) => Ok(Self::ReadMmap(x)),
             Self::WriteMmap(mut x) => {
+                x.flush()?;
                 let mmap = x.get_map()?.make_read_only()?;
                 #[cfg(target_os = "linux")]
                 let _ = mmap.advise(Advice::PopulateRead);
@@ -638,7 +639,7 @@ impl MmapWriter {
             // Can't resize length under an active memory mapping in Windows
             #[cfg(target_os = "windows")]
             {
-                Self::clear_mmap(std::hint::black_box(&mut self));
+                Self::clear_mmap(std::hint::black_box(self));
             }
 
             self.file()?.set_len(self.written_len as u64)?;
