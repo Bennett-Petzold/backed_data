@@ -30,7 +30,7 @@ pub trait AsyncDecoder<Source: ?Sized + AsyncRead> {
 #[cfg(feature = "async")]
 pub trait AsyncEncoder<Target: ?Sized + AsyncWrite>: Unpin {
     type Error: From<std::io::Error>;
-    type T: Serialize + Send + Sync;
+    type T: ?Sized + Serialize + Send + Sync;
     fn encode(
         &self,
         data: &Self::T,
