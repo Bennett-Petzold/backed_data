@@ -17,6 +17,7 @@ use super::{AsyncReadDisk, AsyncWriteDisk};
 /// Large collections of [`BackedEntry`](`super::super::BackedEntry`)s would otherwise risk overwhelming
 /// OS limts on the number of open file descriptors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Plainfile {
     /// File location.
     path: PathBuf,
