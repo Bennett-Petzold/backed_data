@@ -1,6 +1,8 @@
 use std::{
     cmp::min,
-    io::{Read, Write},
+    future::Future,
+    io::{Cursor, ErrorKind, Read, Write},
+    marker::PhantomData,
     pin::Pin,
     sync::{
         mpsc::{channel, Receiver, Sender},
@@ -9,12 +11,15 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-use futures::{AsyncBufRead, AsyncRead, AsyncWrite};
+use futures::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use serde::Serialize;
 
 use crate::utils::blocking::BlockingFn;
 
-use super::disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk};
+use super::{
+    disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
+    formats::{AsyncDecoder, AsyncEncoder, Decoder, Encoder},
+};
 
 /// Adapts a synchronous disk to be asynchronous.
 ///
@@ -333,6 +338,10 @@ impl<W: Write> BlockingFn for SyncAsAsyncWriteBg<W> {
                             Ok(advance) => {
                                 pos += advance;
                             }
+                            // Just retry if the error is valid under async
+                            Err(error)
+                                if [ErrorKind::WouldBlock, ErrorKind::Interrupted]
+                                    .contains(&error.kind()) => {}
                             Err(error) => {
                                 let retry_wait = Arc::new(Condvar::new());
                                 self.status_tx
@@ -509,5 +518,100 @@ where
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
         SyncAsAsyncWrite::new(&self.inner, &self.handle, self.write_buffer_min_size)
+    }
+}
+
+/// Adapts a synchronous coder to be asynchronous.
+///
+/// The function handle is used to spawn `coder`'s (de)serialization on another
+/// thread.
+#[derive(Debug, Clone)]
+pub struct SyncCoderAsyncDisk<C, D, F, DR, ER> {
+    coder: C,
+    handle: F,
+    _phantom: (PhantomData<D>, PhantomData<DR>, PhantomData<ER>),
+}
+
+/// [`BlockingFn`] that runs a synchronous decoder.
+#[derive(Debug)]
+pub struct DecodeBg<D> {
+    decoder: D,
+    bytes: Cursor<Vec<u8>>,
+}
+
+impl<D> BlockingFn for DecodeBg<D>
+where
+    D: Decoder<Cursor<Vec<u8>>>,
+{
+    type Output = Result<D::T, D::Error>;
+    fn call(mut self) -> Self::Output {
+        self.decoder.decode(&mut self.bytes)
+    }
+}
+
+impl<C, D, F, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsyncDisk<C, D, F, DR, ER>
+where
+    C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Clone + Sync + Send,
+    D: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
+    F: Fn(DecodeBg<C>) -> DR + Sync + Send,
+    DR: Future<Output = Result<C::T, C::Error>> + Sync + Send,
+    ER: Sync + Send,
+{
+    type Error = C::Error;
+    type T = C::T;
+
+    async fn decode(&self, source: &mut D::ReadDisk) -> Result<Self::T, Self::Error> {
+        let mut buffer = Vec::new();
+        source.read_to_end(&mut buffer).await?;
+        (self.handle)(DecodeBg {
+            decoder: self.coder.clone(),
+            bytes: Cursor::new(buffer),
+        })
+        .await
+    }
+}
+
+/// [`BlockingFn`] that runs a synchronous encoder.
+#[derive(Debug)]
+pub struct EncodeBg<E: Encoder<Vec<u8>>> {
+    encoder: E,
+    data: E::T,
+}
+
+impl<E> BlockingFn for EncodeBg<E>
+where
+    E: Encoder<Vec<u8>, T: Sized>,
+{
+    type Output = Result<Vec<u8>, E::Error>;
+    fn call(self) -> Self::Output {
+        let mut bytes = Vec::new();
+        self.encoder.encode(&self.data, &mut bytes)?;
+        Ok(bytes)
+    }
+}
+
+impl<C, D, F, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsyncDisk<C, D, F, DR, ER>
+where
+    C: Encoder<Vec<u8>, T: Sync + Send + Sized + Clone> + Clone + Sync + Send + Unpin,
+    D: AsyncWriteDisk<WriteDisk: Sync + Send> + Sync + Send + Unpin,
+    F: Fn(EncodeBg<C>) -> ER + Sync + Send + Unpin,
+    DR: Sync + Send + Unpin,
+    ER: Future<Output = Result<Vec<u8>, C::Error>> + Sync + Send + Unpin,
+{
+    type Error = C::Error;
+    type T = C::T;
+
+    async fn encode(&self, data: &Self::T, target: &mut D::WriteDisk) -> Result<(), Self::Error> {
+        let encoded = (self.handle)(EncodeBg {
+            encoder: self.coder.clone(),
+            data: data.clone(),
+        })
+        .await?;
+
+        target.write_all(&encoded).await?;
+        target.flush().await?;
+        target.close().await?;
+
+        Ok(())
     }
 }
