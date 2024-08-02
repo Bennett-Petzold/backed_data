@@ -15,6 +15,11 @@ pub use sync_impl::*;
 pub mod disks;
 pub mod formats;
 
+#[cfg(feature = "async")]
+pub mod adapters;
+#[cfg(feature = "async")]
+pub use adapters::SyncAsAsync;
+
 /// Entry kept on some backing storage, loaded into memory on request.
 ///
 /// Use a heap pointer type or [`BackedEntryBox`], otherwise this will occupy
