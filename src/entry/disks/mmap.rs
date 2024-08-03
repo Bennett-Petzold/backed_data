@@ -1,9 +1,10 @@
 use std::{
+    cell::UnsafeCell,
     cmp::max,
     fs::File,
     io::{Cursor, ErrorKind, Write},
     mem::transmute,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
 };
@@ -21,16 +22,7 @@ use crate::utils::BorrowExtender;
 
 use super::{ReadDisk, WriteDisk};
 
-// ---------- Internal types ---------- //
-
-#[derive(Debug)]
-pub enum SwitchingMmap {
-    EmptyFile,
-    ReadMmap(memmap2::Mmap),
-    WriteMmap(MmapWriter),
-}
-
-fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+fn open_mmap_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
     let f = File::options()
         .read(true)
         .write(true)
@@ -41,95 +33,59 @@ fn open_mmap<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
     Ok(f)
 }
 
-impl SwitchingMmap {
-    fn init_read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = open_mmap(path)?;
-
-        if file.metadata()?.len() == 0 {
-            return Ok(Self::EmptyFile);
-        }
-
-        let mmap = unsafe { MmapOptions::new().map(&file) }?;
-        #[cfg(target_os = "linux")]
-        let _ = mmap.advise(Advice::PopulateRead);
-
-        Ok(Self::ReadMmap(mmap))
-    }
-
-    fn conv_to_read(self) -> std::io::Result<Self> {
-        match self {
-            Self::EmptyFile => Ok(Self::EmptyFile),
-            Self::ReadMmap(x) => Ok(Self::ReadMmap(x)),
-            Self::WriteMmap(mut x) => {
-                x.flush()?;
-                let mmap = x.get_map()?.make_read_only()?;
-                #[cfg(target_os = "linux")]
-                let _ = mmap.advise(Advice::PopulateRead);
-
-                Ok(Self::ReadMmap(mmap))
-            }
-        }
-    }
-
-    fn conv_to_write<P: AsRef<Path>>(self, path: P) -> std::io::Result<Self> {
-        match self {
-            Self::EmptyFile => Ok(Self::WriteMmap(MmapWriter::no_advise(path)?)),
-            Self::ReadMmap(x) => Ok(Self::WriteMmap(MmapWriter::from_args(path, x.make_mut()?)?)),
-            Self::WriteMmap(x) => Ok(Self::WriteMmap(x)),
-        }
-    }
+/// Read-only [`memmap2::Mmap`] that handles zero-length on Windows.
+#[derive(Debug)]
+pub enum ReadMmap {
+    Empty,
+    NonEmpty(memmap2::Mmap),
 }
 
-impl AsRef<[u8]> for SwitchingMmap {
+impl AsRef<[u8]> for ReadMmap {
     fn as_ref(&self) -> &[u8] {
         match self {
-            Self::EmptyFile => &[],
-            Self::ReadMmap(x) => x.as_ref(),
-            Self::WriteMmap(x) => x.as_ref(),
+            Self::Empty => &[],
+            Self::NonEmpty(x) => x.as_ref(),
         }
     }
 }
 
-impl Write for SwitchingMmap {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+impl Deref for ReadMmap {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
         match self {
-            Self::EmptyFile => Err(std::io::Error::new(
-                ErrorKind::Other,
-                "Cannot write to an empty mmap",
-            )),
-            Self::ReadMmap(_) => Err(std::io::Error::new(
-                ErrorKind::Other,
-                "Cannot write to ReadMmap",
-            )),
-            Self::WriteMmap(x) => x.write(buf),
-        }
-    }
-
-    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
-        match self {
-            Self::EmptyFile => Err(std::io::Error::new(
-                ErrorKind::Other,
-                "Cannot write to an empty mmap",
-            )),
-            Self::ReadMmap(_) => Err(std::io::Error::new(
-                ErrorKind::Other,
-                "Cannot write to ReadMmap",
-            )),
-            Self::WriteMmap(x) => x.write_vectored(bufs),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Self::EmptyFile => Ok(()),
-            Self::ReadMmap(_) => Ok(()),
-            Self::WriteMmap(x) => x.flush(),
+            Self::Empty => &[],
+            Self::NonEmpty(x) => x.as_ref(),
         }
     }
 }
+
+impl ReadMmap {
+    #[cfg(target_os = "linux")]
+    pub fn advise(&self, advice: memmap2::Advice) -> std::io::Result<()> {
+        if let Self::NonEmpty(mmap) = self {
+            mmap.advise(advice)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn new_arc<P: AsRef<Path>>(path: P) -> std::io::Result<Arc<Self>> {
+        let file = open_mmap_file(path)?;
+
+        let mmap = if file.metadata()?.len() == 0 {
+            Self::Empty
+        } else {
+            Self::NonEmpty(unsafe { MmapOptions::new().map(&file) }?)
+        };
+
+        Ok(Arc::new(mmap))
+    }
+}
+
+// ---------- Internal types ---------- //
 
 #[derive(Debug)]
-pub struct ReadMmapGuard(BorrowExtender<Arc<GuardedMmap>, RwLockReadGuard<'static, SwitchingMmap>>);
+pub struct ReadMmapGuard(Arc<ReadMmap>);
 
 impl AsRef<[u8]> for ReadMmapGuard {
     fn as_ref(&self) -> &[u8] {
@@ -138,146 +94,218 @@ impl AsRef<[u8]> for ReadMmapGuard {
 }
 
 impl Deref for ReadMmapGuard {
-    type Target = SwitchingMmap;
+    type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0.deref()
     }
 }
 
+/// This is always issued so that the MmapWriter access is unique.
 #[derive(Debug)]
-pub struct WriteMmapGuard(
-    BorrowExtender<Arc<GuardedMmap>, RwLockWriteGuard<'static, SwitchingMmap>>,
-);
+pub struct WriteMmapGuard(Arc<WriteMmap>);
 
 impl AsRef<[u8]> for WriteMmapGuard {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        let this = unsafe { &*self.0.get() };
+        this.as_ref()
+    }
+}
+
+impl AsMut<[u8]> for WriteMmapGuard {
+    fn as_mut(&mut self) -> &mut [u8] {
+        let this = unsafe { &mut *self.0.get() };
+        this.as_mut()
     }
 }
 
 impl Deref for WriteMmapGuard {
-    type Target = SwitchingMmap;
+    type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.as_ref()
+    }
+}
+
+impl DerefMut for WriteMmapGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut()
     }
 }
 
 impl Write for WriteMmapGuard {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)
+        let this = unsafe { &mut *self.0.get() };
+        this.write(buf)
     }
     fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
-        self.0.write_vectored(bufs)
+        let this = unsafe { &mut *self.0.get() };
+        this.write_vectored(bufs)
     }
     fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()
+        let this = unsafe { &mut *self.0.get() };
+        this.flush()
     }
 }
+
+/// Adding [`Send`] and [`Sync`] to [`UnsafeCell`] on [`MmapWriter`].
+///
+/// The `!Send + !Sync` bounds are just a lint from the standard library, not
+/// actual unsafety.
+#[derive(Debug)]
+pub struct WriteMmap(UnsafeCell<MmapWriter>);
+
+impl From<WriteMmap> for UnsafeCell<MmapWriter> {
+    fn from(val: WriteMmap) -> Self {
+        val.0
+    }
+}
+
+impl From<MmapWriter> for WriteMmap {
+    fn from(value: MmapWriter) -> Self {
+        Self(UnsafeCell::new(value))
+    }
+}
+
+impl WriteMmap {
+    pub fn into_inner(self) -> MmapWriter {
+        self.0.into_inner()
+    }
+
+    pub fn get(&self) -> *mut MmapWriter {
+        self.0.get()
+    }
+}
+
+unsafe impl Send for WriteMmap {}
+unsafe impl Sync for WriteMmap {}
 
 /// Guards an inner mmap to match Rust mutability requirements.
 ///
-/// Allows >= 1 outstanding mmap instances for immutable access via read locks,
-/// 1 outstanding mmap instance for mutable access via a write lock, or
-/// no outstanding accesses.
-///
-/// `access_lock` is claimed for the full duration of methods getting a read
-/// or write handle, so [`Self::get_read`] can transition from a read to write
-/// access without another thread potentially claiming a lock inbetween.
-#[derive(Debug)]
-struct GuardedMmap {
-    inner: RwLock<SwitchingMmap>,
-    access_lock: Mutex<()>,
+/// Allows >= 1 outstanding mmap instances for immutable access, 1 outstanding
+/// mmap instance for mutable access via a write lock, or no outstanding
+/// accesses.
+#[derive(Debug, Clone)]
+pub enum SwitchingMmap {
+    /// Previously failed irrecoverably, so no mmap in memory.
+    Invalid,
+    ReadMmap(Arc<ReadMmap>),
+    WriteMmap(Arc<WriteMmap>),
 }
 
-impl GuardedMmap {
-    fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        Ok(Self {
-            inner: RwLock::new(SwitchingMmap::init_read(path)?),
-            access_lock: Mutex::new(()),
-        })
+impl SwitchingMmap {
+    fn init_read<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        Ok(Self::ReadMmap(ReadMmap::new_arc(path)?))
     }
 
-    /// Fails when an outstanding write is held, or on lock panic.
-    fn get_read<P: AsRef<Path>>(this: Arc<Self>, path: P) -> std::io::Result<ReadMmapGuard> {
-        // Hold exclusive access for getting locks `self.inner` during the
-        // execution of this function.
-        let _access = this
-            .access_lock
-            .lock()
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("{:#?}", e)))?;
-
-        let gen_read_lock = |this: &Arc<Self>| {
-            BorrowExtender::try_new(this.clone(), |this| {
-                let this = this.as_ref();
-                let this = unsafe { transmute::<&GuardedMmap, &'static GuardedMmap>(this) };
-                this.inner.try_read().map_err(|e| match e {
-                    TryLockError::WouldBlock => {
-                        std::io::Error::new(ErrorKind::WouldBlock, "Read lock is unavailable.")
-                    }
-                    x => std::io::Error::new(ErrorKind::Other, format!("{:#?}", x)),
-                })
-            })
+    /// Return self with either a valid guard, or an error.
+    ///
+    /// In the valid guard case, this is the
+    /// [`ReadMmap`](`SwitchingMmap::ReadMmap`) variant. In the error case,
+    /// this may be either [`WriteMmap`](`SwitchingMmap::WriteMmap`) or
+    /// [`Invalid`](`SwitchingMmap::Invalid`).
+    fn read_handle<P: AsRef<Path>>(
+        self,
+        path: P,
+    ) -> Result<(Self, ReadMmapGuard), (Self, std::io::Error)> {
+        let read_ret = |mmap: Arc<ReadMmap>| {
+            let guard = ReadMmapGuard(mmap.clone());
+            Ok((Self::ReadMmap(mmap), guard))
         };
 
-        let read_lock = gen_read_lock(&this)?;
+        match self {
+            Self::WriteMmap(x) => match Arc::try_unwrap(x) {
+                Ok(x) => {
+                    let writer = x.into_inner();
+                    let mmap = Arc::new(if writer.written_len > 0 {
+                        match writer.get_map() {
+                            Ok(map) => match map.make_read_only() {
+                                Ok(read_map) => ReadMmap::NonEmpty(read_map),
+                                Err(e) => {
+                                    return Err((Self::Invalid, e));
+                                }
+                            },
+                            Err((writer, e)) => {
+                                return Err((Self::WriteMmap(Arc::new(writer.into())), e));
+                            }
+                        }
+                    } else {
+                        ReadMmap::Empty
+                    });
 
-        let is_write = matches!(**read_lock, SwitchingMmap::WriteMmap(_));
+                    #[cfg(target_os = "linux")]
+                    let _ = mmap.advise(Advice::PopulateRead);
 
-        if is_write {
-            drop(read_lock);
-            let write_lock = this.inner.write();
-
-            match write_lock {
-                Ok(mut mmap) => {
-                    let temp_mmap = std::mem::replace(
-                        &mut *mmap,
-                        SwitchingMmap::ReadMmap(unsafe {
-                            MmapOptions::new().map(&open_mmap(&path)?)?
-                        }),
-                    );
-                    *mmap = temp_mmap.conv_to_read()?;
-
-                    drop(mmap);
-                    Ok(ReadMmapGuard(gen_read_lock(&this)?))
+                    read_ret(mmap)
                 }
-                Err(e) => Err(std::io::Error::new(ErrorKind::Other, format!("{:#?}", e))),
-            }
-        } else {
-            Ok(ReadMmapGuard(read_lock))
+                Err(arc) => Err((
+                    Self::WriteMmap(arc),
+                    std::io::Error::new(ErrorKind::Other, "A read handle is currently open"),
+                )),
+            },
+            Self::ReadMmap(x) => read_ret(x),
+            Self::Invalid => match ReadMmap::new_arc(path) {
+                Ok(x) => read_ret(x),
+                Err(e) => Err((Self::Invalid, e)),
+            },
         }
     }
 
-    /// Fails when an outstanding write is held, or on lock panic.
-    fn get_write<P: AsRef<Path>>(this: Arc<Self>, path: P) -> std::io::Result<WriteMmapGuard> {
-        // Hold exclusive access for getting locks `self.inner` during the
-        // execution of this function.
-        let _access = this
-            .access_lock
-            .lock()
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("{:#?}", e)))?;
-
-        let mut write_lock = BorrowExtender::try_new(this.clone(), |this| {
-            let this = this.as_ref();
-            let this = unsafe { transmute::<&GuardedMmap, &'static GuardedMmap>(this) };
-            this.inner.try_write().map_err(|e| match e {
-                TryLockError::WouldBlock => {
-                    std::io::Error::new(ErrorKind::WouldBlock, "Write lock is unavailable.")
+    /// Return self with either a valid guard, or an error.
+    ///
+    /// In the valid guard case, this is the
+    /// [`WriteMmap`](`SwitchingMmap::WriteMmap`) variant. In the error case,
+    /// this may be either [`ReadMmap`](`SwitchingMmap::ReadMmap`) or
+    /// [`Invalid`](`SwitchingMmap::Invalid`).
+    fn write_handle<P: AsRef<Path>>(
+        self,
+        path: P,
+    ) -> Result<(Self, WriteMmapGuard), (Self, std::io::Error)> {
+        let writer = match self {
+            Self::WriteMmap(x) => match Arc::try_unwrap(x) {
+                Ok(mmap) => mmap,
+                Err(arc) => {
+                    return Err((
+                        Self::WriteMmap(arc),
+                        std::io::Error::new(ErrorKind::Other, "A write handle is currently open"),
+                    ));
                 }
-                x => std::io::Error::new(ErrorKind::Other, format!("{:#?}", x)),
-            })
-        })?;
+            },
+            Self::ReadMmap(x) => match Arc::try_unwrap(x) {
+                Ok(mmap) => match mmap {
+                    ReadMmap::NonEmpty(read_mmap) => match read_mmap
+                        .make_mut()
+                        .and_then(|write_mmap| MmapWriter::from_args(path, write_mmap))
+                    {
+                        Ok(write_mmap) => write_mmap.into(),
+                        Err(e) => {
+                            return Err((Self::Invalid, e));
+                        }
+                    },
+                    ReadMmap::Empty => match MmapWriter::no_advise(path) {
+                        Ok(mmap) => mmap.into(),
+                        Err(e) => {
+                            return Err((Self::Invalid, e));
+                        }
+                    },
+                },
+                Err(arc) => {
+                    return Err((
+                        Self::ReadMmap(arc),
+                        std::io::Error::new(ErrorKind::Other, "A read handle is currently open"),
+                    ));
+                }
+            },
+            Self::Invalid => match MmapWriter::no_advise(path) {
+                Ok(mmap) => mmap.into(),
+                Err(e) => {
+                    return Err((Self::Invalid, e));
+                }
+            },
+        };
 
-        let is_read = !matches!(**write_lock, SwitchingMmap::WriteMmap(_));
+        let writer = Arc::new(writer);
 
-        if is_read {
-            let temp_mmap = std::mem::replace(
-                &mut **write_lock,
-                SwitchingMmap::WriteMmap(MmapWriter::no_advise(&path)?),
-            );
-            **write_lock = temp_mmap.conv_to_write(path)?;
-        }
-
-        Ok(WriteMmapGuard(write_lock))
+        let guard = WriteMmapGuard(writer.clone());
+        Ok((Self::WriteMmap(writer), guard))
     }
 }
 
@@ -292,7 +320,7 @@ impl GuardedMmap {
 pub struct Mmap {
     /// File location.
     path: PathBuf,
-    mmap: Arc<GuardedMmap>,
+    mmap: Mutex<SwitchingMmap>,
 }
 
 // ---------- Serde impls ---------- //
@@ -312,7 +340,7 @@ impl<'de> Deserialize<'de> for Mmap {
         D: serde::Deserializer<'de>,
     {
         let path = PathBuf::deserialize(deserializer)?;
-        let mmap = GuardedMmap::new(&path)
+        let mmap = SwitchingMmap::init_read(&path)
             .map_err(serde::de::Error::custom)?
             .into();
 
@@ -322,12 +350,11 @@ impl<'de> Deserialize<'de> for Mmap {
 
 // ---------- END Serde impls ---------- //
 
-impl From<PathBuf> for Mmap {
-    fn from(value: PathBuf) -> Self {
-        let mmap = GuardedMmap::new(&value)
-            .unwrap_or_else(|_| panic!("Path could not be opened through mmap: {:#?}", &value))
-            .into();
-        Self { path: value, mmap }
+impl TryFrom<PathBuf> for Mmap {
+    type Error = std::io::Error;
+    fn try_from(value: PathBuf) -> std::io::Result<Self> {
+        let mmap = SwitchingMmap::init_read(&value)?.into();
+        Ok(Self { path: value, mmap })
     }
 }
 
@@ -344,8 +371,8 @@ impl AsRef<Path> for Mmap {
 }
 
 impl Mmap {
-    pub fn new(path: PathBuf) -> Self {
-        path.into()
+    pub fn new(path: PathBuf) -> std::io::Result<Self> {
+        path.try_into()
     }
 }
 
@@ -353,9 +380,20 @@ impl ReadDisk for Mmap {
     type ReadDisk = Cursor<ReadMmapGuard>;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        let mmap = GuardedMmap::get_read(self.mmap.clone(), &self.path)?;
+        // Shuffle out the current mmap value to replace later.
+        let mut held_mmap = self.mmap.lock().unwrap();
+        let cur_mmap = std::mem::replace(&mut *held_mmap, SwitchingMmap::Invalid);
 
-        Ok(Cursor::new(mmap))
+        match cur_mmap.read_handle(&self.path) {
+            Ok((mmap, guard)) => {
+                *held_mmap = mmap;
+                Ok(Cursor::new(guard))
+            }
+            Err((mmap, error)) => {
+                *held_mmap = mmap;
+                Err(error)
+            }
+        }
     }
 }
 
@@ -391,7 +429,7 @@ impl MmapWriter {
     }
 
     fn no_advise<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = open_mmap(&path)?;
+        let file = open_mmap_file(&path)?;
 
         // If the file is empty, we need to push in a garbage byte for mmap to
         // succeed.
@@ -414,7 +452,7 @@ impl MmapWriter {
     }
 
     fn file(&self) -> std::io::Result<File> {
-        open_mmap(&self.path)
+        open_mmap_file(&self.path)
     }
 
     /// Test if a newly `ftruncate`-allocated file as a hole in it, to
@@ -561,11 +599,6 @@ impl MmapWriter {
 
     /// Shrink to the actually written size, discarding garbage at the end.
     fn truncate(&mut self) -> std::io::Result<()> {
-        println!(
-            "CALLING TRUNCATE => written, reserved: {} {}",
-            self.written_len, self.reserved_len
-        );
-        // Shrink to the actually written size, discarding garbage at the end.
         if self.written_len < self.reserved_len {
             self.file()?.set_len(self.written_len as u64).unwrap();
 
@@ -576,14 +609,18 @@ impl MmapWriter {
         Ok(())
     }
 
-    fn get_map(&mut self) -> std::io::Result<memmap2::MmapMut> {
-        self.flush()?;
+    fn get_map(mut self) -> Result<memmap2::MmapMut, (Self, std::io::Error)> {
+        let exec = |this: &mut Self| {
+            this.flush()?;
 
-        let stub_mmap = unsafe { MmapOptions::new().map_mut(&self.file()?) }?;
+            let stub_mmap = unsafe { MmapOptions::new().map_mut(&this.file()?) }?;
 
-        let map = std::mem::replace(&mut self.mmap, stub_mmap);
+            let map = std::mem::replace(&mut this.mmap, stub_mmap);
 
-        Ok(map)
+            Ok(map)
+        };
+
+        exec(&mut self).map_err(|e| (self, e))
     }
 
     /// Remap to the current reserved len.
@@ -636,20 +673,14 @@ impl Write for MmapWriter {
 
 impl Drop for MmapWriter {
     fn drop(&mut self) {
-        if self.written_len > 0 {
-            // Skip if this drop is for an temporary
-            // instance that existed for memory
-            // consistency. Otherwise the truncation can
-            // trigger SIGBUS on later writes.
-            self.truncate().unwrap_or_else(|x| {
-                panic!(
-                    "{} {}\n Error: {:#?}",
-                    "Failed to truncate on drop, call `self.flush` first to avoid",
-                    "using this panicking drop implementation.",
-                    x
-                )
-            })
-        }
+        self.truncate().unwrap_or_else(|x| {
+            panic!(
+                "{} {}\n Error: {:#?}",
+                "Failed to truncate on drop, call `self.flush` first to avoid",
+                "using this panicking drop implementation.",
+                x
+            )
+        })
     }
 }
 
@@ -669,7 +700,20 @@ impl WriteDisk for Mmap {
     type WriteDisk = WriteMmapGuard;
 
     fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        GuardedMmap::get_write(self.mmap.clone(), &self.path)
+        // Shuffle out the current mmap value to replace later.
+        let mut held_mmap = self.mmap.lock().unwrap();
+        let cur_mmap = std::mem::replace(&mut *held_mmap, SwitchingMmap::Invalid);
+
+        match cur_mmap.write_handle(&self.path) {
+            Ok((mmap, guard)) => {
+                *held_mmap = mmap;
+                Ok(guard)
+            }
+            Err((mmap, error)) => {
+                *held_mmap = mmap;
+                Err(error)
+            }
+        }
     }
 }
 
@@ -696,6 +740,7 @@ mod tests {
 
         let mut read_data = Vec::new();
         Mmap::new(temp_file.clone())
+            .unwrap()
             .read_disk()
             .unwrap()
             .read_to_end(&mut read_data)
@@ -715,6 +760,7 @@ mod tests {
 
         let mut read_data = Vec::new();
         Mmap::new(temp_file.clone())
+            .unwrap()
             .read_disk()
             .unwrap()
             .read_to_end(&mut read_data)
@@ -731,6 +777,7 @@ mod tests {
 
         assert_eq!(
             Mmap::new(temp_file.clone())
+                .unwrap()
                 .write_disk()
                 .unwrap()
                 .write(SEQUENCE)
@@ -751,7 +798,7 @@ mod tests {
         let temp_file = temp_dir().join(Uuid::new_v4().to_string());
         let _ = remove_file(&temp_file);
 
-        let mmap = Mmap::new(temp_file.clone());
+        let mmap = Mmap::new(temp_file.clone()).unwrap();
 
         let mut write_disk = mmap.write_disk().unwrap();
         assert_eq!(
@@ -792,7 +839,7 @@ mod tests {
         file_mut.set_len(GARBAGE_LEN as u64).unwrap();
         file_mut.flush().unwrap();
 
-        let mmap = Mmap::new(temp_file.clone());
+        let mmap = Mmap::new(temp_file.clone()).unwrap();
 
         let read_check = |expected| {
             let mut read_data = Vec::new();
