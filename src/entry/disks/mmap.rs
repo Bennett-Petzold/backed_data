@@ -3,10 +3,9 @@ use std::{
     cmp::max,
     fs::File,
     io::{Cursor, ErrorKind, Write},
-    mem::transmute,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
+    sync::{Arc, Mutex},
 };
 
 use memmap2::MmapOptions;
@@ -18,7 +17,6 @@ use memmap2::Advice;
 #[cfg(target_os = "linux")]
 use memmap2::RemapOptions;
 
-use crate::utils::BorrowExtender;
 
 use super::{ReadDisk, WriteDisk};
 
@@ -77,6 +75,9 @@ impl ReadMmap {
         } else {
             Self::NonEmpty(unsafe { MmapOptions::new().map(&file) }?)
         };
+
+        #[cfg(target_family = "unix")]
+        let _ = mmap.advise(Advice::PopulateRead);
 
         Ok(Arc::new(mmap))
     }
@@ -238,7 +239,7 @@ impl SwitchingMmap {
                 }
                 Err(arc) => Err((
                     Self::WriteMmap(arc),
-                    std::io::Error::new(ErrorKind::Other, "A read handle is currently open"),
+                    std::io::Error::new(ErrorKind::Other, "A write handle is currently open"),
                 )),
             },
             Self::ReadMmap(x) => read_ret(x),
@@ -376,8 +377,10 @@ impl Mmap {
     }
 }
 
+pub type ReadMmapCursor = Cursor<ReadMmapGuard>;
+
 impl ReadDisk for Mmap {
-    type ReadDisk = Cursor<ReadMmapGuard>;
+    type ReadDisk = ReadMmapCursor;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
         // Shuffle out the current mmap value to replace later.
@@ -411,8 +414,6 @@ pub struct MmapWriter {
 
 impl MmapWriter {
     fn from_args<P: AsRef<Path>>(path: P, mmap: memmap2::MmapMut) -> std::io::Result<Self> {
-        #[cfg(target_os = "linux")]
-        let _ = mmap.advise(Advice::Sequential);
         #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateWrite);
 
@@ -577,12 +578,10 @@ impl MmapWriter {
                 self.reserved_len = new_reservation;
             }
 
-            // Increase mapping size to file size and re-advise.
+            // Increase mapping size to file size.
             // Don't advise write, as that may produce an arbitrarily long
             // load (especially if a huge sparse file is allocated).
             self.remap()?;
-            #[cfg(target_family = "unix")]
-            let _ = self.mmap.advise(Advice::Sequential);
         }
         Ok(())
     }
