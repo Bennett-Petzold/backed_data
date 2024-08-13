@@ -158,6 +158,21 @@ name = "shakespeare_secret"
 path = "examples/shakespeare_secret.rs"
 required-features = ["bincode", "encrypted"]
 
+[[example]]
+name = "mmap"
+path = "examples/mmap.rs"
+required-features = ["mmap"]
+
+[[example]]
+name = "async_mmap"
+path = "examples/async_mmap.rs"
+required-features = ["mmap", "async"]
+
+[[example]]
+name = "async_simd"
+path = "examples/async_simd.rs"
+required-features = ["simd_json", "async"]
+
 [profile.bench]
 debug = true
 

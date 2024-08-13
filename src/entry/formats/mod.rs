@@ -1,24 +1,21 @@
-use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "async")]
-use futures::io::{AsyncRead, AsyncWrite};
 
-pub trait Decoder<Source: ?Sized + Read> {
+pub trait Decoder<Source: ?Sized> {
     type Error: From<std::io::Error>;
     type T: for<'de> Deserialize<'de> + ?Sized;
     fn decode(&self, source: &mut Source) -> Result<Self::T, Self::Error>;
 }
 
-pub trait Encoder<Target: ?Sized + Write> {
+pub trait Encoder<Target: ?Sized> {
     type Error: From<std::io::Error>;
     type T: Serialize + ?Sized;
     fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error>;
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncDecoder<Source: ?Sized + AsyncRead> {
+pub trait AsyncDecoder<Source: ?Sized> {
     type Error: From<std::io::Error>;
     type T: for<'de> Deserialize<'de> + Send + Sync;
     fn decode(
@@ -28,7 +25,7 @@ pub trait AsyncDecoder<Source: ?Sized + AsyncRead> {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncEncoder<Target: ?Sized + AsyncWrite>: Unpin {
+pub trait AsyncEncoder<Target: ?Sized>: Unpin {
     type Error: From<std::io::Error>;
     type T: ?Sized + Serialize + Send + Sync;
     fn encode(
