@@ -17,6 +17,9 @@ use crate::entry::BackedEntryAsync;
 pub mod async_impl;
 pub mod sync_impl;
 
+mod err;
+pub use err::*;
+
 const META_FILE: &str = "meta.dat";
 
 /// [`BackedArray`] wrapper for automatically creating new entries in a

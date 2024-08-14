@@ -1,6 +1,4 @@
-
 use serde::{Deserialize, Serialize};
-
 
 pub trait Decoder<Source: ?Sized> {
     type Error: From<std::io::Error>;

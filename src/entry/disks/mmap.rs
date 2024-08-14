@@ -17,7 +17,6 @@ use memmap2::Advice;
 #[cfg(target_os = "linux")]
 use memmap2::RemapOptions;
 
-
 use super::{ReadDisk, WriteDisk};
 
 fn open_mmap_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {

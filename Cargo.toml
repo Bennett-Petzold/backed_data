@@ -100,6 +100,7 @@ uuid = { version = "1.8.0", features = ["v4"], optional = true }
 http-serde = { version = "2.1.1", optional = true }
 cfg-if = { version = "1.0.0", optional = true }
 nix = "0.29.0"
+thiserror = "1.0.63"
 
 # Linux OS call dependency, used for mmap
 [target.'cfg(target_os = "linux")'.dependencies]

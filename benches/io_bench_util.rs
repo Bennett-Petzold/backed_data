@@ -2,6 +2,7 @@
 
 use std::{
     env::temp_dir,
+    error::Error,
     fmt::Debug,
     fs::{create_dir, read_dir, read_to_string, remove_dir_all, File},
     io::Write,
@@ -16,6 +17,7 @@ use backed_data::{
     entry::formats::BincodeCoder,
 };
 use chrono::Local;
+use error_stack::Context;
 use fs_extra::dir::get_size;
 use humansize::{format_size, BINARY};
 use serde::{Deserialize, Serialize};
@@ -94,8 +96,8 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Coder: Default,
-    E::Disk: From<PathBuf>,
-    E::WriteError: From<std::io::Error> + Debug,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
+    E::WriteError: Context + Error,
     E::Unwrapped: for<'a> From<&'a [E::InnerData]>,
     for<'a> &'a [E::InnerData]: From<&'a [u8]>,
     for<'a> &'a E::InnerData: From<&'a u8>,
@@ -121,8 +123,8 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Coder: Default,
-    E::Disk: From<PathBuf> + AsRef<Path>,
-    E::WriteError: From<std::io::Error> + Debug,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error> + AsRef<Path>,
+    E::WriteError: Context + Error,
     E::Unwrapped: for<'a> From<&'a [u8]>,
 {
     use std::sync::mpsc::sync_channel;
@@ -160,9 +162,9 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
     <E::Disk as AsyncWriteDisk>::WriteDisk: Send + Sync,
-    E::AsyncWriteError: From<std::io::Error> + Debug,
+    E::AsyncWriteError: Context + Error,
     E::Unwrapped: for<'u> From<&'u [u8]>,
 {
     use backed_data::entry::formats::AsyncBincodeCoder;
@@ -186,9 +188,9 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
-    E::Disk: From<PathBuf> + AsRef<Path>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error> + AsRef<Path>,
     <E::Disk as AsyncWriteDisk>::WriteDisk: Send + Sync,
-    E::AsyncWriteError: From<std::io::Error> + Debug,
+    E::AsyncWriteError: Context + Error,
     E::Unwrapped: for<'a> From<&'a [u8]>,
 {
     use backed_data::entry::formats::AsyncBincodeCoder;
@@ -227,9 +229,9 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default + Send + Sync,
-    E::Disk: From<PathBuf> + AsRef<Path> + Send + Sync,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error> + AsRef<Path> + Send + Sync,
     <E::Disk as AsyncWriteDisk>::WriteDisk: Send + Sync,
-    E::AsyncWriteError: From<std::io::Error> + Debug,
+    E::AsyncWriteError: Context + Error,
     E::Unwrapped: for<'a> From<&'a [u8]>,
 {
     use std::iter::repeat;

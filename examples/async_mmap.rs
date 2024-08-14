@@ -21,13 +21,8 @@ mod not_windows {
 
     use backed_data::{
         entry::{
-            adapters::{
-                SyncAsAsyncRead, SyncAsAsyncReadBg, SyncAsAsyncWriteBg,
-            },
-            disks::{
-                mmap::ReadMmapCursor,
-                AsyncReadDisk, AsyncWriteDisk, Mmap,
-            },
+            adapters::{SyncAsAsyncRead, SyncAsAsyncReadBg, SyncAsAsyncWriteBg},
+            disks::{mmap::ReadMmapCursor, AsyncReadDisk, AsyncWriteDisk, Mmap},
             SyncAsAsync,
         },
         utils::blocking::BlockingFn,
