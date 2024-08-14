@@ -146,7 +146,9 @@ impl<R: Read> BlockingFn for SyncAsAsyncReadBg<R> {
                         }
                         Err(e) => *read_send = Some(Err(e)),
                     }
-                    self.waker.lock().unwrap().take().map(|w| w.wake());
+                    if let Some(w) = self.waker.lock().unwrap().take() {
+                        w.wake()
+                    }
                 }
                 None => (),
             }
@@ -612,8 +614,8 @@ where
     S: Write,
 {
     type Output = Result<(), E::Error>;
-    fn call(mut self) -> Self::Output {
-        self.encoder.encode(self.data, &mut self.sink)
+    fn call(self) -> Self::Output {
+        self.encoder.encode(self.data, self.sink)
     }
 }
 

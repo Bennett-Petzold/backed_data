@@ -372,6 +372,7 @@ dependencies = [
  "simd-json",
  "smol",
  "stable_deref_trait",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "tokio-util",

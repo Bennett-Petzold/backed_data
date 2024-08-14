@@ -3,9 +3,8 @@
     doc = "```"
 )]
 #![cfg_attr(
-    all(not(target_os = "windows"), any(miri, not(feature = "mmap")),),
-    doc = "```no_run"
+    any(miri, target_os = "windows", not(feature = "mmap")),
+    doc = "```ignore"
 )]
-#![cfg_attr(target_os = "windows", doc = "```ignore")]
 #![doc = include_str!("../../examples/mmap.rs")]
 //! ```
