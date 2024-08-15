@@ -17,6 +17,7 @@ jobs:
             arch: arm
             triple: aarch64-apple-darwin
     runs-on: ${{ format('{0}-latest', matrix.os) }}
+    environment: testing
     steps:
     - uses: actions/checkout@v4
       with:
