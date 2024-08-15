@@ -15,7 +15,6 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.ref_name != 'main' && 'testing' || 'unrestricted' }}
 
-    environment: testing
     steps:
     - uses: actions/checkout@v4
       with:
