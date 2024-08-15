@@ -722,54 +722,6 @@
 <a href="#722" id="722">722</a>
 <a href="#723" id="723">723</a>
 <a href="#724" id="724">724</a>
-<a href="#725" id="725">725</a>
-<a href="#726" id="726">726</a>
-<a href="#727" id="727">727</a>
-<a href="#728" id="728">728</a>
-<a href="#729" id="729">729</a>
-<a href="#730" id="730">730</a>
-<a href="#731" id="731">731</a>
-<a href="#732" id="732">732</a>
-<a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a>
-<a href="#736" id="736">736</a>
-<a href="#737" id="737">737</a>
-<a href="#738" id="738">738</a>
-<a href="#739" id="739">739</a>
-<a href="#740" id="740">740</a>
-<a href="#741" id="741">741</a>
-<a href="#742" id="742">742</a>
-<a href="#743" id="743">743</a>
-<a href="#744" id="744">744</a>
-<a href="#745" id="745">745</a>
-<a href="#746" id="746">746</a>
-<a href="#747" id="747">747</a>
-<a href="#748" id="748">748</a>
-<a href="#749" id="749">749</a>
-<a href="#750" id="750">750</a>
-<a href="#751" id="751">751</a>
-<a href="#752" id="752">752</a>
-<a href="#753" id="753">753</a>
-<a href="#754" id="754">754</a>
-<a href="#755" id="755">755</a>
-<a href="#756" id="756">756</a>
-<a href="#757" id="757">757</a>
-<a href="#758" id="758">758</a>
-<a href="#759" id="759">759</a>
-<a href="#760" id="760">760</a>
-<a href="#761" id="761">761</a>
-<a href="#762" id="762">762</a>
-<a href="#763" id="763">763</a>
-<a href="#764" id="764">764</a>
-<a href="#765" id="765">765</a>
-<a href="#766" id="766">766</a>
-<a href="#767" id="767">767</a>
-<a href="#768" id="768">768</a>
-<a href="#769" id="769">769</a>
-<a href="#770" id="770">770</a>
-<a href="#771" id="771">771</a>
-<a href="#772" id="772">772</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::min,
     future::Future,
@@ -777,7 +729,7 @@
     marker::PhantomData,
     pin::Pin,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
         Arc, Condvar, Mutex,
     },
     task::{Context, Poll, Waker},
@@ -861,7 +813,7 @@
 </span><span class="kw">pub struct </span>SyncAsAsyncRead {
     pending: bool,
     <span class="comment">// Provide a waker and notify with condvar to trigger a new read.
-    </span>cmd: Arc&lt;(Condvar, std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;ReadCmd&gt;&gt;)&gt;,
+    </span>cmd_tx: SyncSender&lt;ReadCmd&gt;,
     waker: Arc&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Waker&gt;&gt;&gt;,
     <span class="attr">#[allow(clippy::type_complexity)]
     </span>read: Arc&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;std::io::Result&lt;Vec&lt;u8&gt;&gt;&gt;&gt;&gt;,
@@ -871,7 +823,6 @@
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">enum </span>ReadCmd {
     Read,
-    Kill,
 }
 
 <span class="doccomment">/// [`BlockingFn`] that spawns a background reader.
@@ -879,8 +830,7 @@
 </span><span class="kw">pub struct </span>SyncAsAsyncReadBg&lt;R&gt; {
     reader: R,
     buffer_size: usize,
-    cmd: Arc&lt;(Condvar, std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;ReadCmd&gt;&gt;)&gt;,
-    initialized: Arc&lt;std::sync::Mutex&lt;bool&gt;&gt;,
+    cmd_rx: Receiver&lt;ReadCmd&gt;,
     waker: Arc&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Waker&gt;&gt;&gt;,
     <span class="attr">#[allow(clippy::type_complexity)]
     </span>read: Arc&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;std::io::Result&lt;Vec&lt;u8&gt;&gt;&gt;&gt;&gt;,
@@ -889,49 +839,26 @@
 <span class="kw">impl</span>&lt;R: Read&gt; BlockingFn <span class="kw">for </span>SyncAsAsyncReadBg&lt;R&gt; {
     <span class="kw">type </span>Output = ();
     <span class="kw">fn </span>call(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="self">Self</span>::Output {
-        <span class="comment">// Signal initialization
-        </span><span class="self">self</span>.cmd.<span class="number">0</span>.wait(<span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap()).unwrap().take();
-        <span class="kw-2">*</span><span class="self">self</span>.initialized.lock().unwrap() = <span class="bool-val">true</span>;
+        <span class="comment">// Only valid command to be sent is a Read
+        </span><span class="kw">while </span><span class="self">self</span>.cmd_rx.recv().is_ok() {
+            <span class="kw">let </span><span class="kw-2">mut </span>read_buffer = <span class="macro">vec!</span>[<span class="number">0</span>; <span class="self">self</span>.buffer_size];
 
-        <span class="kw">loop </span>{
-            <span class="comment">// Exit if parent thread died
-            </span><span class="kw">if </span>Arc::strong_count(<span class="kw-2">&amp;</span><span class="self">self</span>.cmd) == <span class="number">1 </span>{
-                <span class="kw">return</span>;
+            <span class="kw">let </span>res = <span class="self">self</span>.reader.read(<span class="kw-2">&amp;mut </span>read_buffer);
+
+            <span class="comment">// Mutex guards here held until end of block
+            </span><span class="kw">let </span><span class="kw-2">mut </span>read_send = <span class="self">self</span>.read.lock().unwrap();
+
+            <span class="kw">match </span>res {
+                <span class="prelude-val">Ok</span>(x) =&gt; {
+                    <span class="kw-2">*</span>read_send = {
+                        read_buffer.truncate(x);
+                        <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(read_buffer))
+                    }
+                }
+                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw-2">*</span>read_send = <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(e)),
             }
-
-            <span class="comment">// Take the commands as they come in
-            </span><span class="kw">let </span>cmd = <span class="self">self</span>.cmd.<span class="number">0</span>.wait(<span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap()).unwrap().take();
-
-            <span class="comment">// If `cmd` is `None`, this was a spurious wakeup.
-            // See [`std::sync::Condvar::wait`].
-            </span><span class="kw">match </span>cmd {
-                <span class="comment">// Stop looping if the parent was dropped
-                </span><span class="prelude-val">Some</span>(ReadCmd::Kill) =&gt; {
-                    <span class="macro">println!</span>(<span class="string">"GOT KILL"</span>);
-                    <span class="kw">return</span>;
-                }
-                <span class="prelude-val">Some</span>(ReadCmd::Read) =&gt; {
-                    <span class="kw">let </span><span class="kw-2">mut </span>read_buffer = <span class="macro">vec!</span>[<span class="number">0</span>; <span class="self">self</span>.buffer_size];
-
-                    <span class="kw">let </span>res = <span class="self">self</span>.reader.read(<span class="kw-2">&amp;mut </span>read_buffer);
-
-                    <span class="comment">// Mutex guards here held until end of block
-                    </span><span class="kw">let </span><span class="kw-2">mut </span>read_send = <span class="self">self</span>.read.lock().unwrap();
-
-                    <span class="kw">match </span>res {
-                        <span class="prelude-val">Ok</span>(x) =&gt; {
-                            <span class="kw-2">*</span>read_send = {
-                                read_buffer.truncate(x);
-                                <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(read_buffer))
-                            }
-                        }
-                        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw-2">*</span>read_send = <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(e)),
-                    }
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = <span class="self">self</span>.waker.lock().unwrap().take() {
-                        w.wake()
-                    }
-                }
-                <span class="prelude-val">None </span>=&gt; (),
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = <span class="self">self</span>.waker.lock().unwrap().take() {
+                w.wake()
             }
         }
     }
@@ -943,16 +870,14 @@
         </span>R: ReadDisk,
         F: Fn(SyncAsAsyncReadBg&lt;R::ReadDisk&gt;),
     {
-        <span class="kw">let </span>cmd = Arc::new((Condvar::new(), std::sync::Mutex::default()));
+        <span class="kw">let </span>(cmd_tx, cmd_rx) = sync_channel(<span class="number">0</span>);
         <span class="kw">let </span>waker = Arc::new(std::sync::Mutex::default());
-        <span class="kw">let </span>initialized = Arc::new(std::sync::Mutex::new(<span class="bool-val">false</span>));
         <span class="kw">let </span>read = Arc::new(std::sync::Mutex::default());
 
         (handle)(SyncAsAsyncReadBg {
             reader: disk.read_disk()<span class="question-mark">?</span>,
-            cmd: cmd.clone(),
+            cmd_rx,
             waker: waker.clone(),
-            initialized: initialized.clone(),
             read: read.clone(),
             buffer_size,
         });
@@ -960,16 +885,9 @@
         <span class="kw">let </span>buffered: Box&lt;[<span class="kw">_</span>]&gt; = Box::new([]);
         <span class="kw">let </span>buffered = buffered.into_vec();
 
-        <span class="comment">// Wait for initialization, sleeping to give background thread time
-        // for startup.
-        </span><span class="kw">while </span>!(<span class="kw-2">*</span>initialized.lock().unwrap()) {
-            cmd.<span class="number">0</span>.notify_all();
-            std::thread::sleep(Duration::from_nanos(<span class="number">1</span>));
-        }
-
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             pending: <span class="bool-val">false</span>,
-            cmd,
+            cmd_tx,
             waker,
             read,
             buffered,
@@ -1014,8 +932,7 @@
             <span class="self">self</span>.pending = <span class="bool-val">true</span>;
 
             <span class="kw-2">*</span><span class="self">self</span>.waker.lock().unwrap() = <span class="prelude-val">Some</span>(cx.waker().clone());
-            <span class="kw-2">*</span><span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap() = <span class="prelude-val">Some</span>(ReadCmd::Read);
-            <span class="self">self</span>.cmd.<span class="number">0</span>.notify_one();
+            <span class="self">self</span>.cmd_tx.send(ReadCmd::Read).unwrap();
 
             <span class="kw">return </span>Poll::Pending;
         };
@@ -1045,19 +962,6 @@
                 <span class="self">self</span>.consume(read_len);
                 Poll::Ready(<span class="prelude-val">Ok</span>(read_len))
             }
-        }
-    }
-}
-
-<span class="kw">impl </span>Drop <span class="kw">for </span>SyncAsAsyncRead {
-    <span class="doccomment">/// Signals background thread to die on drop.
-    </span><span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw-2">*</span><span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap() = <span class="prelude-val">Some</span>(ReadCmd::Kill);
-        <span class="comment">// Spam notify until background thread finishes.
-        </span><span class="kw">while </span>Arc::strong_count(<span class="kw-2">&amp;</span><span class="self">self</span>.cmd) &gt; <span class="number">1 </span>{
-            <span class="macro">println!</span>(<span class="string">"THREAD STILL ALIVE, WAKING"</span>);
-            <span class="self">self</span>.cmd.<span class="number">0</span>.notify_all();
-            std::thread::sleep(Duration::from_millis(<span class="number">10</span>));
         }
     }
 }
