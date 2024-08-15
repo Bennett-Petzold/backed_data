@@ -162,8 +162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-trait"
-version = "0.1.79"
 name = "async-executor"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
