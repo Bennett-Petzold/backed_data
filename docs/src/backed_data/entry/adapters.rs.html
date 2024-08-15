@@ -755,9 +755,6 @@
 <a href="#755" id="755">755</a>
 <a href="#756" id="756">756</a>
 <a href="#757" id="757">757</a>
-<a href="#758" id="758">758</a>
-<a href="#759" id="759">759</a>
-<a href="#760" id="760">760</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::min,
     future::Future,
@@ -769,6 +766,7 @@
         Arc, Condvar, Mutex,
     },
     task::{Context, Poll, Waker},
+    time::Duration,
 };
 
 <span class="kw">use </span>futures::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -849,7 +847,6 @@
     pending: bool,
     <span class="comment">// Provide a waker and notify with condvar to trigger a new read.
     </span>cmd: Arc&lt;(Condvar, std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;ReadCmd&gt;&gt;)&gt;,
-    initialized: Arc&lt;std::sync::Mutex&lt;bool&gt;&gt;,
     waker: Arc&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Waker&gt;&gt;&gt;,
     <span class="attr">#[allow(clippy::type_complexity)]
     </span>read: Arc&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;std::io::Result&lt;Vec&lt;u8&gt;&gt;&gt;&gt;&gt;,
@@ -877,10 +874,13 @@
 <span class="kw">impl</span>&lt;R: Read&gt; BlockingFn <span class="kw">for </span>SyncAsAsyncReadBg&lt;R&gt; {
     <span class="kw">type </span>Output = ();
     <span class="kw">fn </span>call(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="self">Self</span>::Output {
+        <span class="comment">// Signal initialization
+        </span><span class="self">self</span>.cmd.<span class="number">0</span>.wait(<span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap()).unwrap().take();
+        <span class="kw-2">*</span><span class="self">self</span>.initialized.lock().unwrap() = <span class="bool-val">true</span>;
+
         <span class="kw">loop </span>{
-            <span class="comment">// Take the command and signal that it was received
+            <span class="comment">// Take the commands as they come in
             </span><span class="kw">let </span>cmd = <span class="self">self</span>.cmd.<span class="number">0</span>.wait(<span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap()).unwrap().take();
-            <span class="kw-2">*</span><span class="self">self</span>.initialized.lock().unwrap() = <span class="bool-val">true</span>;
 
             <span class="comment">// If `cmd` is `None`, this was a spurious wakeup.
             // See [`std::sync::Condvar::wait`].
@@ -939,11 +939,17 @@
         <span class="kw">let </span>buffered: Box&lt;[<span class="kw">_</span>]&gt; = Box::new([]);
         <span class="kw">let </span>buffered = buffered.into_vec();
 
+        <span class="comment">// Wait for initialization, sleeping to give background thread time
+        // for startup.
+        </span><span class="kw">while </span>!(<span class="kw-2">*</span>initialized.lock().unwrap()) {
+            cmd.<span class="number">0</span>.notify_all();
+            std::thread::sleep(Duration::from_nanos(<span class="number">1</span>));
+        }
+
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             pending: <span class="bool-val">false</span>,
             cmd,
             waker,
-            initialized,
             read,
             buffered,
         })
@@ -955,13 +961,6 @@
         <span class="kw-2">mut </span><span class="self">self</span>: Pin&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt;,
         cx: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>&gt;,
     ) -&gt; Poll&lt;std::io::Result&lt;<span class="kw-2">&amp;</span>[u8]&gt;&gt; {
-        <span class="comment">// Wait for initialization
-        </span><span class="kw">if </span>!(<span class="kw-2">*</span><span class="self">self</span>.initialized.lock().unwrap()) {
-            <span class="self">self</span>.cmd.<span class="number">0</span>.notify_all();
-            cx.waker().wake_by_ref();
-            <span class="kw">return </span>Poll::Pending;
-        }
-
         <span class="kw">if </span><span class="self">self</span>.pending {
             <span class="comment">// A bit of borrow checker hacking, since we can't assign to
             // `self.buffered` while `self.read` is borrowed.
@@ -1032,11 +1031,6 @@
 <span class="kw">impl </span>Drop <span class="kw">for </span>SyncAsAsyncRead {
     <span class="doccomment">/// Signals background thread to die on drop.
     </span><span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="comment">// Wait for initialization
-        </span><span class="kw">while </span>!(<span class="kw-2">*</span><span class="self">self</span>.initialized.lock().unwrap()) {
-            <span class="self">self</span>.cmd.<span class="number">0</span>.notify_all();
-        }
-
         <span class="kw-2">*</span><span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap() = <span class="prelude-val">Some</span>(ReadCmd::Kill);
         <span class="self">self</span>.cmd.<span class="number">0</span>.notify_all();
     }
