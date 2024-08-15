@@ -9,6 +9,7 @@ use std::{
         Arc, Condvar, Mutex,
     },
     task::{Context, Poll, Waker},
+    time::Duration,
 };
 
 use futures::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -89,7 +90,6 @@ pub struct SyncAsAsyncRead {
     pending: bool,
     // Provide a waker and notify with condvar to trigger a new read.
     cmd: Arc<(Condvar, std::sync::Mutex<Option<ReadCmd>>)>,
-    initialized: Arc<std::sync::Mutex<bool>>,
     waker: Arc<std::sync::Mutex<Option<Waker>>>,
     #[allow(clippy::type_complexity)]
     read: Arc<std::sync::Mutex<Option<std::io::Result<Vec<u8>>>>>,
@@ -117,10 +117,13 @@ pub struct SyncAsAsyncReadBg<R> {
 impl<R: Read> BlockingFn for SyncAsAsyncReadBg<R> {
     type Output = ();
     fn call(mut self) -> Self::Output {
+        // Signal initialization
+        self.cmd.0.wait(self.cmd.1.lock().unwrap()).unwrap().take();
+        *self.initialized.lock().unwrap() = true;
+
         loop {
-            // Take the command and signal that it was received
+            // Take the commands as they come in
             let cmd = self.cmd.0.wait(self.cmd.1.lock().unwrap()).unwrap().take();
-            *self.initialized.lock().unwrap() = true;
 
             // If `cmd` is `None`, this was a spurious wakeup.
             // See [`std::sync::Condvar::wait`].
@@ -179,11 +182,17 @@ impl SyncAsAsyncRead {
         let buffered: Box<[_]> = Box::new([]);
         let buffered = buffered.into_vec();
 
+        // Wait for initialization, sleeping to give background thread time
+        // for startup.
+        while !(*initialized.lock().unwrap()) {
+            cmd.0.notify_all();
+            std::thread::sleep(Duration::from_nanos(1));
+        }
+
         Ok(Self {
             pending: false,
             cmd,
             waker,
-            initialized,
             read,
             buffered,
         })
@@ -195,13 +204,6 @@ impl AsyncBufRead for SyncAsAsyncRead {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<&[u8]>> {
-        // Wait for initialization
-        if !(*self.initialized.lock().unwrap()) {
-            self.cmd.0.notify_all();
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
-        }
-
         if self.pending {
             // A bit of borrow checker hacking, since we can't assign to
             // `self.buffered` while `self.read` is borrowed.
@@ -272,11 +274,6 @@ impl AsyncRead for SyncAsAsyncRead {
 impl Drop for SyncAsAsyncRead {
     /// Signals background thread to die on drop.
     fn drop(&mut self) {
-        // Wait for initialization
-        while !(*self.initialized.lock().unwrap()) {
-            self.cmd.0.notify_all();
-        }
-
         *self.cmd.1.lock().unwrap() = Some(ReadCmd::Kill);
         self.cmd.0.notify_all();
     }
