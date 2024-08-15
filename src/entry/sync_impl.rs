@@ -1,7 +1,4 @@
-use std::{
-    io::Write,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use either::Either;
 use serde::{Deserialize, Serialize};
@@ -21,9 +18,8 @@ where
     /// Updates underlying storage with the current entry
     pub fn update(&mut self) -> Result<(), Coder::Error> {
         if let Some(val) = self.value.get() {
-            let mut disk = self.disk.write_disk()?;
-            self.coder.encode(val, &mut disk)?;
-            disk.flush()?; // Make sure buffer is emptied
+            let disk = self.disk.write_disk()?;
+            self.coder.encode(val, disk)?;
         }
         Ok(())
     }
@@ -32,9 +28,8 @@ where
     ///
     /// See [`Self::write_unload`] to skip the memory write.
     pub fn write(&mut self, new_value: T::Inner) -> Result<(), Coder::Error> {
-        let mut disk = self.disk.write_disk()?;
-        self.coder.encode(&new_value, &mut disk)?;
-        disk.flush()?; // Make sure buffer is emptied
+        let disk = self.disk.write_disk()?;
+        self.coder.encode(&new_value, disk)?;
 
         // Drop previous value and write in new.
         // value.set() only works when uninitialized.
@@ -97,9 +92,8 @@ where
     /// See [`Self::write`] to keep the value in memory.
     pub fn write_unload<U: Into<T::Inner>>(&mut self, new_value: U) -> Result<(), Coder::Error> {
         self.unload();
-        let mut disk = self.disk.write_disk()?;
-        self.coder.encode(&new_value.into(), &mut disk)?;
-        disk.flush()?; // Make sure buffer is emptied
+        let disk = self.disk.write_disk()?;
+        self.coder.encode(&new_value.into(), disk)?;
         Ok(())
     }
 }

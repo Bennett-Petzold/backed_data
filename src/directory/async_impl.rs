@@ -6,7 +6,7 @@ use std::{
 };
 
 use error_stack::Context;
-use futures::{io::AsyncWriteExt, stream, StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -224,16 +224,14 @@ where
             .try_into()
             .map_err(DiskWriteErr::disk_err)?;
 
-        let mut disk = disk
+        let disk = disk
             .async_write_disk()
             .await
             .map_err(DiskWriteErr::io_err)?;
         coder
-            .encode(self, &mut disk)
+            .encode(self, disk)
             .await
             .map_err(DiskWriteErr::write_err)?;
-        disk.flush().await.map_err(DiskWriteErr::io_err)?;
-        disk.close().await.map_err(DiskWriteErr::io_err)?;
         Ok(self)
     }
 }
@@ -257,8 +255,8 @@ where
             .join(META_FILE)
             .try_into()
             .map_err(DiskReadErr::read_err)?;
-        let mut disk = disk.async_read_disk().await.map_err(DiskReadErr::io_err)?;
-        coder.decode(&mut disk).await.map_err(DiskReadErr::disk_err)
+        let disk = disk.async_read_disk().await.map_err(DiskReadErr::io_err)?;
+        coder.decode(disk).await.map_err(DiskReadErr::disk_err)
     }
 }
 

@@ -36,7 +36,7 @@ where
     T: Send + Sync,
     F: BlockingFn<Output = T> + Send,
 {
-    // Val is held here uninitialized, and wri(tten into by the thread.
+    // Val is held here uninitialized, and written into by the thread.
     let mut val = MaybeUninit::uninit();
     let arg = || {
         val = MaybeUninit::new(arg.call());

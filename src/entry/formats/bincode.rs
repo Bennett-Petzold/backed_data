@@ -32,13 +32,18 @@ impl<T: ?Sized + for<'de> Deserialize<'de>, Source: Read> Decoder<Source> for Bi
     }
 }
 
-impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for BincodeCoder<T> {
+impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for BincodeCoder<T>
+where
+    for<'a> &'a mut Target: Write,
+{
     type Error = bincode::Error;
     type T = T;
-    fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
+    fn encode(&self, data: &Self::T, mut target: Target) -> Result<(), Self::Error> {
         bincode::options()
             .with_limit(u32::MAX as u64)
             .allow_trailing_bytes()
-            .serialize_into(target, data)
+            .serialize_into(&mut target, data)?;
+        target.flush()?;
+        Ok(())
     }
 }
