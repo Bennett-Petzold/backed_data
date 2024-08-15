@@ -11,6 +11,11 @@ permissions: write-all
 jobs:
   gen-coverage:
     runs-on: ubuntu-latest
+    if: ${{ GITHUB_REF_NAME != 'main' }} 
+
+    env:
+      ENVIRONMENT: ${{ GITHUB_REF_NAME != 'main' && 'testing' || 'unrestricted' }}
+
     environment: testing
     steps:
     - uses: actions/checkout@v4
