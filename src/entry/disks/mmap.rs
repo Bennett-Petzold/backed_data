@@ -57,7 +57,7 @@ impl Deref for ReadMmap {
 }
 
 impl ReadMmap {
-    #[cfg(target_os = "linux")]
+    #[cfg(target_os = "unix")]
     pub fn advise(&self, advice: memmap2::Advice) -> std::io::Result<()> {
         if let Self::NonEmpty(mmap) = self {
             mmap.advise(advice)
