@@ -559,25 +559,29 @@ where
 /// needs to be initialized to use the [`AsyncEncoder`] and [`AsyncDecoder`]
 /// implementations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncCoderAsyncDisk<C, D, F, DR, ER> {
+pub struct SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
     coder: Arc<C>,
     #[serde(skip)]
-    handle: Option<F>,
+    read_handle: Option<RF>,
+    #[serde(skip)]
+    encode_handle: Option<EF>,
     #[serde(skip)]
     _phantom: (PhantomData<D>, PhantomData<DR>, PhantomData<ER>),
 }
 
-impl<C, D, F, DR, ER> SyncCoderAsyncDisk<C, D, F, DR, ER> {
-    pub fn new(coder: C, handle: F) -> Self {
+impl<C, D, RF, EF, DR, ER> SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
+    pub fn new(coder: C, read_handle: RF, encode_handle: EF) -> Self {
         Self {
             coder: Arc::new(coder),
-            handle: Some(handle),
+            read_handle: Some(read_handle),
+            encode_handle: Some(encode_handle),
             _phantom: (PhantomData, PhantomData, PhantomData),
         }
     }
 
-    pub fn set_handle(&mut self, handle: F) -> &mut Self {
-        self.handle = Some(handle);
+    pub fn set_handles(&mut self, read_handle: RF, encode_handle: EF) -> &mut Self {
+        self.read_handle = Some(read_handle);
+        self.encode_handle = Some(encode_handle);
         self
     }
 }
@@ -619,11 +623,12 @@ where
     }
 }
 
-impl<C, D, F, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsyncDisk<C, D, F, DR, ER>
+impl<C, D, RF, EF, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
 where
     C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
     D: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
-    F: Fn(DecodeBg<C, Cursor<Vec<u8>>>) -> DR + Sync + Send,
+    RF: Fn(DecodeBg<C, Cursor<Vec<u8>>>) -> DR + Sync + Send,
+    EF: Sync + Send,
     DR: Future<Output = Result<C::T, C::Error>> + Sync + Send,
     ER: Sync + Send,
 {
@@ -631,7 +636,7 @@ where
     type T = C::T;
 
     async fn decode(&self, mut source: D::ReadDisk) -> Result<Self::T, Self::Error> {
-        let handle = self.handle.as_ref().ok_or(std::io::Error::new(
+        let handle = self.read_handle.as_ref().ok_or(std::io::Error::new(
             ErrorKind::Other,
             "Need a handle configured to run!",
         ))?;
@@ -645,11 +650,12 @@ where
     }
 }
 
-impl<C, D, F, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsyncDisk<C, D, F, DR, ER>
+impl<C, D, RF, EF, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
 where
     C: Encoder<Vec<u8>, T: Sync + Send + Sized + Clone> + Sync + Send,
     D: AsyncWriteDisk<WriteDisk: Sync + Send> + Sync + Send,
-    F: Fn(EncodeBg<C, Vec<u8>>) -> ER + Sync + Send,
+    RF: Sync + Send,
+    EF: Fn(EncodeBg<C, Vec<u8>>) -> ER + Sync + Send,
     DR: Sync + Send,
     ER: Future<Output = Result<Vec<u8>, C::Error>> + Sync + Send,
 {
@@ -657,7 +663,7 @@ where
     type T = C::T;
 
     async fn encode(&self, data: &Self::T, mut target: D::WriteDisk) -> Result<(), Self::Error> {
-        let handle = self.handle.as_ref().ok_or(std::io::Error::new(
+        let handle = self.encode_handle.as_ref().ok_or(std::io::Error::new(
             ErrorKind::Other,
             "Need a handle configured to run!",
         ))?;

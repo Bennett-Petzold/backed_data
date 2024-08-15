@@ -19,8 +19,10 @@ async fn main() {
 
     let disk = Plainfile::new(backing_file.clone());
 
+    // Create an adapter to run encoding and decoding in tokio's blocking
+    // threadpool.
     let coder = SyncCoderAsAsync::<_, Plainfile, _, _, _, _>::new(
-        SimdJsonCoder::<_>::default(),
+        SimdJsonCoder::default(),
         |x: DecodeBg<_, _>| unsafe { tokio_blocking(x) },
         |x: EncodeBg<_, _>| unsafe { tokio_blocking(x) },
     );
