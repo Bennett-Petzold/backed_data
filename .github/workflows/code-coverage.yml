@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ENVIRONMENT: ${{ ( github.head_ref || github.ref_name ) != 'main' && 'testing' || 'unrestricted' }}
+      ENVIRONMENT: ${{ github.ref_name != 'main' && 'testing' || 'unrestricted' }}
 
     environment: testing
     steps:
