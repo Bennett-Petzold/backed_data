@@ -16,6 +16,7 @@ mod not_windows {
         cmp::max,
         env::temp_dir,
         hint::black_box,
+        process::exit,
         time::{Duration, SystemTime},
     };
 
@@ -35,6 +36,12 @@ mod not_windows {
     const SIZE: usize = ELEMENTS_PER * NUM_COPIES;
 
     pub async fn example() {
+        // Temp debug timeout
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_secs(60 * 3));
+            exit(1);
+        });
+
         let backing_file = temp_dir().join("backed_array_async_mmap");
 
         let disk = SyncAsAsync::new(

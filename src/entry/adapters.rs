@@ -5,7 +5,7 @@ use std::{
     marker::PhantomData,
     pin::Pin,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
         Arc, Condvar, Mutex,
     },
     task::{Context, Poll, Waker},
@@ -89,7 +89,7 @@ impl<T: Serialize, RF, WF> Serialize for SyncAsAsync<T, RF, WF> {
 pub struct SyncAsAsyncRead {
     pending: bool,
     // Provide a waker and notify with condvar to trigger a new read.
-    cmd: Arc<(Condvar, std::sync::Mutex<Option<ReadCmd>>)>,
+    cmd_tx: SyncSender<ReadCmd>,
     waker: Arc<std::sync::Mutex<Option<Waker>>>,
     #[allow(clippy::type_complexity)]
     read: Arc<std::sync::Mutex<Option<std::io::Result<Vec<u8>>>>>,
@@ -99,7 +99,6 @@ pub struct SyncAsAsyncRead {
 #[derive(Debug)]
 enum ReadCmd {
     Read,
-    Kill,
 }
 
 /// [`BlockingFn`] that spawns a background reader.
@@ -107,8 +106,7 @@ enum ReadCmd {
 pub struct SyncAsAsyncReadBg<R> {
     reader: R,
     buffer_size: usize,
-    cmd: Arc<(Condvar, std::sync::Mutex<Option<ReadCmd>>)>,
-    initialized: Arc<std::sync::Mutex<bool>>,
+    cmd_rx: Receiver<ReadCmd>,
     waker: Arc<std::sync::Mutex<Option<Waker>>>,
     #[allow(clippy::type_complexity)]
     read: Arc<std::sync::Mutex<Option<std::io::Result<Vec<u8>>>>>,
@@ -117,43 +115,26 @@ pub struct SyncAsAsyncReadBg<R> {
 impl<R: Read> BlockingFn for SyncAsAsyncReadBg<R> {
     type Output = ();
     fn call(mut self) -> Self::Output {
-        // Signal initialization
-        self.cmd.0.wait(self.cmd.1.lock().unwrap()).unwrap().take();
-        *self.initialized.lock().unwrap() = true;
+        // Only valid command to be sent is a Read
+        while self.cmd_rx.recv().is_ok() {
+            let mut read_buffer = vec![0; self.buffer_size];
 
-        loop {
-            // Take the commands as they come in
-            let cmd = self.cmd.0.wait(self.cmd.1.lock().unwrap()).unwrap().take();
+            let res = self.reader.read(&mut read_buffer);
 
-            // If `cmd` is `None`, this was a spurious wakeup.
-            // See [`std::sync::Condvar::wait`].
-            match cmd {
-                // Stop looping if the parent was dropped
-                Some(ReadCmd::Kill) => {
-                    return;
-                }
-                Some(ReadCmd::Read) => {
-                    let mut read_buffer = vec![0; self.buffer_size];
+            // Mutex guards here held until end of block
+            let mut read_send = self.read.lock().unwrap();
 
-                    let res = self.reader.read(&mut read_buffer);
-
-                    // Mutex guards here held until end of block
-                    let mut read_send = self.read.lock().unwrap();
-
-                    match res {
-                        Ok(x) => {
-                            *read_send = {
-                                read_buffer.truncate(x);
-                                Some(Ok(read_buffer))
-                            }
-                        }
-                        Err(e) => *read_send = Some(Err(e)),
-                    }
-                    if let Some(w) = self.waker.lock().unwrap().take() {
-                        w.wake()
+            match res {
+                Ok(x) => {
+                    *read_send = {
+                        read_buffer.truncate(x);
+                        Some(Ok(read_buffer))
                     }
                 }
-                None => (),
+                Err(e) => *read_send = Some(Err(e)),
+            }
+            if let Some(w) = self.waker.lock().unwrap().take() {
+                w.wake()
             }
         }
     }
@@ -165,16 +146,14 @@ impl SyncAsAsyncRead {
         R: ReadDisk,
         F: Fn(SyncAsAsyncReadBg<R::ReadDisk>),
     {
-        let cmd = Arc::new((Condvar::new(), std::sync::Mutex::default()));
+        let (cmd_tx, cmd_rx) = sync_channel(0);
         let waker = Arc::new(std::sync::Mutex::default());
-        let initialized = Arc::new(std::sync::Mutex::default());
         let read = Arc::new(std::sync::Mutex::default());
 
         (handle)(SyncAsAsyncReadBg {
             reader: disk.read_disk()?,
-            cmd: cmd.clone(),
+            cmd_rx,
             waker: waker.clone(),
-            initialized: initialized.clone(),
             read: read.clone(),
             buffer_size,
         });
@@ -182,16 +161,9 @@ impl SyncAsAsyncRead {
         let buffered: Box<[_]> = Box::new([]);
         let buffered = buffered.into_vec();
 
-        // Wait for initialization, sleeping to give background thread time
-        // for startup.
-        while !(*initialized.lock().unwrap()) {
-            cmd.0.notify_all();
-            std::thread::sleep(Duration::from_nanos(1));
-        }
-
         Ok(Self {
             pending: false,
-            cmd,
+            cmd_tx,
             waker,
             read,
             buffered,
@@ -236,8 +208,7 @@ impl AsyncBufRead for SyncAsAsyncRead {
             self.pending = true;
 
             *self.waker.lock().unwrap() = Some(cx.waker().clone());
-            *self.cmd.1.lock().unwrap() = Some(ReadCmd::Read);
-            self.cmd.0.notify_one();
+            self.cmd_tx.send(ReadCmd::Read).unwrap();
 
             return Poll::Pending;
         };
@@ -268,14 +239,6 @@ impl AsyncRead for SyncAsAsyncRead {
                 Poll::Ready(Ok(read_len))
             }
         }
-    }
-}
-
-impl Drop for SyncAsAsyncRead {
-    /// Signals background thread to die on drop.
-    fn drop(&mut self) {
-        *self.cmd.1.lock().unwrap() = Some(ReadCmd::Kill);
-        self.cmd.0.notify_all();
     }
 }
 
@@ -383,8 +346,12 @@ impl<W: Write> BlockingFn for SyncAsAsyncWriteBg<W> {
                                 // also quit this receiving thread. Otherwise
                                 // only exit the wait on a non-suprious wakeup.
                                 loop {
-                                    let mut retry_toggle =
-                                        retry_wait.wait(self.retry_toggle.lock().unwrap()).unwrap();
+                                    let (mut retry_toggle, _) = retry_wait
+                                        .wait_timeout(
+                                            self.retry_toggle.lock().unwrap(),
+                                            Duration::from_secs(1),
+                                        )
+                                        .unwrap();
 
                                     if !retry_toggle.alive {
                                         return;
