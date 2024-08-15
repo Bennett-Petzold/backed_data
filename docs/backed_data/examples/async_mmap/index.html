@@ -17,6 +17,7 @@
         cmp::max,
         env::temp_dir,
         hint::black_box,
+        process::exit,
         time::{Duration, SystemTime},
     };
 
@@ -36,6 +37,12 @@
     <span class="kw">const </span>SIZE: usize = ELEMENTS_PER * NUM_COPIES;
 
     <span class="kw">pub async fn </span>example() {
+        <span class="comment">// Temp debug timeout
+        </span>std::thread::spawn(|| {
+            sleep(Duration::from_secs(<span class="number">60</span>));
+            exit(<span class="number">1</span>);
+        });
+
         <span class="kw">let </span>backing_file = temp_dir().join(<span class="string">"backed_array_async_mmap"</span>);
 
         <span class="kw">let </span>disk = SyncAsAsync::new(
