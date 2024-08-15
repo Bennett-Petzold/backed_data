@@ -57,7 +57,6 @@
             <span class="prelude-val">None</span>,
         );
 
-        <span class="macro">println!</span>(<span class="string">"PRIOR TO WRITE"</span>);
         {
             <span class="comment">// Data can be written in asynchronously.
             </span><span class="kw">let </span>input_data_single: [u8; ELEMENTS_PER] = array::from_fn(|x| x <span class="kw">as </span>u8);
@@ -70,9 +69,7 @@
             write_disk.close().<span class="kw">await</span>.unwrap();
 
             <span class="kw">let </span>elapsed_time = SystemTime::now().duration_since(start_time).unwrap();
-            <span class="macro">println!</span>(<span class="string">"Time to write: {:#?}"</span>, elapsed_time);
         }
-        <span class="macro">println!</span>(<span class="string">"AFTER WRITE"</span>);
 
         <span class="kw">let </span>read_fn = |<span class="kw-2">mut </span>disk: SyncAsAsyncRead| <span class="kw">async move </span>{
             <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::with_capacity(SIZE);
@@ -87,7 +84,6 @@
             elapsed_time
         };
 
-        <span class="macro">println!</span>(<span class="string">"PRIOR TO READ 1"</span>);
         <span class="comment">// Wait for write disk to drop.
         </span><span class="kw">while </span>disk.async_read_disk().<span class="kw">await</span>.is_err() {
             sleep(Duration::from_millis(<span class="number">1</span>)).<span class="kw">await</span>;
@@ -98,17 +94,13 @@
             <span class="kw">let </span>time = read_fn(read_disk).<span class="kw">await</span>;
             <span class="macro">println!</span>(<span class="string">"\nTime to read a single: {:#?}"</span>, time);
         }
-        <span class="macro">println!</span>(<span class="string">"AFTER READ 1"</span>);
 
-        <span class="macro">println!</span>(<span class="string">"PRIOR TO READ 2"</span>);
         {
             <span class="kw">let </span>read_disk = disk.async_read_disk().<span class="kw">await</span>.unwrap();
             <span class="kw">let </span>time = read_fn(read_disk).<span class="kw">await</span>;
             <span class="macro">println!</span>(<span class="string">"\nTime for second single read: {:#?}"</span>, time);
         }
-        <span class="macro">println!</span>(<span class="string">"AFTER READ 2"</span>);
 
-        <span class="macro">println!</span>(<span class="string">"PRIOR TO READ 3"</span>);
         {
             <span class="kw">let </span>read_disk_1 = disk.async_read_disk().<span class="kw">await</span>.unwrap();
             <span class="kw">let </span>read_disk_2 = disk.async_read_disk().<span class="kw">await</span>.unwrap();
@@ -117,7 +109,6 @@
             <span class="macro">println!</span>(<span class="string">"\nConcurrent read time is similar to single read time."</span>,);
             <span class="macro">println!</span>(<span class="string">"Time to read two concurrently: {:#?}"</span>, max(time_1, time_2));
         }
-        <span class="macro">println!</span>(<span class="string">"AFTER READ 3"</span>);
     }
 }</code></pre></div>
 </div></details></section></div></main></body></html>

@@ -766,6 +766,7 @@
 <a href="#766" id="766">766</a>
 <a href="#767" id="767">767</a>
 <a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::min,
     future::Future,
@@ -885,13 +886,16 @@
 <span class="kw">impl</span>&lt;R: Read&gt; BlockingFn <span class="kw">for </span>SyncAsAsyncReadBg&lt;R&gt; {
     <span class="kw">type </span>Output = ();
     <span class="kw">fn </span>call(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="self">Self</span>::Output {
-        <span class="macro">println!</span>(<span class="string">"Waiting for init..."</span>);
         <span class="comment">// Signal initialization
         </span><span class="self">self</span>.cmd.<span class="number">0</span>.wait(<span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap()).unwrap().take();
         <span class="kw-2">*</span><span class="self">self</span>.initialized.lock().unwrap() = <span class="bool-val">true</span>;
-        <span class="macro">println!</span>(<span class="string">"ACK INIT!"</span>);
 
         <span class="kw">loop </span>{
+            <span class="comment">// Exit if parent thread died
+            </span><span class="kw">if </span>Arc::strong_count(<span class="kw-2">&amp;</span><span class="self">self</span>.cmd) == <span class="number">1 </span>{
+                <span class="kw">return</span>;
+            }
+
             <span class="comment">// Take the commands as they come in
             </span><span class="kw">let </span>cmd = <span class="self">self</span>.cmd.<span class="number">0</span>.wait(<span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap()).unwrap().take();
 
@@ -955,11 +959,9 @@
         <span class="comment">// Wait for initialization, sleeping to give background thread time
         // for startup.
         </span><span class="kw">while </span>!(<span class="kw-2">*</span>initialized.lock().unwrap()) {
-            <span class="macro">println!</span>(<span class="string">"Failed lock test"</span>);
             cmd.<span class="number">0</span>.notify_all();
             std::thread::sleep(Duration::from_nanos(<span class="number">1</span>));
         }
-        <span class="macro">println!</span>(<span class="string">"Passed lock test"</span>);
 
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             pending: <span class="bool-val">false</span>,
