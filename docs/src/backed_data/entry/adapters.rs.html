@@ -767,6 +767,9 @@
 <a href="#767" id="767">767</a>
 <a href="#768" id="768">768</a>
 <a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::min,
     future::Future,
@@ -904,6 +907,7 @@
             </span><span class="kw">match </span>cmd {
                 <span class="comment">// Stop looping if the parent was dropped
                 </span><span class="prelude-val">Some</span>(ReadCmd::Kill) =&gt; {
+                    <span class="macro">println!</span>(<span class="string">"GOT KILL"</span>);
                     <span class="kw">return</span>;
                 }
                 <span class="prelude-val">Some</span>(ReadCmd::Read) =&gt; {
@@ -1051,7 +1055,9 @@
         <span class="kw-2">*</span><span class="self">self</span>.cmd.<span class="number">1</span>.lock().unwrap() = <span class="prelude-val">Some</span>(ReadCmd::Kill);
         <span class="comment">// Spam notify until background thread finishes.
         </span><span class="kw">while </span>Arc::strong_count(<span class="kw-2">&amp;</span><span class="self">self</span>.cmd) &gt; <span class="number">1 </span>{
+            <span class="macro">println!</span>(<span class="string">"THREAD STILL ALIVE, WAKING"</span>);
             <span class="self">self</span>.cmd.<span class="number">0</span>.notify_all();
+            std::thread::sleep(Duration::from_millis(<span class="number">10</span>));
         }
     }
 }
