@@ -75,7 +75,7 @@ impl ReadMmap {
             Self::NonEmpty(unsafe { MmapOptions::new().map(&file) }?)
         };
 
-        #[cfg(target_family = "unix")]
+        #[cfg(target_os = "linux")]
         let _ = mmap.advise(Advice::PopulateRead);
 
         Ok(Arc::new(mmap))
