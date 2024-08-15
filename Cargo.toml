@@ -174,6 +174,11 @@ name = "async_simd"
 path = "examples/async_simd.rs"
 required-features = ["simd_json", "async"]
 
+[[example]]
+name = "remote_simd"
+path = "examples/remote_simd.rs"
+required-features = ["simd_json", "async"]
+
 [profile.bench]
 debug = true
 
