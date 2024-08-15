@@ -1,4 +1,4 @@
-#![cfg(all(feature = "simd_json", feature = "async"))]
+#![cfg(all(feature = "simd_json", feature = "async", feature = "network"))]
 
 use std::{future::ready, str::FromStr};
 
