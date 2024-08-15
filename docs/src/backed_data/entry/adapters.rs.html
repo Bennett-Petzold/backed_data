@@ -755,6 +755,10 @@
 <a href="#755" id="755">755</a>
 <a href="#756" id="756">756</a>
 <a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::min,
     future::Future,
@@ -924,7 +928,7 @@
     {
         <span class="kw">let </span>cmd = Arc::new((Condvar::new(), std::sync::Mutex::default()));
         <span class="kw">let </span>waker = Arc::new(std::sync::Mutex::default());
-        <span class="kw">let </span>initialized = Arc::new(std::sync::Mutex::default());
+        <span class="kw">let </span>initialized = Arc::new(std::sync::Mutex::new(<span class="bool-val">false</span>));
         <span class="kw">let </span>read = Arc::new(std::sync::Mutex::default());
 
         (handle)(SyncAsAsyncReadBg {
@@ -1140,8 +1144,12 @@
                                 // also quit this receiving thread. Otherwise
                                 // only exit the wait on a non-suprious wakeup.
                                 </span><span class="kw">loop </span>{
-                                    <span class="kw">let </span><span class="kw-2">mut </span>retry_toggle =
-                                        retry_wait.wait(<span class="self">self</span>.retry_toggle.lock().unwrap()).unwrap();
+                                    <span class="kw">let </span>(<span class="kw-2">mut </span>retry_toggle, <span class="kw">_</span>) = retry_wait
+                                        .wait_timeout(
+                                            <span class="self">self</span>.retry_toggle.lock().unwrap(),
+                                            Duration::from_secs(<span class="number">1</span>),
+                                        )
+                                        .unwrap();
 
                                     <span class="kw">if </span>!retry_toggle.alive {
                                         <span class="kw">return</span>;
