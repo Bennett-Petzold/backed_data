@@ -10,7 +10,10 @@ on:
 jobs:
   build_features:
     runs-on: ubuntu-latest
-    environment: testing
+
+    environment:
+      name: ${{ github.ref_name != 'main' && 'testing' || 'unrestricted' }}
+
     steps:
     - uses: actions/checkout@v4
 
