@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["async_impl","sync_impl"],"struct":["DirectoryBackedArray"],"type":["AsyncStdDirBackedArray","AsyncZstdDirBackedArray","StdDirBackedArray","ZstdDirBackedArray"]};
+window.SIDEBAR_ITEMS = {"enum":["DiskCreateErr","DiskReadErr","DiskWriteErr"],"mod":["async_impl","sync_impl"],"struct":["DirectoryBackedArray"],"type":["AsyncStdDirBackedArray","AsyncZstdDirBackedArray","StdDirBackedArray","ZstdDirBackedArray"]};

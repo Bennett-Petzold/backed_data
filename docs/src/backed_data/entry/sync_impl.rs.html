@@ -521,16 +521,7 @@
 <a href="#521" id="521">521</a>
 <a href="#522" id="522">522</a>
 <a href="#523" id="523">523</a>
-<a href="#524" id="524">524</a>
-<a href="#525" id="525">525</a>
-<a href="#526" id="526">526</a>
-<a href="#527" id="527">527</a>
-<a href="#528" id="528">528</a>
-<a href="#529" id="529">529</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
-    io::Write,
-    ops::{Deref, DerefMut},
-};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::ops::{Deref, DerefMut};
 
 <span class="kw">use </span>either::Either;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -550,10 +541,9 @@
     <span class="doccomment">/// Updates underlying storage with the current entry
     </span><span class="kw">pub fn </span>update(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Coder::Error&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(val) = <span class="self">self</span>.value.get() {
-            <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.write_disk()<span class="question-mark">?</span>;
-            <span class="self">self</span>.coder.encode(val, <span class="kw-2">&amp;mut </span>disk)<span class="question-mark">?</span>;
-            disk.flush()<span class="question-mark">?</span>; <span class="comment">// Make sure buffer is emptied
-        </span>}
+            <span class="kw">let </span>disk = <span class="self">self</span>.disk.write_disk()<span class="question-mark">?</span>;
+            <span class="self">self</span>.coder.encode(val, disk)<span class="question-mark">?</span>;
+        }
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -561,11 +551,10 @@
     ///
     /// See [`Self::write_unload`] to skip the memory write.
     </span><span class="kw">pub fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_value: T::Inner) -&gt; <span class="prelude-ty">Result</span>&lt;(), Coder::Error&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.write_disk()<span class="question-mark">?</span>;
-        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value, <span class="kw-2">&amp;mut </span>disk)<span class="question-mark">?</span>;
-        disk.flush()<span class="question-mark">?</span>; <span class="comment">// Make sure buffer is emptied
+        <span class="kw">let </span>disk = <span class="self">self</span>.disk.write_disk()<span class="question-mark">?</span>;
+        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value, disk)<span class="question-mark">?</span>;
 
-        // Drop previous value and write in new.
+        <span class="comment">// Drop previous value and write in new.
         // value.set() only works when uninitialized.
         </span><span class="self">self</span>.value = T::new();
         <span class="kw">let _ </span>= <span class="self">self</span>.value.set(new_value);
@@ -626,10 +615,9 @@
     /// See [`Self::write`] to keep the value in memory.
     </span><span class="kw">pub fn </span>write_unload&lt;U: Into&lt;T::Inner&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_value: U) -&gt; <span class="prelude-ty">Result</span>&lt;(), Coder::Error&gt; {
         <span class="self">self</span>.unload();
-        <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.write_disk()<span class="question-mark">?</span>;
-        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value.into(), <span class="kw-2">&amp;mut </span>disk)<span class="question-mark">?</span>;
-        disk.flush()<span class="question-mark">?</span>; <span class="comment">// Make sure buffer is emptied
-        </span><span class="prelude-val">Ok</span>(())
+        <span class="kw">let </span>disk = <span class="self">self</span>.disk.write_disk()<span class="question-mark">?</span>;
+        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value.into(), disk)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
     }
 }
 

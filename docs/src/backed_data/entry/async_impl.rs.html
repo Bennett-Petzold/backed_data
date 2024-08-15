@@ -466,26 +466,12 @@
 <a href="#466" id="466">466</a>
 <a href="#467" id="467">467</a>
 <a href="#468" id="468">468</a>
-<a href="#469" id="469">469</a>
-<a href="#470" id="470">470</a>
-<a href="#471" id="471">471</a>
-<a href="#472" id="472">472</a>
-<a href="#473" id="473">473</a>
-<a href="#474" id="474">474</a>
-<a href="#475" id="475">475</a>
-<a href="#476" id="476">476</a>
-<a href="#477" id="477">477</a>
-<a href="#478" id="478">478</a>
-<a href="#479" id="479">479</a>
-<a href="#480" id="480">480</a>
-<a href="#481" id="481">481</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
 <span class="kw">use </span>either::Either;
-<span class="kw">use </span>futures::io::AsyncWriteExt;
 <span class="kw">use </span>futures::Future;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>tokio::sync::OnceCell;
@@ -505,24 +491,16 @@
     <span class="doccomment">/// See [`Self::update`].
     </span><span class="kw">pub async fn </span>a_update(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Coder::Error&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(val) = <span class="self">self</span>.value.get() {
-            <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
-            <span class="self">self</span>.coder.encode(val, <span class="kw-2">&amp;mut </span>disk).<span class="kw">await</span><span class="question-mark">?</span>;
-
-            <span class="comment">// Make sure buffer is emptied
-            </span>disk.flush().<span class="kw">await</span><span class="question-mark">?</span>;
-            disk.close().<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="kw">let </span>disk = <span class="self">self</span>.disk.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="self">self</span>.coder.encode(val, disk).<span class="kw">await</span><span class="question-mark">?</span>;
         }
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="doccomment">/// See [`Self::write`].
     </span><span class="kw">pub async fn </span>a_write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_value: T) -&gt; <span class="prelude-ty">Result</span>&lt;(), Coder::Error&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value, <span class="kw-2">&amp;mut </span>disk).<span class="kw">await</span><span class="question-mark">?</span>;
-
-        <span class="comment">// Make sure buffer is emptied
-        </span>disk.flush().<span class="kw">await</span><span class="question-mark">?</span>;
-        disk.close().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>disk = <span class="self">self</span>.disk.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value, disk).<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="comment">// Drop previous value and write in new.
         // value.set() only works when uninitialized.
@@ -541,8 +519,8 @@
     </span><span class="kw">pub async fn </span>a_load(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span>T, Coder::Error&gt; {
         <span class="self">self</span>.value
             .get_or_try_init(|| <span class="kw">async </span>{
-                <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.async_read_disk().<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="self">self</span>.coder.decode(<span class="kw-2">&amp;mut </span>disk).<span class="kw">await
+                <span class="kw">let </span>disk = <span class="self">self</span>.disk.async_read_disk().<span class="kw">await</span><span class="question-mark">?</span>;
+                <span class="self">self</span>.coder.decode(disk).<span class="kw">await
             </span>})
             .<span class="kw">await
     </span>}
@@ -555,13 +533,9 @@
     <span class="doccomment">/// [`Self::write_unload`].
     </span><span class="kw">pub async fn </span>a_write_unload&lt;U: Into&lt;T&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_value: U) -&gt; <span class="prelude-ty">Result</span>&lt;(), Coder::Error&gt; {
         <span class="self">self</span>.unload();
-        <span class="kw">let </span><span class="kw-2">mut </span>disk = <span class="self">self</span>.disk.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value.into(), <span class="kw-2">&amp;mut </span>disk).<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="comment">// Make sure buffer is emptied
-        </span>disk.flush().<span class="kw">await</span><span class="question-mark">?</span>;
-        disk.close().<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(())
-    }
+        <span class="kw">let </span>disk = <span class="self">self</span>.disk.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="self">self</span>.coder.encode(<span class="kw-2">&amp;</span>new_value.into(), disk).<span class="kw">await
+    </span>}
 }
 
 <span class="kw">pub trait </span>OnceCellWrap {

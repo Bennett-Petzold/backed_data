@@ -286,10 +286,15 @@
 <a href="#286" id="286">286</a>
 <a href="#287" id="287">287</a>
 <a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::marker::PhantomData;
 
 <span class="kw">use </span>csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, QuoteStyle, Terminator, Trim};
-<span class="kw">use </span>futures::io::{AsyncRead, AsyncWrite};
+<span class="kw">use </span>futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 <span class="kw">use </span>futures::TryStreamExt;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
@@ -428,11 +433,11 @@
 <span class="kw">where
     </span>T: <span class="question-mark">?</span>Sized + From&lt;Vec&lt;E&gt;&gt; + Default + <span class="kw">for</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; + Send + Sync,
     E: <span class="question-mark">?</span>Sized + <span class="kw">for</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; + Send + Sync,
-    Source: <span class="question-mark">?</span>Sized + AsyncRead + Send + Sync + Unpin,
+    Source: AsyncRead + Send + Sync + Unpin,
 {
     <span class="kw">type </span>Error = csv_async::Error;
     <span class="kw">type </span>T = T;
-    <span class="kw">async fn </span>decode(<span class="kw-2">&amp;</span><span class="self">self</span>, source: <span class="kw-2">&amp;mut </span>Source) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt; {
+    <span class="kw">async fn </span>decode(<span class="kw-2">&amp;</span><span class="self">self</span>, source: Source) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt; {
         <span class="self">self</span>.reader_builder()
             .create_deserializer(source)
             .deserialize()
@@ -447,15 +452,20 @@
     </span>T: <span class="question-mark">?</span>Sized + AsRef&lt;[E]&gt; + Default + Serialize + Send + Sync + Unpin,
     E: Serialize + Send + Sync + Unpin,
     Target: AsyncWrite + Send + Sync + Unpin,
+    <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Target: AsyncWrite,
 {
     <span class="kw">type </span>Error = csv_async::Error;
     <span class="kw">type </span>T = T;
-    <span class="kw">async fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>, data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T, target: <span class="kw-2">&amp;mut </span>Target) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>writer = <span class="self">self</span>.writer_builder().create_serializer(target);
+    <span class="kw">async fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>, data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T, <span class="kw-2">mut </span>target: Target) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>writer = <span class="self">self</span>.writer_builder().create_serializer(<span class="kw-2">&amp;mut </span>target);
 
         <span class="kw">for </span>line <span class="kw">in </span>data.as_ref() {
             writer.serialize(line).<span class="kw">await</span><span class="question-mark">?
         </span>}
+        drop(writer);
+
+        target.flush().<span class="kw">await</span><span class="question-mark">?</span>;
+        target.close().<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 }

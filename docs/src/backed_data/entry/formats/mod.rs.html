@@ -67,43 +67,81 @@
 <a href="#67" id="67">67</a>
 <a href="#68" id="68">68</a>
 <a href="#69" id="69">69</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::io::{Read, Write};
+<a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>serde::{Deserialize, Serialize};
 
-<span class="kw">use </span>serde::{Deserialize, Serialize};
-
-<span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
-</span><span class="kw">use </span>futures::io::{AsyncRead, AsyncWrite};
-
-<span class="kw">pub trait </span>Decoder&lt;Source: <span class="question-mark">?</span>Sized + Read&gt; {
+<span class="doccomment">/// A format decoder that can be used synchronously.
+</span><span class="kw">pub trait </span>Decoder&lt;Source: <span class="question-mark">?</span>Sized&gt; {
     <span class="kw">type </span>Error: From&lt;std::io::Error&gt;;
     <span class="kw">type </span>T: <span class="kw">for</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; + <span class="question-mark">?</span>Sized;
-    <span class="kw">fn </span>decode(<span class="kw-2">&amp;</span><span class="self">self</span>, source: <span class="kw-2">&amp;mut </span>Source) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt;;
+
+    <span class="doccomment">/// Return data with a known format from storage.
+    </span><span class="kw">fn </span>decode(<span class="kw-2">&amp;</span><span class="self">self</span>, source: <span class="kw-2">&amp;mut </span>Source) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt;;
 }
 
-<span class="kw">pub trait </span>Encoder&lt;Target: <span class="question-mark">?</span>Sized + Write&gt; {
+<span class="doccomment">/// A format encoder that can be used synchronously.
+///
+/// # Implementation
+/// It is the responsibility of trait implementors to call
+/// [`WriteExt::flush`] to ensure encodings write out to disk. Any implementor
+/// that does not to call these may fail to put all data on disk, making the
+/// encoding invalid and causing read failure.
+</span><span class="kw">pub trait </span>Encoder&lt;Target: <span class="question-mark">?</span>Sized&gt; {
     <span class="kw">type </span>Error: From&lt;std::io::Error&gt;;
     <span class="kw">type </span>T: Serialize + <span class="question-mark">?</span>Sized;
-    <span class="kw">fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>, data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T, target: <span class="kw-2">&amp;mut </span>Target) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt;;
+
+    <span class="doccomment">/// Fully write out formatted data to a target disk.
+    </span><span class="kw">fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>, data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T, target: Target) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt;;
 }
 
-<span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
-</span><span class="kw">pub trait </span>AsyncDecoder&lt;Source: <span class="question-mark">?</span>Sized + AsyncRead&gt; {
+<span class="doccomment">/// A format decoder that can be used asynchronously.
+</span><span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
+</span><span class="kw">pub trait </span>AsyncDecoder&lt;Source: <span class="question-mark">?</span>Sized&gt; {
     <span class="kw">type </span>Error: From&lt;std::io::Error&gt;;
     <span class="kw">type </span>T: <span class="kw">for</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; + Send + Sync;
-    <span class="kw">fn </span>decode(
+
+    <span class="doccomment">/// Return data with a known format from storage.
+    </span><span class="kw">fn </span>decode(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        source: <span class="kw-2">&amp;mut </span>Source,
+        source: Source,
     ) -&gt; <span class="kw">impl </span>std::future::Future&lt;Output = <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt;&gt; + Send;
 }
 
-<span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
-</span><span class="kw">pub trait </span>AsyncEncoder&lt;Target: <span class="question-mark">?</span>Sized + AsyncWrite&gt;: Unpin {
+<span class="doccomment">/// A format encoder that can be used asynchronously.
+///
+/// # Implementation
+/// It is the responsibility of trait implementors to call
+/// [`AsyncWriteExt::flush`] and [`AsyncWriteExt::close`] to ensure encodings
+/// write out to disk. Any implementor that does not to call these may fail to
+/// put all data on disk, making the encoding invalid and causing read failure.
+</span><span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
+</span><span class="kw">pub trait </span>AsyncEncoder&lt;Target: <span class="question-mark">?</span>Sized&gt; {
     <span class="kw">type </span>Error: From&lt;std::io::Error&gt;;
-    <span class="kw">type </span>T: Serialize + Send + Sync;
-    <span class="kw">fn </span>encode(
+    <span class="kw">type </span>T: <span class="question-mark">?</span>Sized + Serialize + Send + Sync;
+
+    <span class="doccomment">/// Fully write out formatted data to a target disk.
+    </span><span class="kw">fn </span>encode(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T,
-        target: <span class="kw-2">&amp;mut </span>Target,
+        target: Target,
     ) -&gt; <span class="kw">impl </span>std::future::Future&lt;Output = <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt;&gt; + Send;
 }
 

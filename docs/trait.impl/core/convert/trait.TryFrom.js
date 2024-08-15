@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"backed_data":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html\" title=\"trait core::convert::TryFrom\">TryFrom</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/nightly/std/path/struct.PathBuf.html\" title=\"struct std::path::PathBuf\">PathBuf</a>&gt; for <a class=\"struct\" href=\"backed_data/entry/disks/mmap/struct.Mmap.html\" title=\"struct backed_data::entry::disks::mmap::Mmap\">Mmap</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -89,6 +89,7 @@
 <a href="#89" id="89">89</a>
 <a href="#90" id="90">90</a>
 <a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     fs::File,
     io::{BufReader, BufWriter},
@@ -108,6 +109,7 @@
 /// Large collections of [`BackedEntry`](`super::super::BackedEntry`)s would otherwise risk overwhelming
 /// OS limts on the number of open file descriptors.
 </span><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 </span><span class="kw">pub struct </span>Plainfile {
     <span class="doccomment">/// File location.
     </span>path: PathBuf,

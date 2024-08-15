@@ -78,6 +78,7 @@
 <a href="#78" id="78">78</a>
 <a href="#79" id="79">79</a>
 <a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     fs::File,
     path::{Path, PathBuf},
@@ -92,6 +93,7 @@
 
 <span class="doccomment">/// [`Plainfile`](`super::Plainfile`), but with no buffering at all.
 </span><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 </span><span class="kw">pub struct </span>Unbuffered {
     <span class="doccomment">/// File location.
     </span>path: PathBuf,

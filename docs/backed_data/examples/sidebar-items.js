@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["large_reencode","remote_loading","shakespeare_secret"]};
+window.SIDEBAR_ITEMS = {"mod":["async_mmap","async_simd","large_reencode","mmap","remote_loading","remote_simd","shakespeare_secret"]};

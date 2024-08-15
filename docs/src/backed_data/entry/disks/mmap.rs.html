@@ -824,14 +824,59 @@
 <a href="#824" id="824">824</a>
 <a href="#825" id="825">825</a>
 <a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
+<a href="#843" id="843">843</a>
+<a href="#844" id="844">844</a>
+<a href="#845" id="845">845</a>
+<a href="#846" id="846">846</a>
+<a href="#847" id="847">847</a>
+<a href="#848" id="848">848</a>
+<a href="#849" id="849">849</a>
+<a href="#850" id="850">850</a>
+<a href="#851" id="851">851</a>
+<a href="#852" id="852">852</a>
+<a href="#853" id="853">853</a>
+<a href="#854" id="854">854</a>
+<a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+    cell::UnsafeCell,
     cmp::max,
     fs::File,
     io::{Cursor, ErrorKind, Write},
-    mem::transmute,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
+    sync::{Arc, Mutex},
 };
 
 <span class="kw">use </span>memmap2::MmapOptions;
@@ -843,20 +888,9 @@
 <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
 </span><span class="kw">use </span>memmap2::RemapOptions;
 
-<span class="kw">use </span><span class="kw">crate</span>::utils::BorrowExtender;
-
 <span class="kw">use super</span>::{ReadDisk, WriteDisk};
 
-<span class="comment">// ---------- Internal types ---------- //
-
-</span><span class="attr">#[derive(Debug)]
-</span><span class="kw">pub enum </span>SwitchingMmap {
-    EmptyFile,
-    ReadMmap(memmap2::Mmap),
-    WriteMmap(MmapWriter),
-}
-
-<span class="kw">fn </span>open_mmap&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;File&gt; {
+<span class="kw">fn </span>open_mmap_file&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;File&gt; {
     <span class="kw">let </span>f = File::options()
         .read(<span class="bool-val">true</span>)
         .write(<span class="bool-val">true</span>)
@@ -867,95 +901,62 @@
     <span class="prelude-val">Ok</span>(f)
 }
 
-<span class="kw">impl </span>SwitchingMmap {
-    <span class="kw">fn </span>init_read&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="kw">let </span>file = open_mmap(path)<span class="question-mark">?</span>;
+<span class="doccomment">/// Read-only [`memmap2::Mmap`] that handles zero-length on Windows.
+</span><span class="attr">#[derive(Debug)]
+</span><span class="kw">pub enum </span>ReadMmap {
+    Empty,
+    NonEmpty(memmap2::Mmap),
+}
 
-        <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.len() == <span class="number">0 </span>{
-            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="self">Self</span>::EmptyFile);
+<span class="kw">impl </span>AsRef&lt;[u8]&gt; <span class="kw">for </span>ReadMmap {
+    <span class="kw">fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
+        <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::Empty =&gt; <span class="kw-2">&amp;</span>[],
+            <span class="self">Self</span>::NonEmpty(x) =&gt; x.as_ref(),
         }
+    }
+}
 
-        <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
+<span class="kw">impl </span>Deref <span class="kw">for </span>ReadMmap {
+    <span class="kw">type </span>Target = [u8];
+    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
+        <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::Empty =&gt; <span class="kw-2">&amp;</span>[],
+            <span class="self">Self</span>::NonEmpty(x) =&gt; x.as_ref(),
+        }
+    }
+}
+
+<span class="kw">impl </span>ReadMmap {
+    <span class="attr">#[cfg(target_family = <span class="string">"unix"</span>)]
+    </span><span class="kw">pub fn </span>advise(<span class="kw-2">&amp;</span><span class="self">self</span>, advice: memmap2::Advice) -&gt; std::io::Result&lt;()&gt; {
+        <span class="kw">if let </span><span class="self">Self</span>::NonEmpty(mmap) = <span class="self">self </span>{
+            mmap.advise(advice)
+        } <span class="kw">else </span>{
+            <span class="prelude-val">Ok</span>(())
+        }
+    }
+
+    <span class="kw">pub fn </span>new_arc&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
+        <span class="kw">let </span>file = open_mmap_file(path)<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>mmap = <span class="kw">if </span>file.metadata()<span class="question-mark">?</span>.len() == <span class="number">0 </span>{
+            <span class="self">Self</span>::Empty
+        } <span class="kw">else </span>{
+            <span class="self">Self</span>::NonEmpty(<span class="kw">unsafe </span>{ MmapOptions::new().map(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>)
+        };
+
         <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
         </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
 
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(mmap))
-    }
-
-    <span class="kw">fn </span>conv_to_read(<span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::EmptyFile),
-            <span class="self">Self</span>::ReadMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(x)),
-            <span class="self">Self</span>::WriteMmap(<span class="kw-2">mut </span>x) =&gt; {
-                x.flush()<span class="question-mark">?</span>;
-                <span class="kw">let </span>mmap = x.get_map()<span class="question-mark">?</span>.make_read_only()<span class="question-mark">?</span>;
-                <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
-                </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
-
-                <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(mmap))
-            }
-        }
-    }
-
-    <span class="kw">fn </span>conv_to_write&lt;P: AsRef&lt;Path&gt;&gt;(<span class="self">self</span>, path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::WriteMmap(MmapWriter::no_advise(path)<span class="question-mark">?</span>)),
-            <span class="self">Self</span>::ReadMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::WriteMmap(MmapWriter::from_args(path, x.make_mut()<span class="question-mark">?</span>)<span class="question-mark">?</span>)),
-            <span class="self">Self</span>::WriteMmap(x) =&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::WriteMmap(x)),
-        }
+        <span class="prelude-val">Ok</span>(Arc::new(mmap))
     }
 }
 
-<span class="kw">impl </span>AsRef&lt;[u8]&gt; <span class="kw">for </span>SwitchingMmap {
-    <span class="kw">fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::EmptyFile =&gt; <span class="kw-2">&amp;</span>[],
-            <span class="self">Self</span>::ReadMmap(x) =&gt; x.as_ref(),
-            <span class="self">Self</span>::WriteMmap(x) =&gt; x.as_ref(),
-        }
-    }
-}
+<span class="comment">// ---------- Internal types ---------- //
 
-<span class="kw">impl </span>Write <span class="kw">for </span>SwitchingMmap {
-    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; std::io::Result&lt;usize&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
-                ErrorKind::Other,
-                <span class="string">"Cannot write to an empty mmap"</span>,
-            )),
-            <span class="self">Self</span>::ReadMmap(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
-                ErrorKind::Other,
-                <span class="string">"Cannot write to ReadMmap"</span>,
-            )),
-            <span class="self">Self</span>::WriteMmap(x) =&gt; x.write(buf),
-        }
-    }
-
-    <span class="kw">fn </span>write_vectored(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bufs: <span class="kw-2">&amp;</span>[std::io::IoSlice&lt;<span class="lifetime">'_</span>&gt;]) -&gt; std::io::Result&lt;usize&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
-                ErrorKind::Other,
-                <span class="string">"Cannot write to an empty mmap"</span>,
-            )),
-            <span class="self">Self</span>::ReadMmap(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(
-                ErrorKind::Other,
-                <span class="string">"Cannot write to ReadMmap"</span>,
-            )),
-            <span class="self">Self</span>::WriteMmap(x) =&gt; x.write_vectored(bufs),
-        }
-    }
-
-    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::EmptyFile =&gt; <span class="prelude-val">Ok</span>(()),
-            <span class="self">Self</span>::ReadMmap(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(()),
-            <span class="self">Self</span>::WriteMmap(x) =&gt; x.flush(),
-        }
-    }
-}
-
-<span class="attr">#[derive(Debug)]
-</span><span class="kw">pub struct </span>ReadMmapGuard(BorrowExtender&lt;Arc&lt;GuardedMmap&gt;, RwLockReadGuard&lt;<span class="lifetime">'static</span>, SwitchingMmap&gt;&gt;);
+</span><span class="attr">#[derive(Debug)]
+</span><span class="kw">pub struct </span>ReadMmapGuard(Arc&lt;ReadMmap&gt;);
 
 <span class="kw">impl </span>AsRef&lt;[u8]&gt; <span class="kw">for </span>ReadMmapGuard {
     <span class="kw">fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
@@ -964,146 +965,218 @@
 }
 
 <span class="kw">impl </span>Deref <span class="kw">for </span>ReadMmapGuard {
-    <span class="kw">type </span>Target = SwitchingMmap;
+    <span class="kw">type </span>Target = [u8];
     <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0
-    </span>}
+        <span class="self">self</span>.<span class="number">0</span>.deref()
+    }
 }
 
-<span class="attr">#[derive(Debug)]
-</span><span class="kw">pub struct </span>WriteMmapGuard(
-    BorrowExtender&lt;Arc&lt;GuardedMmap&gt;, RwLockWriteGuard&lt;<span class="lifetime">'static</span>, SwitchingMmap&gt;&gt;,
-);
+<span class="doccomment">/// This is always issued so that the MmapWriter access is unique.
+</span><span class="attr">#[derive(Debug)]
+</span><span class="kw">pub struct </span>WriteMmapGuard(Arc&lt;WriteMmap&gt;);
 
 <span class="kw">impl </span>AsRef&lt;[u8]&gt; <span class="kw">for </span>WriteMmapGuard {
     <span class="kw">fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
-        <span class="self">self</span>.<span class="number">0</span>.as_ref()
+        <span class="kw">let </span>this = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span><span class="self">self</span>.<span class="number">0</span>.get() };
+        this.as_ref()
+    }
+}
+
+<span class="kw">impl </span>AsMut&lt;[u8]&gt; <span class="kw">for </span>WriteMmapGuard {
+    <span class="kw">fn </span>as_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[u8] {
+        <span class="kw">let </span>this = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.<span class="number">0</span>.get() };
+        this.as_mut()
     }
 }
 
 <span class="kw">impl </span>Deref <span class="kw">for </span>WriteMmapGuard {
-    <span class="kw">type </span>Target = SwitchingMmap;
+    <span class="kw">type </span>Target = [u8];
     <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0
-    </span>}
+        <span class="self">self</span>.as_ref()
+    }
+}
+
+<span class="kw">impl </span>DerefMut <span class="kw">for </span>WriteMmapGuard {
+    <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target {
+        <span class="self">self</span>.as_mut()
+    }
 }
 
 <span class="kw">impl </span>Write <span class="kw">for </span>WriteMmapGuard {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; std::io::Result&lt;usize&gt; {
-        <span class="self">self</span>.<span class="number">0</span>.write(buf)
+        <span class="kw">let </span>this = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.<span class="number">0</span>.get() };
+        this.write(buf)
     }
     <span class="kw">fn </span>write_vectored(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bufs: <span class="kw-2">&amp;</span>[std::io::IoSlice&lt;<span class="lifetime">'_</span>&gt;]) -&gt; std::io::Result&lt;usize&gt; {
-        <span class="self">self</span>.<span class="number">0</span>.write_vectored(bufs)
+        <span class="kw">let </span>this = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.<span class="number">0</span>.get() };
+        this.write_vectored(bufs)
     }
     <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
-        <span class="self">self</span>.<span class="number">0</span>.flush()
+        <span class="kw">let </span>this = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span><span class="self">self</span>.<span class="number">0</span>.get() };
+        this.flush()
     }
 }
+
+<span class="doccomment">/// Adding [`Send`] and [`Sync`] to [`UnsafeCell`] on [`MmapWriter`].
+///
+/// The `!Send + !Sync` bounds are just a lint from the standard library, not
+/// actual unsafety.
+</span><span class="attr">#[derive(Debug)]
+</span><span class="kw">pub struct </span>WriteMmap(UnsafeCell&lt;MmapWriter&gt;);
+
+<span class="kw">impl </span>From&lt;WriteMmap&gt; <span class="kw">for </span>UnsafeCell&lt;MmapWriter&gt; {
+    <span class="kw">fn </span>from(val: WriteMmap) -&gt; <span class="self">Self </span>{
+        val.<span class="number">0
+    </span>}
+}
+
+<span class="kw">impl </span>From&lt;MmapWriter&gt; <span class="kw">for </span>WriteMmap {
+    <span class="kw">fn </span>from(value: MmapWriter) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>(UnsafeCell::new(value))
+    }
+}
+
+<span class="kw">impl </span>WriteMmap {
+    <span class="kw">pub fn </span>into_inner(<span class="self">self</span>) -&gt; MmapWriter {
+        <span class="self">self</span>.<span class="number">0</span>.into_inner()
+    }
+
+    <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">*mut </span>MmapWriter {
+        <span class="self">self</span>.<span class="number">0</span>.get()
+    }
+}
+
+<span class="kw">unsafe impl </span>Send <span class="kw">for </span>WriteMmap {}
+<span class="kw">unsafe impl </span>Sync <span class="kw">for </span>WriteMmap {}
 
 <span class="doccomment">/// Guards an inner mmap to match Rust mutability requirements.
 ///
-/// Allows &gt;= 1 outstanding mmap instances for immutable access via read locks,
-/// 1 outstanding mmap instance for mutable access via a write lock, or
-/// no outstanding accesses.
-///
-/// `access_lock` is claimed for the full duration of methods getting a read
-/// or write handle, so [`Self::get_read`] can transition from a read to write
-/// access without another thread potentially claiming a lock inbetween.
-</span><span class="attr">#[derive(Debug)]
-</span><span class="kw">struct </span>GuardedMmap {
-    inner: RwLock&lt;SwitchingMmap&gt;,
-    access_lock: Mutex&lt;()&gt;,
+/// Allows &gt;= 1 outstanding mmap instances for immutable access, 1 outstanding
+/// mmap instance for mutable access via a write lock, or no outstanding
+/// accesses.
+</span><span class="attr">#[derive(Debug, Clone)]
+</span><span class="kw">pub enum </span>SwitchingMmap {
+    <span class="doccomment">/// Previously failed irrecoverably, so no mmap in memory.
+    </span>Invalid,
+    ReadMmap(Arc&lt;ReadMmap&gt;),
+    WriteMmap(Arc&lt;WriteMmap&gt;),
 }
 
-<span class="kw">impl </span>GuardedMmap {
-    <span class="kw">fn </span>new&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-            inner: RwLock::new(SwitchingMmap::init_read(path)<span class="question-mark">?</span>),
-            access_lock: Mutex::new(()),
-        })
+<span class="kw">impl </span>SwitchingMmap {
+    <span class="kw">fn </span>init_read&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::ReadMmap(ReadMmap::new_arc(path)<span class="question-mark">?</span>))
     }
 
-    <span class="doccomment">/// Fails when an outstanding write is held, or on lock panic.
-    </span><span class="kw">fn </span>get_read&lt;P: AsRef&lt;Path&gt;&gt;(this: Arc&lt;<span class="self">Self</span>&gt;, path: P) -&gt; std::io::Result&lt;ReadMmapGuard&gt; {
-        <span class="comment">// Hold exclusive access for getting locks `self.inner` during the
-        // execution of this function.
-        </span><span class="kw">let </span>_access = this
-            .access_lock
-            .lock()
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, <span class="macro">format!</span>(<span class="string">"{:#?}"</span>, e)))<span class="question-mark">?</span>;
-
-        <span class="kw">let </span>gen_read_lock = |this: <span class="kw-2">&amp;</span>Arc&lt;<span class="self">Self</span>&gt;| {
-            BorrowExtender::try_new(this.clone(), |this| {
-                <span class="kw">let </span>this = this.as_ref();
-                <span class="kw">let </span>this = <span class="kw">unsafe </span>{ transmute::&lt;<span class="kw-2">&amp;</span>GuardedMmap, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>GuardedMmap&gt;(this) };
-                this.inner.try_read().map_err(|e| <span class="kw">match </span>e {
-                    TryLockError::WouldBlock =&gt; {
-                        std::io::Error::new(ErrorKind::WouldBlock, <span class="string">"Read lock is unavailable."</span>)
-                    }
-                    x =&gt; std::io::Error::new(ErrorKind::Other, <span class="macro">format!</span>(<span class="string">"{:#?}"</span>, x)),
-                })
-            })
+    <span class="doccomment">/// Return self with either a valid guard, or an error.
+    ///
+    /// In the valid guard case, this is the
+    /// [`ReadMmap`](`SwitchingMmap::ReadMmap`) variant. In the error case,
+    /// this may be either [`WriteMmap`](`SwitchingMmap::WriteMmap`) or
+    /// [`Invalid`](`SwitchingMmap::Invalid`).
+    </span><span class="kw">fn </span>read_handle&lt;P: AsRef&lt;Path&gt;&gt;(
+        <span class="self">self</span>,
+        path: P,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, ReadMmapGuard), (<span class="self">Self</span>, std::io::Error)&gt; {
+        <span class="kw">let </span>read_ret = |mmap: Arc&lt;ReadMmap&gt;| {
+            <span class="kw">let </span>guard = ReadMmapGuard(mmap.clone());
+            <span class="prelude-val">Ok</span>((<span class="self">Self</span>::ReadMmap(mmap), guard))
         };
 
-        <span class="kw">let </span>read_lock = gen_read_lock(<span class="kw-2">&amp;</span>this)<span class="question-mark">?</span>;
+        <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::WriteMmap(x) =&gt; <span class="kw">match </span>Arc::try_unwrap(x) {
+                <span class="prelude-val">Ok</span>(x) =&gt; {
+                    <span class="kw">let </span>writer = x.into_inner();
+                    <span class="kw">let </span>mmap = Arc::new(<span class="kw">if </span>writer.written_len &gt; <span class="number">0 </span>{
+                        <span class="kw">match </span>writer.get_map() {
+                            <span class="prelude-val">Ok</span>(map) =&gt; <span class="kw">match </span>map.make_read_only() {
+                                <span class="prelude-val">Ok</span>(read_map) =&gt; ReadMmap::NonEmpty(read_map),
+                                <span class="prelude-val">Err</span>(e) =&gt; {
+                                    <span class="kw">return </span><span class="prelude-val">Err</span>((<span class="self">Self</span>::Invalid, e));
+                                }
+                            },
+                            <span class="prelude-val">Err</span>((writer, e)) =&gt; {
+                                <span class="kw">return </span><span class="prelude-val">Err</span>((<span class="self">Self</span>::WriteMmap(Arc::new(writer.into())), e));
+                            }
+                        }
+                    } <span class="kw">else </span>{
+                        ReadMmap::Empty
+                    });
 
-        <span class="kw">let </span>is_write = <span class="macro">matches!</span>(<span class="kw-2">**</span>read_lock, SwitchingMmap::WriteMmap(<span class="kw">_</span>));
+                    <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+                    </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateRead);
 
-        <span class="kw">if </span>is_write {
-            drop(read_lock);
-            <span class="kw">let </span>write_lock = this.inner.write();
-
-            <span class="kw">match </span>write_lock {
-                <span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>mmap) =&gt; {
-                    <span class="kw">let </span>temp_mmap = std::mem::replace(
-                        <span class="kw-2">&amp;mut *</span>mmap,
-                        SwitchingMmap::ReadMmap(<span class="kw">unsafe </span>{
-                            MmapOptions::new().map(<span class="kw-2">&amp;</span>open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>)<span class="question-mark">?
-                        </span>}),
-                    );
-                    <span class="kw-2">*</span>mmap = temp_mmap.conv_to_read()<span class="question-mark">?</span>;
-
-                    drop(mmap);
-                    <span class="prelude-val">Ok</span>(ReadMmapGuard(gen_read_lock(<span class="kw-2">&amp;</span>this)<span class="question-mark">?</span>))
+                    read_ret(mmap)
                 }
-                <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(std::io::Error::new(ErrorKind::Other, <span class="macro">format!</span>(<span class="string">"{:#?}"</span>, e))),
-            }
-        } <span class="kw">else </span>{
-            <span class="prelude-val">Ok</span>(ReadMmapGuard(read_lock))
+                <span class="prelude-val">Err</span>(arc) =&gt; <span class="prelude-val">Err</span>((
+                    <span class="self">Self</span>::WriteMmap(arc),
+                    std::io::Error::new(ErrorKind::Other, <span class="string">"A write handle is currently open"</span>),
+                )),
+            },
+            <span class="self">Self</span>::ReadMmap(x) =&gt; read_ret(x),
+            <span class="self">Self</span>::Invalid =&gt; <span class="kw">match </span>ReadMmap::new_arc(path) {
+                <span class="prelude-val">Ok</span>(x) =&gt; read_ret(x),
+                <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>((<span class="self">Self</span>::Invalid, e)),
+            },
         }
     }
 
-    <span class="doccomment">/// Fails when an outstanding write is held, or on lock panic.
-    </span><span class="kw">fn </span>get_write&lt;P: AsRef&lt;Path&gt;&gt;(this: Arc&lt;<span class="self">Self</span>&gt;, path: P) -&gt; std::io::Result&lt;WriteMmapGuard&gt; {
-        <span class="comment">// Hold exclusive access for getting locks `self.inner` during the
-        // execution of this function.
-        </span><span class="kw">let </span>_access = this
-            .access_lock
-            .lock()
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, <span class="macro">format!</span>(<span class="string">"{:#?}"</span>, e)))<span class="question-mark">?</span>;
-
-        <span class="kw">let </span><span class="kw-2">mut </span>write_lock = BorrowExtender::try_new(this.clone(), |this| {
-            <span class="kw">let </span>this = this.as_ref();
-            <span class="kw">let </span>this = <span class="kw">unsafe </span>{ transmute::&lt;<span class="kw-2">&amp;</span>GuardedMmap, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>GuardedMmap&gt;(this) };
-            this.inner.try_write().map_err(|e| <span class="kw">match </span>e {
-                TryLockError::WouldBlock =&gt; {
-                    std::io::Error::new(ErrorKind::WouldBlock, <span class="string">"Write lock is unavailable."</span>)
+    <span class="doccomment">/// Return self with either a valid guard, or an error.
+    ///
+    /// In the valid guard case, this is the
+    /// [`WriteMmap`](`SwitchingMmap::WriteMmap`) variant. In the error case,
+    /// this may be either [`ReadMmap`](`SwitchingMmap::ReadMmap`) or
+    /// [`Invalid`](`SwitchingMmap::Invalid`).
+    </span><span class="kw">fn </span>write_handle&lt;P: AsRef&lt;Path&gt;&gt;(
+        <span class="self">self</span>,
+        path: P,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, WriteMmapGuard), (<span class="self">Self</span>, std::io::Error)&gt; {
+        <span class="kw">let </span>writer = <span class="kw">match </span><span class="self">self </span>{
+            <span class="self">Self</span>::WriteMmap(x) =&gt; <span class="kw">match </span>Arc::try_unwrap(x) {
+                <span class="prelude-val">Ok</span>(mmap) =&gt; mmap,
+                <span class="prelude-val">Err</span>(arc) =&gt; {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>((
+                        <span class="self">Self</span>::WriteMmap(arc),
+                        std::io::Error::new(ErrorKind::Other, <span class="string">"A write handle is currently open"</span>),
+                    ));
                 }
-                x =&gt; std::io::Error::new(ErrorKind::Other, <span class="macro">format!</span>(<span class="string">"{:#?}"</span>, x)),
-            })
-        })<span class="question-mark">?</span>;
+            },
+            <span class="self">Self</span>::ReadMmap(x) =&gt; <span class="kw">match </span>Arc::try_unwrap(x) {
+                <span class="prelude-val">Ok</span>(mmap) =&gt; <span class="kw">match </span>mmap {
+                    ReadMmap::NonEmpty(read_mmap) =&gt; <span class="kw">match </span>read_mmap
+                        .make_mut()
+                        .and_then(|write_mmap| MmapWriter::from_args(path, write_mmap))
+                    {
+                        <span class="prelude-val">Ok</span>(write_mmap) =&gt; write_mmap.into(),
+                        <span class="prelude-val">Err</span>(e) =&gt; {
+                            <span class="kw">return </span><span class="prelude-val">Err</span>((<span class="self">Self</span>::Invalid, e));
+                        }
+                    },
+                    ReadMmap::Empty =&gt; <span class="kw">match </span>MmapWriter::no_advise(path) {
+                        <span class="prelude-val">Ok</span>(mmap) =&gt; mmap.into(),
+                        <span class="prelude-val">Err</span>(e) =&gt; {
+                            <span class="kw">return </span><span class="prelude-val">Err</span>((<span class="self">Self</span>::Invalid, e));
+                        }
+                    },
+                },
+                <span class="prelude-val">Err</span>(arc) =&gt; {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>((
+                        <span class="self">Self</span>::ReadMmap(arc),
+                        std::io::Error::new(ErrorKind::Other, <span class="string">"A read handle is currently open"</span>),
+                    ));
+                }
+            },
+            <span class="self">Self</span>::Invalid =&gt; <span class="kw">match </span>MmapWriter::no_advise(path) {
+                <span class="prelude-val">Ok</span>(mmap) =&gt; mmap.into(),
+                <span class="prelude-val">Err</span>(e) =&gt; {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>((<span class="self">Self</span>::Invalid, e));
+                }
+            },
+        };
 
-        <span class="kw">let </span>is_read = !<span class="macro">matches!</span>(<span class="kw-2">**</span>write_lock, SwitchingMmap::WriteMmap(<span class="kw">_</span>));
+        <span class="kw">let </span>writer = Arc::new(writer);
 
-        <span class="kw">if </span>is_read {
-            <span class="kw">let </span>temp_mmap = std::mem::replace(
-                <span class="kw-2">&amp;mut **</span>write_lock,
-                SwitchingMmap::WriteMmap(MmapWriter::no_advise(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>),
-            );
-            <span class="kw-2">**</span>write_lock = temp_mmap.conv_to_write(path)<span class="question-mark">?</span>;
-        }
-
-        <span class="prelude-val">Ok</span>(WriteMmapGuard(write_lock))
+        <span class="kw">let </span>guard = WriteMmapGuard(writer.clone());
+        <span class="prelude-val">Ok</span>((<span class="self">Self</span>::WriteMmap(writer), guard))
     }
 }
 
@@ -1118,7 +1191,7 @@
 </span><span class="kw">pub struct </span>Mmap {
     <span class="doccomment">/// File location.
     </span>path: PathBuf,
-    mmap: Arc&lt;GuardedMmap&gt;,
+    mmap: Mutex&lt;SwitchingMmap&gt;,
 }
 
 <span class="comment">// ---------- Serde impls ---------- //
@@ -1138,7 +1211,7 @@
         </span>D: serde::Deserializer&lt;<span class="lifetime">'de</span>&gt;,
     {
         <span class="kw">let </span>path = PathBuf::deserialize(deserializer)<span class="question-mark">?</span>;
-        <span class="kw">let </span>mmap = GuardedMmap::new(<span class="kw-2">&amp;</span>path)
+        <span class="kw">let </span>mmap = SwitchingMmap::init_read(<span class="kw-2">&amp;</span>path)
             .map_err(serde::de::Error::custom)<span class="question-mark">?
             </span>.into();
 
@@ -1148,12 +1221,11 @@
 
 <span class="comment">// ---------- END Serde impls ---------- //
 
-</span><span class="kw">impl </span>From&lt;PathBuf&gt; <span class="kw">for </span>Mmap {
-    <span class="kw">fn </span>from(value: PathBuf) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>mmap = GuardedMmap::new(<span class="kw-2">&amp;</span>value)
-            .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Path could not be opened through mmap: {:#?}"</span>, <span class="kw-2">&amp;</span>value))
-            .into();
-        <span class="self">Self </span>{ path: value, mmap }
+</span><span class="kw">impl </span>TryFrom&lt;PathBuf&gt; <span class="kw">for </span>Mmap {
+    <span class="kw">type </span>Error = std::io::Error;
+    <span class="kw">fn </span>try_from(value: PathBuf) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>mmap = SwitchingMmap::init_read(<span class="kw-2">&amp;</span>value)<span class="question-mark">?</span>.into();
+        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ path: value, mmap })
     }
 }
 
@@ -1170,18 +1242,31 @@
 }
 
 <span class="kw">impl </span>Mmap {
-    <span class="kw">pub fn </span>new(path: PathBuf) -&gt; <span class="self">Self </span>{
-        path.into()
+    <span class="kw">pub fn </span>new(path: PathBuf) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
+        path.try_into()
     }
 }
 
+<span class="kw">pub type </span>ReadMmapCursor = Cursor&lt;ReadMmapGuard&gt;;
+
 <span class="kw">impl </span>ReadDisk <span class="kw">for </span>Mmap {
-    <span class="kw">type </span>ReadDisk = Cursor&lt;ReadMmapGuard&gt;;
+    <span class="kw">type </span>ReadDisk = ReadMmapCursor;
 
     <span class="kw">fn </span>read_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::ReadDisk&gt; {
-        <span class="kw">let </span>mmap = GuardedMmap::get_read(<span class="self">self</span>.mmap.clone(), <span class="kw-2">&amp;</span><span class="self">self</span>.path)<span class="question-mark">?</span>;
+        <span class="comment">// Shuffle out the current mmap value to replace later.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>held_mmap = <span class="self">self</span>.mmap.lock().unwrap();
+        <span class="kw">let </span>cur_mmap = std::mem::replace(<span class="kw-2">&amp;mut *</span>held_mmap, SwitchingMmap::Invalid);
 
-        <span class="prelude-val">Ok</span>(Cursor::new(mmap))
+        <span class="kw">match </span>cur_mmap.read_handle(<span class="kw-2">&amp;</span><span class="self">self</span>.path) {
+            <span class="prelude-val">Ok</span>((mmap, guard)) =&gt; {
+                <span class="kw-2">*</span>held_mmap = mmap;
+                <span class="prelude-val">Ok</span>(Cursor::new(guard))
+            }
+            <span class="prelude-val">Err</span>((mmap, error)) =&gt; {
+                <span class="kw-2">*</span>held_mmap = mmap;
+                <span class="prelude-val">Err</span>(error)
+            }
+        }
     }
 }
 
@@ -1200,8 +1285,6 @@
 <span class="kw">impl </span>MmapWriter {
     <span class="kw">fn </span>from_args&lt;P: AsRef&lt;Path&gt;&gt;(path: P, mmap: memmap2::MmapMut) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
-        </span><span class="kw">let _ </span>= mmap.advise(Advice::Sequential);
-        <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
         </span><span class="kw">let _ </span>= mmap.advise(Advice::PopulateWrite);
 
         <span class="kw">let </span>reserved_len = mmap.len();
@@ -1217,7 +1300,7 @@
     }
 
     <span class="kw">fn </span>no_advise&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;<span class="self">Self</span>&gt; {
-        <span class="kw">let </span>file = open_mmap(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+        <span class="kw">let </span>file = open_mmap_file(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
 
         <span class="comment">// If the file is empty, we need to push in a garbage byte for mmap to
         // succeed.
@@ -1240,7 +1323,7 @@
     }
 
     <span class="kw">fn </span>file(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;File&gt; {
-        open_mmap(<span class="kw-2">&amp;</span><span class="self">self</span>.path)
+        open_mmap_file(<span class="kw-2">&amp;</span><span class="self">self</span>.path)
     }
 
     <span class="doccomment">/// Test if a newly `ftruncate`-allocated file as a hole in it, to
@@ -1365,12 +1448,10 @@
                 <span class="self">self</span>.reserved_len = new_reservation;
             }
 
-            <span class="comment">// Increase mapping size to file size and re-advise.
+            <span class="comment">// Increase mapping size to file size.
             // Don't advise write, as that may produce an arbitrarily long
             // load (especially if a huge sparse file is allocated).
             </span><span class="self">self</span>.remap()<span class="question-mark">?</span>;
-            <span class="attr">#[cfg(target_family = <span class="string">"unix"</span>)]
-            </span><span class="kw">let _ </span>= <span class="self">self</span>.mmap.advise(Advice::Sequential);
         }
         <span class="prelude-val">Ok</span>(())
     }
@@ -1387,12 +1468,7 @@
 
     <span class="doccomment">/// Shrink to the actually written size, discarding garbage at the end.
     </span><span class="kw">fn </span>truncate(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
-        <span class="macro">println!</span>(
-            <span class="string">"CALLING TRUNCATE =&gt; written, reserved: {} {}"</span>,
-            <span class="self">self</span>.written_len, <span class="self">self</span>.reserved_len
-        );
-        <span class="comment">// Shrink to the actually written size, discarding garbage at the end.
-        </span><span class="kw">if </span><span class="self">self</span>.written_len &lt; <span class="self">self</span>.reserved_len {
+        <span class="kw">if </span><span class="self">self</span>.written_len &lt; <span class="self">self</span>.reserved_len {
             <span class="self">self</span>.file()<span class="question-mark">?</span>.set_len(<span class="self">self</span>.written_len <span class="kw">as </span>u64).unwrap();
 
             <span class="self">self</span>.reserved_len = <span class="self">self</span>.written_len;
@@ -1402,14 +1478,18 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn </span>get_map(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;memmap2::MmapMut&gt; {
-        <span class="self">self</span>.flush()<span class="question-mark">?</span>;
+    <span class="kw">fn </span>get_map(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;memmap2::MmapMut, (<span class="self">Self</span>, std::io::Error)&gt; {
+        <span class="kw">let </span>exec = |this: <span class="kw-2">&amp;mut </span><span class="self">Self</span>| {
+            this.flush()<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>stub_mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map_mut(<span class="kw-2">&amp;</span><span class="self">self</span>.file()<span class="question-mark">?</span>) }<span class="question-mark">?</span>;
+            <span class="kw">let </span>stub_mmap = <span class="kw">unsafe </span>{ MmapOptions::new().map_mut(<span class="kw-2">&amp;</span>this.file()<span class="question-mark">?</span>) }<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>map = std::mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.mmap, stub_mmap);
+            <span class="kw">let </span>map = std::mem::replace(<span class="kw-2">&amp;mut </span>this.mmap, stub_mmap);
 
-        <span class="prelude-val">Ok</span>(map)
+            <span class="prelude-val">Ok</span>(map)
+        };
+
+        exec(<span class="kw-2">&amp;mut </span><span class="self">self</span>).map_err(|e| (<span class="self">self</span>, e))
     }
 
     <span class="doccomment">/// Remap to the current reserved len.
@@ -1462,20 +1542,14 @@
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>MmapWriter {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw">if </span><span class="self">self</span>.written_len &gt; <span class="number">0 </span>{
-            <span class="comment">// Skip if this drop is for an temporary
-            // instance that existed for memory
-            // consistency. Otherwise the truncation can
-            // trigger SIGBUS on later writes.
-            </span><span class="self">self</span>.truncate().unwrap_or_else(|x| {
-                <span class="macro">panic!</span>(
-                    <span class="string">"{} {}\n Error: {:#?}"</span>,
-                    <span class="string">"Failed to truncate on drop, call `self.flush` first to avoid"</span>,
-                    <span class="string">"using this panicking drop implementation."</span>,
-                    x
-                )
-            })
-        }
+        <span class="self">self</span>.truncate().unwrap_or_else(|x| {
+            <span class="macro">panic!</span>(
+                <span class="string">"{} {}\n Error: {:#?}"</span>,
+                <span class="string">"Failed to truncate on drop, call `self.flush` first to avoid"</span>,
+                <span class="string">"using this panicking drop implementation."</span>,
+                x
+            )
+        })
     }
 }
 
@@ -1495,7 +1569,20 @@
     <span class="kw">type </span>WriteDisk = WriteMmapGuard;
 
     <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
-        GuardedMmap::get_write(<span class="self">self</span>.mmap.clone(), <span class="kw-2">&amp;</span><span class="self">self</span>.path)
+        <span class="comment">// Shuffle out the current mmap value to replace later.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>held_mmap = <span class="self">self</span>.mmap.lock().unwrap();
+        <span class="kw">let </span>cur_mmap = std::mem::replace(<span class="kw-2">&amp;mut *</span>held_mmap, SwitchingMmap::Invalid);
+
+        <span class="kw">match </span>cur_mmap.write_handle(<span class="kw-2">&amp;</span><span class="self">self</span>.path) {
+            <span class="prelude-val">Ok</span>((mmap, guard)) =&gt; {
+                <span class="kw-2">*</span>held_mmap = mmap;
+                <span class="prelude-val">Ok</span>(guard)
+            }
+            <span class="prelude-val">Err</span>((mmap, error)) =&gt; {
+                <span class="kw-2">*</span>held_mmap = mmap;
+                <span class="prelude-val">Err</span>(error)
+            }
+        }
     }
 }
 
@@ -1522,6 +1609,7 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>read_data = Vec::new();
         Mmap::new(temp_file.clone())
+            .unwrap()
             .read_disk()
             .unwrap()
             .read_to_end(<span class="kw-2">&amp;mut </span>read_data)
@@ -1541,6 +1629,7 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>read_data = Vec::new();
         Mmap::new(temp_file.clone())
+            .unwrap()
             .read_disk()
             .unwrap()
             .read_to_end(<span class="kw-2">&amp;mut </span>read_data)
@@ -1557,6 +1646,7 @@
 
         <span class="macro">assert_eq!</span>(
             Mmap::new(temp_file.clone())
+                .unwrap()
                 .write_disk()
                 .unwrap()
                 .write(SEQUENCE)
@@ -1577,7 +1667,7 @@
         <span class="kw">let </span>temp_file = temp_dir().join(Uuid::new_v4().to_string());
         <span class="kw">let _ </span>= remove_file(<span class="kw-2">&amp;</span>temp_file);
 
-        <span class="kw">let </span>mmap = Mmap::new(temp_file.clone());
+        <span class="kw">let </span>mmap = Mmap::new(temp_file.clone()).unwrap();
 
         <span class="kw">let </span><span class="kw-2">mut </span>write_disk = mmap.write_disk().unwrap();
         <span class="macro">assert_eq!</span>(
@@ -1618,7 +1708,7 @@
         file_mut.set_len(GARBAGE_LEN <span class="kw">as </span>u64).unwrap();
         file_mut.flush().unwrap();
 
-        <span class="kw">let </span>mmap = Mmap::new(temp_file.clone());
+        <span class="kw">let </span>mmap = Mmap::new(temp_file.clone()).unwrap();
 
         <span class="kw">let </span>read_check = |expected| {
             <span class="kw">let </span><span class="kw-2">mut </span>read_data = Vec::new();

@@ -1,0 +1,110 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `remote_simd` mod in crate `backed_data`."><title>backed_data::examples::remote_simd - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="backed_data" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (13a52890d 2024-08-14)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../backed_data/index.html">backed_<wbr>data</a><span class="version">0.2.0</span></h2></div><h2 class="location"><a href="#">Module remote_<wbr>simd</a></h2><div class="sidebar-elems"><h2><a href="../index.html">In backed_<wbr>data::<wbr>examples</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../../index.html">backed_data</a>::<wbr><a href="../index.html">examples</a>::<wbr><a class="mod" href="#">remote_simd</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../../src/backed_data/examples/remote_simd.rs.html#1-20">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock">
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#![cfg(all(feature = <span class="string">"simd_json"</span>, feature = <span class="string">"async"</span>, feature = <span class="string">"network"</span>))]
+
+</span><span class="kw">use </span>std::{future::ready, str::FromStr};
+
+<span class="kw">use </span>backed_data::{
+    entry::{
+        adapters::{DecodeBg, SyncCoderAsyncDisk},
+        disks::{AsyncReadDisk, Network},
+        formats::{AsyncDecoder, SimdJsonCoder},
+    },
+    utils::blocking::BlockingFn,
+};
+<span class="kw">use </span>reqwest::{Method, Request};
+<span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>url::Url;
+
+<span class="kw">const </span>COURSE_URL: <span class="kw-2">&amp;</span>str =
+    <span class="string">"https://www.lib.ncsu.edu/api/course-guides/everything.json?curriculum=ece"</span>;
+
+<span class="attr">#[tokio::main]
+</span><span class="kw">async fn </span>main() {
+    <span class="kw">let </span>disk = Network::new(
+        Request::new(Method::GET, Url::from_str(COURSE_URL).unwrap()),
+        <span class="prelude-val">None</span>,
+    );
+
+    <span class="comment">// Create an adapter to run decoding in tokio's blocking threadpool, on top
+    // of an asynchronous disk. Specify unit types for writes and write future
+    // returns, as those are not used.
+    </span><span class="kw">let </span>coder = SyncCoderAsyncDisk::&lt;<span class="kw">_</span>, Network, <span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, ()&gt;::new(
+        SimdJsonCoder::default(),
+        |x: DecodeBg&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;| ready(x.call()),
+        (),
+    );
+
+    <span class="comment">// Decode asynchronously using the asynchronous disk and a blocking thread.
+    </span><span class="kw">let </span>decoded: Vec&lt;NcsuCourseListings&gt; = coder
+        .decode(disk.async_read_disk().<span class="kw">await</span>.unwrap())
+        .<span class="kw">await
+        </span>.unwrap();
+
+    <span class="comment">// The data is now loaded locally and available.
+    </span><span class="kw">let </span>ece_109 = decoded[<span class="number">0</span>]
+        .children
+        .iter()
+        .find(|child| child.course == <span class="string">"109"</span>)
+        .unwrap();
+    <span class="macro">println!</span>(<span class="string">"ECE 109: {:#?}"</span>, ece_109);
+}
+
+<span class="comment">// ---------- Code beyond this point is unrelated to the processing pipeline ---------- //
+
+// All following code is generated with `transform`
+// (https://github.com/ritz078/transform), and slightly post-processed.
+</span><span class="attr">#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>NcsuCourseListings {
+    <span class="kw">pub </span>does_course_exist: bool,
+    <span class="kw">pub </span>inherited_content: bool,
+    <span class="kw">pub </span>curriculum: String,
+    <span class="kw">pub </span>course_code: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="kw">pub </span>curriculum_name: String,
+    <span class="kw">pub </span>section: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="kw">pub </span>title: String,
+    <span class="kw">pub </span>description: String,
+    <span class="kw">pub </span>subject_specialist: SubjectSpecialist,
+    <span class="kw">pub </span>tid: String,
+    <span class="kw">pub </span>last_updated: String,
+    <span class="kw">pub </span>instructors: Vec&lt;String&gt;,
+    <span class="kw">pub </span>recommended_content: Vec&lt;RecommendedContent&gt;,
+    <span class="kw">pub </span>children: Vec&lt;Children&gt;,
+}
+
+<span class="attr">#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>SubjectSpecialist {
+    <span class="kw">pub </span>name: String,
+    <span class="kw">pub </span>unity: String,
+}
+
+<span class="attr">#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>RecommendedContent {
+    <span class="kw">pub </span>name: String,
+    <span class="kw">pub </span>description: String,
+    <span class="kw">pub </span>links: Vec&lt;Link&gt;,
+}
+
+<span class="attr">#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>Link {
+    <span class="kw">pub </span>link_label: String,
+    <span class="kw">pub </span>url: String,
+    <span class="kw">pub </span>annotation: String,
+}
+
+<span class="attr">#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>Children {
+    <span class="kw">pub </span>course: String,
+    <span class="attr">#[serde(default)]
+    </span><span class="kw">pub </span>instructors: Vec&lt;String&gt;,
+    <span class="kw">pub </span>librarian: Librarian,
+    <span class="kw">pub </span>course_title: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="kw">pub </span>path: String,
+    <span class="kw">pub </span>json: String,
+}
+
+<span class="attr">#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>Librarian {
+    <span class="kw">pub </span>name: String,
+    <span class="kw">pub </span>unity: String,
+}</code></pre></div>
+</div></details></section></div></main></body></html>

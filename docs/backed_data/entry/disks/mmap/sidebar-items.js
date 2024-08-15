@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ReadMmap","SwitchingMmap"],"struct":["Mmap","MmapWriter","ReadMmapGuard","WriteMmap","WriteMmapGuard"],"type":["ReadMmapCursor"]};

@@ -49,11 +49,15 @@
 <a href="#49" id="49">49</a>
 <a href="#50" id="50">50</a>
 <a href="#51" id="51">51</a>
+<a href="#52" id="52">52</a>
+<a href="#53" id="53">53</a>
+<a href="#54" id="54">54</a>
+<a href="#55" id="55">55</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::marker::PhantomData;
 
 <span class="kw">use </span>async_bincode::futures::{AsyncBincodeReader, AsyncBincodeWriter};
 <span class="kw">use </span>futures::io::{AsyncRead, AsyncWrite};
-<span class="kw">use </span>futures::{SinkExt, StreamExt};
+<span class="kw">use </span>futures::{AsyncWriteExt, SinkExt, StreamExt};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
 <span class="kw">use super</span>::{AsyncDecoder, AsyncEncoder};
@@ -78,7 +82,7 @@
 {
     <span class="kw">type </span>Error = bincode::Error;
     <span class="kw">type </span>T = T;
-    <span class="kw">async fn </span>decode(<span class="kw-2">&amp;</span><span class="self">self</span>, source: <span class="kw-2">&amp;mut </span>Source) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt; {
+    <span class="kw">async fn </span>decode(<span class="kw-2">&amp;</span><span class="self">self</span>, source: Source) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::T, <span class="self">Self</span>::Error&gt; {
         AsyncBincodeReader::from(source)
             .next()
             .<span class="kw">await
@@ -92,12 +96,16 @@
 <span class="kw">where
     </span>T: Serialize + Send + Sync + Unpin,
     Target: AsyncWrite + Send + Sync + Unpin,
+    <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Target: AsyncWrite,
 {
     <span class="kw">type </span>Error = bincode::Error;
     <span class="kw">type </span>T = T;
-    <span class="kw">async fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>, data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T, target: <span class="kw-2">&amp;mut </span>Target) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>bincode_writer = AsyncBincodeWriter::from(target).for_async();
-        bincode_writer.send(data).<span class="kw">await
-    </span>}
+    <span class="kw">async fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>, data: <span class="kw-2">&amp;</span><span class="self">Self</span>::T, <span class="kw-2">mut </span>target: Target) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>bincode_writer = AsyncBincodeWriter::from(<span class="kw-2">&amp;mut </span>target).for_async();
+        bincode_writer.send(data).<span class="kw">await</span><span class="question-mark">?</span>;
+        target.flush().<span class="kw">await</span><span class="question-mark">?</span>;
+        target.close().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
+    }
 }
 </code></pre></div></section></main></body></html>
