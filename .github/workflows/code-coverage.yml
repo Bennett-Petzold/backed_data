@@ -11,10 +11,9 @@ permissions: write-all
 jobs:
   gen-coverage:
     runs-on: ubuntu-latest
-    if: ${{ GITHUB_REF_NAME != 'main' }} 
 
     env:
-      ENVIRONMENT: ${{ GITHUB_REF_NAME != 'main' && 'testing' || 'unrestricted' }}
+      ENVIRONMENT: ${{ ( github.head_ref || github.ref_name ) != 'main' && 'testing' || 'unrestricted' }}
 
     environment: testing
     steps:
