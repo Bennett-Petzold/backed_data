@@ -39,7 +39,7 @@
     <span class="kw">pub async fn </span>example() {
         <span class="comment">// Temp debug timeout
         </span>std::thread::spawn(|| {
-            sleep(Duration::from_secs(<span class="number">60</span>));
+            std::thread::sleep(Duration::from_secs(<span class="number">60</span>));
             exit(<span class="number">1</span>);
         });
 
