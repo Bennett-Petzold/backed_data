@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, QuoteStyle, Terminator, Trim};
-use futures::io::{AsyncRead, AsyncWrite};
+use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 
@@ -140,11 +140,11 @@ impl<T, E, Source> AsyncDecoder<Source> for AsyncCsvCoder<T, E>
 where
     T: ?Sized + From<Vec<E>> + Default + for<'de> Deserialize<'de> + Send + Sync,
     E: ?Sized + for<'de> Deserialize<'de> + Send + Sync,
-    Source: ?Sized + AsyncRead + Send + Sync + Unpin,
+    Source: AsyncRead + Send + Sync + Unpin,
 {
     type Error = csv_async::Error;
     type T = T;
-    async fn decode(&self, source: &mut Source) -> Result<Self::T, Self::Error> {
+    async fn decode(&self, source: Source) -> Result<Self::T, Self::Error> {
         self.reader_builder()
             .create_deserializer(source)
             .deserialize()
@@ -159,15 +159,20 @@ where
     T: ?Sized + AsRef<[E]> + Default + Serialize + Send + Sync + Unpin,
     E: Serialize + Send + Sync + Unpin,
     Target: AsyncWrite + Send + Sync + Unpin,
+    for<'a> &'a mut Target: AsyncWrite,
 {
     type Error = csv_async::Error;
     type T = T;
-    async fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
-        let mut writer = self.writer_builder().create_serializer(target);
+    async fn encode(&self, data: &Self::T, mut target: Target) -> Result<(), Self::Error> {
+        let mut writer = self.writer_builder().create_serializer(&mut target);
 
         for line in data.as_ref() {
             writer.serialize(line).await?
         }
+        drop(writer);
+
+        target.flush().await?;
+        target.close().await?;
         Ok(())
     }
 }

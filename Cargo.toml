@@ -58,7 +58,7 @@ test = [] # For doctests to access test utils
 [dependencies]
 # Core dependencies
 either = "1.13.0"
-serde = { version = "1.0.197", features = ["derive"] }
+serde = { version = "1.0.197", features = ["derive", "rc"] }
 derive-getters = "0.3.0"
 error-stack = "0.5.0"
 

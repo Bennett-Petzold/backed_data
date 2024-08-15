@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::{copy, create_dir_all, remove_dir, remove_file, rename},
-    io::{ErrorKind, Write},
+    io::ErrorKind,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
 };
@@ -275,11 +275,8 @@ where
             .join(META_FILE)
             .try_into()
             .map_err(DiskWriteErr::disk_err)?;
-        let mut disk = disk.write_disk().map_err(DiskWriteErr::io_err)?;
-        coder
-            .encode(self, &mut disk)
-            .map_err(DiskWriteErr::write_err)?;
-        disk.flush().map_err(DiskWriteErr::io_err)?;
+        let disk = disk.write_disk().map_err(DiskWriteErr::io_err)?;
+        coder.encode(self, disk).map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 }

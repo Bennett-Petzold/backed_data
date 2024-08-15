@@ -17,7 +17,7 @@ pub trait WriteDisk {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncReadDisk: Unpin {
+pub trait AsyncReadDisk {
     type ReadDisk: AsyncRead + Unpin;
     fn async_read_disk(
         &self,
@@ -25,7 +25,7 @@ pub trait AsyncReadDisk: Unpin {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncWriteDisk: Unpin {
+pub trait AsyncWriteDisk {
     type WriteDisk: AsyncWrite + Unpin;
     fn async_write_disk(
         &self,
