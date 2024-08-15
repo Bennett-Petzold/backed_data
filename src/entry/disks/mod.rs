@@ -17,7 +17,7 @@ pub trait WriteDisk {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncReadDisk: Unpin {
+pub trait AsyncReadDisk {
     type ReadDisk: AsyncRead + Unpin;
     fn async_read_disk(
         &self,
@@ -25,11 +25,45 @@ pub trait AsyncReadDisk: Unpin {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncWriteDisk: Unpin {
+pub trait AsyncWriteDisk {
     type WriteDisk: AsyncWrite + Unpin;
     fn async_write_disk(
         &self,
     ) -> impl Future<Output = std::io::Result<Self::WriteDisk>> + Send + Sync;
+}
+
+impl<T: ReadDisk> ReadDisk for &T {
+    type ReadDisk = T::ReadDisk;
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        T::read_disk(self)
+    }
+}
+
+impl<T: WriteDisk> WriteDisk for &T {
+    type WriteDisk = T::WriteDisk;
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        T::write_disk(self)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T: AsyncReadDisk + Send> AsyncReadDisk for &T {
+    type ReadDisk = T::ReadDisk;
+    fn async_read_disk(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Self::ReadDisk>> + Send + Sync {
+        T::async_read_disk(self)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T: AsyncWriteDisk + Send> AsyncWriteDisk for &T {
+    type WriteDisk = T::WriteDisk;
+    fn async_write_disk(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Self::WriteDisk>> + Send + Sync {
+        T::async_write_disk(self)
+    }
 }
 
 mod plainfile;
@@ -59,7 +93,7 @@ mod network;
 pub use network::{default_client, Network};
 
 #[cfg(mmap_impl)]
-mod mmap;
+pub mod mmap;
 #[cfg(mmap_impl)]
 pub use mmap::Mmap;
 

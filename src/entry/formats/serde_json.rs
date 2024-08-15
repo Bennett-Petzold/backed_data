@@ -41,11 +41,16 @@ impl<T: ?Sized + for<'de> serde::Deserialize<'de>, Source: Read> Decoder<Source>
         serde_json::from_reader(source).map_err(|e| e.into())
     }
 }
-impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for SerdeJsonCoder<T> {
+impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for SerdeJsonCoder<T>
+where
+    for<'a> &'a mut Target: Write,
+{
     type Error = SerdeJsonErr;
     type T = T;
-    fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
-        serde_json::to_writer_pretty(target, data).map_err(|e| e.into())
+    fn encode(&self, data: &Self::T, mut target: Target) -> Result<(), Self::Error> {
+        serde_json::to_writer_pretty(&mut target, data).map_err(std::io::Error::from)?;
+        target.flush()?;
+        Ok(())
     }
 }
 

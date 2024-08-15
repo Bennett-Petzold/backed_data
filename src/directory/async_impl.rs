@@ -1,9 +1,12 @@
 use std::{
+    error::Error,
+    io::ErrorKind,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use futures::{io::AsyncWriteExt, stream, StreamExt, TryStreamExt};
+use error_stack::Context;
+use futures::{stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -33,7 +36,7 @@ use crate::{
     },
 };
 
-use super::{DirectoryBackedArray, META_FILE};
+use super::{DirectoryBackedArray, DiskCreateErr, DiskReadErr, DiskWriteErr, META_FILE};
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
@@ -63,27 +66,36 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedAsyncWrite + ResizingContainer,
     E::Coder: Default,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
+    E::AsyncWriteError: Context + Error,
 {
     pub async fn a_append<U: Into<E::Unwrapped>>(
         &mut self,
         values: U,
-    ) -> Result<&mut Self, E::AsyncWriteError> {
-        let next_target = self.a_next_target();
+    ) -> error_stack::Result<
+        &mut Self,
+        DiskWriteErr<E::AsyncWriteError, <E::Disk as TryFrom<PathBuf>>::Error>,
+    > {
+        let next_target = self.a_next_target().map_err(DiskWriteErr::disk_err)?;
         self.array
             .a_append(values, next_target, <E::Coder>::default())
-            .await?;
+            .await
+            .map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 
     pub async fn a_append_memory<U: Into<E::Unwrapped>>(
         &mut self,
         values: U,
-    ) -> Result<&mut Self, E::AsyncWriteError> {
-        let next_target = self.a_next_target();
+    ) -> error_stack::Result<
+        &mut Self,
+        DiskWriteErr<E::AsyncWriteError, <E::Disk as TryFrom<PathBuf>>::Error>,
+    > {
+        let next_target = self.a_next_target().map_err(DiskWriteErr::disk_err)?;
         self.array
             .a_append_memory(values, next_target, <E::Coder>::default())
-            .await?;
+            .await
+            .map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 }
@@ -144,38 +156,51 @@ where
 impl<K, E> DirectoryBackedArray<K, E>
 where
     E: BackedEntryContainerNested,
-    E::Disk: AsRef<Path> + From<PathBuf>,
+    E::Disk: AsRef<Path> + TryFrom<PathBuf, Error: Context + Error>,
 {
     /// Moves the directory to a new location wholesale.
-    pub async fn a_move_root(&mut self, new_root: PathBuf) -> std::io::Result<&mut Self> {
+    pub async fn a_move_root(
+        &mut self,
+        new_root: PathBuf,
+    ) -> error_stack::Result<&mut Self, DiskCreateErr<<E::Disk as TryFrom<PathBuf>>::Error>> {
         if rename(self.directory_root.clone(), new_root.clone())
             .await
             .is_err()
         {
-            create_dir_all(new_root.clone()).await?;
+            create_dir_all(new_root.clone())
+                .await
+                .map_err(DiskCreateErr::io_err)?;
             stream::iter(self.array.entries().ref_iter())
                 .then(|chunk| {
                     let new_root = &new_root;
                     async move {
                         let disk = chunk.as_ref().get_ref().get_disk().as_ref();
-                        copy(disk, new_root.join(disk.file_name().unwrap())).await?;
+                        let file_name = disk.file_name().ok_or(std::io::Error::new(
+                            ErrorKind::NotFound,
+                            format!("{:#?} is not a valid file name.", disk),
+                        ))?;
+
+                        copy(disk, new_root.join(file_name)).await?;
                         remove_file(disk).await
                     }
                 })
                 .try_collect::<Vec<_>>()
-                .await?;
+                .await
+                .map_err(DiskCreateErr::io_err)?;
         }
-        Ok(self.update_root(new_root))
+        self.update_root(new_root)
     }
 }
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
     E: BackedEntryContainerNestedAsync,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf>,
 {
-    pub fn a_next_target(&self) -> E::Disk {
-        self.directory_root.join(Uuid::new_v4().to_string()).into()
+    pub fn a_next_target(&self) -> Result<E::Disk, <E::Disk as TryFrom<PathBuf>>::Error> {
+        self.directory_root
+            .join(Uuid::new_v4().to_string())
+            .try_into()
     }
 }
 
@@ -183,22 +208,30 @@ impl<K, E: BackedEntryContainerNestedAsyncWrite> DirectoryBackedArray<K, E>
 where
     K: Send + Sync + Serialize,
     E: Send + Sync + Serialize,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
 {
     /// Async version of [`Self::save`].
-    pub async fn a_save<C>(&self, coder: &C) -> Result<&Self, C::Error>
+    pub async fn a_save<C>(
+        &self,
+        coder: &C,
+    ) -> error_stack::Result<&Self, DiskWriteErr<C::Error, <E::Disk as TryFrom<PathBuf>>::Error>>
     where
-        C: AsyncEncoder<
-            <E::Disk as AsyncWriteDisk>::WriteDisk,
-            Error: From<std::io::Error>,
-            T = Self,
-        >,
+        C: AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk, Error: Context + Error, T = Self>,
     {
-        let disk: E::Disk = self.directory_root.join(META_FILE).into();
-        let mut disk = disk.async_write_disk().await?;
-        coder.encode(self, &mut disk).await?;
-        disk.flush().await?;
-        disk.close().await?;
+        let disk: E::Disk = self
+            .directory_root
+            .join(META_FILE)
+            .try_into()
+            .map_err(DiskWriteErr::disk_err)?;
+
+        let disk = disk
+            .async_write_disk()
+            .await
+            .map_err(DiskWriteErr::io_err)?;
+        coder
+            .encode(self, disk)
+            .await
+            .map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 }
@@ -207,20 +240,23 @@ impl<K, E: BackedEntryContainerNestedAsyncRead> DirectoryBackedArray<K, E>
 where
     K: Send + Sync + for<'de> Deserialize<'de>,
     E: Send + Sync + for<'de> Deserialize<'de>,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
 {
     /// Async version of [`Self::load`].
-    pub async fn a_load<P: AsRef<Path>, C>(root: P, coder: &C) -> Result<Self, C::Error>
+    pub async fn a_load<P: AsRef<Path>, C>(
+        root: P,
+        coder: &C,
+    ) -> error_stack::Result<Self, DiskReadErr<<E::Disk as TryFrom<PathBuf>>::Error, C::Error>>
     where
-        C: AsyncDecoder<
-            <E::Disk as AsyncReadDisk>::ReadDisk,
-            Error: From<std::io::Error>,
-            T = Self,
-        >,
+        C: AsyncDecoder<<E::Disk as AsyncReadDisk>::ReadDisk, Error: Context + Error, T = Self>,
     {
-        let disk: E::Disk = root.as_ref().join(META_FILE).into();
-        let mut disk = disk.async_read_disk().await?;
-        coder.decode(&mut disk).await
+        let disk: E::Disk = root
+            .as_ref()
+            .join(META_FILE)
+            .try_into()
+            .map_err(DiskReadErr::read_err)?;
+        let disk = disk.async_read_disk().await.map_err(DiskReadErr::io_err)?;
+        coder.decode(disk).await.map_err(DiskReadErr::disk_err)
     }
 }
 
@@ -273,7 +309,7 @@ mod tests {
 
     #[test]
     fn write() {
-        // Need to avoid use a runtime without I/O for Miri compatibility
+        // Need to use a runtime without I/O for Miri compatibility
         tokio::runtime::Builder::new_multi_thread()
             .build()
             .unwrap()

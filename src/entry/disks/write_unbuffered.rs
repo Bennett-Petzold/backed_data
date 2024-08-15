@@ -13,6 +13,7 @@ use super::{AsyncReadDisk, AsyncWriteDisk};
 
 /// [`Plainfile`](`super::Plainfile`), but with no write buffering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct WriteUnbuffered {
     /// File location.
     path: PathBuf,

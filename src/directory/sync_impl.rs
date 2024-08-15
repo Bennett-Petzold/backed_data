@@ -1,10 +1,12 @@
 use std::{
+    error::Error,
     fs::{copy, create_dir_all, remove_dir, remove_file, rename},
-    io::Write,
+    io::ErrorKind,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
 };
 
+use error_stack::Context;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -23,7 +25,7 @@ use crate::{
     },
 };
 
-use super::{DirectoryBackedArray, META_FILE};
+use super::{DirectoryBackedArray, DiskCreateErr, DiskReadErr, DiskWriteErr, META_FILE};
 
 impl<K, E> DirectoryBackedArray<K, E> {
     pub fn get_directory_root(&self) -> &PathBuf {
@@ -59,22 +61,36 @@ where
     K: ResizingContainer<Data = usize>,
     E: BackedEntryContainerNestedWrite + ResizingContainer,
     E::Coder: Default,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
+    E::WriteError: Context + Error,
 {
-    pub fn append<U: Into<E::Unwrapped>>(&mut self, values: U) -> Result<&mut Self, E::WriteError> {
-        let next_target = self.next_target();
+    #[allow(clippy::type_complexity)]
+    pub fn append<U: Into<E::Unwrapped>>(
+        &mut self,
+        values: U,
+    ) -> error_stack::Result<
+        &mut Self,
+        DiskWriteErr<E::WriteError, <E::Disk as TryFrom<PathBuf>>::Error>,
+    > {
+        let next_target = self.next_target().map_err(DiskWriteErr::disk_err)?;
         self.array
-            .append(values, next_target, <E::Coder>::default())?;
+            .append(values, next_target, <E::Coder>::default())
+            .map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn append_memory<U: Into<E::Unwrapped>>(
         &mut self,
         values: U,
-    ) -> Result<&mut Self, E::WriteError> {
-        let next_target = self.next_target();
+    ) -> error_stack::Result<
+        &mut Self,
+        DiskWriteErr<E::WriteError, <E::Disk as TryFrom<PathBuf>>::Error>,
+    > {
+        let next_target = self.next_target().map_err(DiskWriteErr::disk_err)?;
         self.array
-            .append_memory(values, next_target, <E::Coder>::default())?;
+            .append_memory(values, next_target, <E::Coder>::default())
+            .map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 }
@@ -177,37 +193,52 @@ where
 impl<K, E> DirectoryBackedArray<K, E>
 where
     E: BackedEntryContainerNested,
-    E::Disk: AsRef<Path> + From<PathBuf>,
+    E::Disk: AsRef<Path> + TryFrom<PathBuf, Error: Context + Error>,
 {
     /// Updates the root of the directory backed array.
     ///
     /// Does not move any files or directories, just changes the stored root.
-    pub fn update_root<P: AsRef<Path>>(&mut self, new_root: P) -> &mut Self {
+    pub fn update_root<P: AsRef<Path>>(
+        &mut self,
+        new_root: P,
+    ) -> error_stack::Result<&mut Self, DiskCreateErr<<E::Disk as TryFrom<PathBuf>>::Error>> {
         let new_root = new_root.as_ref();
-        self.array.raw_chunks().for_each(|mut chunk| {
+        for mut chunk in self.array.raw_chunks() {
             let chunk = open_mut!(chunk);
             let disk = chunk.get_disk_mut();
-            *disk = new_root.join(disk.as_ref().file_name().unwrap()).into();
-        });
+            match new_root.join(disk.as_ref().file_name().unwrap()).try_into() {
+                Ok(new_disk) => *disk = new_disk,
+                Err(e) => return Err(DiskCreateErr::disk_err(e)),
+            }
+        }
         self.directory_root = new_root.to_path_buf();
-        self
+        Ok(self)
     }
 
     /// Moves the directory to a new location wholesale.
-    pub fn move_root(&mut self, new_root: PathBuf) -> std::io::Result<&mut Self> {
+    pub fn move_root(
+        &mut self,
+        new_root: PathBuf,
+    ) -> error_stack::Result<&mut Self, DiskCreateErr<<E::Disk as TryFrom<PathBuf>>::Error>> {
         if rename(self.directory_root.clone(), new_root.clone()).is_err() {
-            create_dir_all(new_root.clone())?;
+            create_dir_all(new_root.clone()).map_err(DiskCreateErr::io_err)?;
             self.array
                 .entries()
                 .ref_iter()
                 .map(|chunk| {
                     let disk = chunk.as_ref().get_ref().get_disk().as_ref();
-                    copy(disk, new_root.join(disk.file_name().unwrap()))?;
+                    let file_name = disk.file_name().ok_or(std::io::Error::new(
+                        ErrorKind::NotFound,
+                        format!("{:#?} is not a valid file name.", disk),
+                    ))?;
+
+                    copy(disk, new_root.join(file_name))?;
                     remove_file(disk)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(DiskCreateErr::io_err)?;
         }
-        Ok(self.update_root(new_root))
+        self.update_root(new_root)
     }
 }
 
@@ -224,21 +255,28 @@ impl<K, E: BackedEntryContainerNestedWrite> DirectoryBackedArray<K, E>
 where
     K: Serialize,
     E: Serialize,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf, Error: Context + Error>,
 {
+    #[allow(clippy::type_complexity)]
     /// Save [`self`] at `DIRECTORY_ROOT/meta.dat`.
     ///
     /// As [`self`] implements serialize and deserialize, it does not need to
     /// be saved with this method. However, this provides a standard location
     /// and format for [`Self::load`] to utilize.
-    pub fn save<C>(&self, coder: &C) -> Result<&Self, C::Error>
+    pub fn save<C>(
+        &self,
+        coder: &C,
+    ) -> error_stack::Result<&Self, DiskWriteErr<C::Error, <E::Disk as TryFrom<PathBuf>>::Error>>
     where
-        C: Encoder<<E::Disk as WriteDisk>::WriteDisk, Error: From<std::io::Error>, T = Self>,
+        C: Encoder<<E::Disk as WriteDisk>::WriteDisk, Error: Context + Error, T = Self>,
     {
-        let disk: E::Disk = self.directory_root.join(META_FILE).into();
-        let mut disk = disk.write_disk()?;
-        coder.encode(self, &mut disk)?;
-        disk.flush()?;
+        let disk: E::Disk = self
+            .directory_root
+            .join(META_FILE)
+            .try_into()
+            .map_err(DiskWriteErr::disk_err)?;
+        let disk = disk.write_disk().map_err(DiskWriteErr::io_err)?;
+        coder.encode(self, disk).map_err(DiskWriteErr::write_err)?;
         Ok(self)
     }
 }
@@ -247,30 +285,40 @@ impl<K, E: BackedEntryContainerNestedRead> DirectoryBackedArray<K, E>
 where
     K: for<'de> Deserialize<'de>,
     E: for<'de> Deserialize<'de>,
-    E::Disk: From<PathBuf>,
 {
+    #[allow(clippy::type_complexity)]
     /// Load [`self`] from `DIRECTORY_ROOT/meta.dat`.
     ///
     /// As [`self`] implements serialize and deserialize, it does not need to
     /// be loaded with this method. However, this uses a standard location and
     /// format from a [`Self::save`] call.
-    pub fn load<P: AsRef<Path>, C>(root: P, coder: &C) -> Result<Self, C::Error>
+    pub fn load<P: AsRef<Path>, C>(
+        root: P,
+        coder: &C,
+    ) -> error_stack::Result<Self, DiskReadErr<<E::Disk as TryFrom<PathBuf>>::Error, C::Error>>
     where
-        C: Decoder<<E::Disk as ReadDisk>::ReadDisk, Error: From<std::io::Error>, T = Self>,
+        C: Decoder<<E::Disk as ReadDisk>::ReadDisk, Error: Context + Error, T = Self>,
+        E::Disk: TryFrom<PathBuf, Error: Context + Error>,
     {
-        let disk: E::Disk = root.as_ref().join(META_FILE).into();
-        let mut disk = disk.read_disk()?;
-        coder.decode(&mut disk)
+        let disk: E::Disk = root
+            .as_ref()
+            .join(META_FILE)
+            .try_into()
+            .map_err(DiskReadErr::read_err)?;
+        let mut disk = disk.read_disk().map_err(DiskReadErr::io_err)?;
+        coder.decode(&mut disk).map_err(DiskReadErr::disk_err)
     }
 }
 
 impl<K, E> DirectoryBackedArray<K, E>
 where
     E: BackedEntryContainerNested,
-    E::Disk: From<PathBuf>,
+    E::Disk: TryFrom<PathBuf>,
 {
-    pub fn next_target(&self) -> E::Disk {
-        self.directory_root.join(Uuid::new_v4().to_string()).into()
+    pub fn next_target(&self) -> Result<E::Disk, <E::Disk as TryFrom<PathBuf>>::Error> {
+        self.directory_root
+            .join(Uuid::new_v4().to_string())
+            .try_into()
     }
 }
 

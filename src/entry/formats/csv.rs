@@ -156,12 +156,13 @@ impl<T, E, Target> Encoder<Target> for CsvCoder<T, E>
 where
     T: ?Sized + Serialize + AsRef<[E]>,
     E: Serialize,
-    Target: ?Sized + Write,
+    Target: Write,
+    for<'a> &'a mut Target: Write,
 {
     type Error = csv::Error;
     type T = T;
-    fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
-        let mut writer = self.writer_builder().from_writer(target);
+    fn encode(&self, data: &Self::T, mut target: Target) -> Result<(), Self::Error> {
+        let mut writer = self.writer_builder().from_writer(&mut target);
         for line in data.as_ref() {
             writer.serialize(line)?
         }

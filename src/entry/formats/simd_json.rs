@@ -22,11 +22,16 @@ impl<T: ?Sized + for<'de> Deserialize<'de>, Source: Read> Decoder<Source> for Si
         simd_json::from_reader(source)
     }
 }
-impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for SimdJsonCoder<T> {
+impl<T: ?Sized + Serialize, Target: Write> Encoder<Target> for SimdJsonCoder<T>
+where
+    for<'a> &'a mut Target: Write,
+{
     type Error = simd_json::Error;
     type T = T;
-    fn encode(&self, data: &Self::T, target: &mut Target) -> Result<(), Self::Error> {
-        simd_json::to_writer_pretty(target, data)
+    fn encode(&self, data: &Self::T, mut target: Target) -> Result<(), Self::Error> {
+        simd_json::to_writer_pretty(&mut target, data)?;
+        target.flush()?;
+        Ok(())
     }
 }
 

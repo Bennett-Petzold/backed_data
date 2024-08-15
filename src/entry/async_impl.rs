@@ -4,7 +4,6 @@ use std::{
 };
 
 use either::Either;
-use futures::io::AsyncWriteExt;
 use futures::Future;
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
@@ -24,24 +23,16 @@ where
     /// See [`Self::update`].
     pub async fn a_update(&mut self) -> Result<(), Coder::Error> {
         if let Some(val) = self.value.get() {
-            let mut disk = self.disk.async_write_disk().await?;
-            self.coder.encode(val, &mut disk).await?;
-
-            // Make sure buffer is emptied
-            disk.flush().await?;
-            disk.close().await?;
+            let disk = self.disk.async_write_disk().await?;
+            self.coder.encode(val, disk).await?;
         }
         Ok(())
     }
 
     /// See [`Self::write`].
     pub async fn a_write(&mut self, new_value: T) -> Result<(), Coder::Error> {
-        let mut disk = self.disk.async_write_disk().await?;
-        self.coder.encode(&new_value, &mut disk).await?;
-
-        // Make sure buffer is emptied
-        disk.flush().await?;
-        disk.close().await?;
+        let disk = self.disk.async_write_disk().await?;
+        self.coder.encode(&new_value, disk).await?;
 
         // Drop previous value and write in new.
         // value.set() only works when uninitialized.
@@ -60,8 +51,8 @@ where
     pub async fn a_load(&self) -> Result<&T, Coder::Error> {
         self.value
             .get_or_try_init(|| async {
-                let mut disk = self.disk.async_read_disk().await?;
-                self.coder.decode(&mut disk).await
+                let disk = self.disk.async_read_disk().await?;
+                self.coder.decode(disk).await
             })
             .await
     }
@@ -74,12 +65,8 @@ where
     /// [`Self::write_unload`].
     pub async fn a_write_unload<U: Into<T>>(&mut self, new_value: U) -> Result<(), Coder::Error> {
         self.unload();
-        let mut disk = self.disk.async_write_disk().await?;
-        self.coder.encode(&new_value.into(), &mut disk).await?;
-        // Make sure buffer is emptied
-        disk.flush().await?;
-        disk.close().await?;
-        Ok(())
+        let disk = self.disk.async_write_disk().await?;
+        self.coder.encode(&new_value.into(), disk).await
     }
 }
 
