@@ -722,6 +722,9 @@
 <a href="#722" id="722">722</a>
 <a href="#723" id="723">723</a>
 <a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::min,
     future::Future,
@@ -860,6 +863,8 @@
             <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = <span class="self">self</span>.waker.lock().unwrap().take() {
                 w.wake()
             }
+
+            drop(read_send);
         }
     }
 }
@@ -924,6 +929,7 @@
                         <span class="kw">return </span>Poll::Pending;
                     }
                 };
+                drop(read);
             }
 
             <span class="self">self</span>.buffered = temp_buffer;
