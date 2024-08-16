@@ -17,7 +17,6 @@
         cmp::max,
         env::temp_dir,
         hint::black_box,
-        process::exit,
         time::{Duration, SystemTime},
     };
 
@@ -37,12 +36,6 @@
     <span class="kw">const </span>SIZE: usize = ELEMENTS_PER * NUM_COPIES;
 
     <span class="kw">pub async fn </span>example() {
-        <span class="comment">// Temp debug timeout
-        </span>std::thread::spawn(|| {
-            std::thread::sleep(Duration::from_secs(<span class="number">60 </span>* <span class="number">3</span>));
-            exit(<span class="number">1</span>);
-        });
-
         <span class="kw">let </span>backing_file = temp_dir().join(<span class="string">"backed_array_async_mmap"</span>);
 
         <span class="kw">let </span>disk = SyncAsAsync::new(
@@ -65,7 +58,9 @@
 
             <span class="kw">let </span>start_time = SystemTime::now();
 
+            <span class="macro">println!</span>(<span class="string">"STARTING WRITE"</span>);
             write_disk.write_all(<span class="kw-2">&amp;</span>input_data).<span class="kw">await</span>.unwrap();
+            <span class="macro">println!</span>(<span class="string">"FINISHED WRITE"</span>);
             write_disk.close().<span class="kw">await</span>.unwrap();
 
             <span class="kw">let </span>elapsed_time = SystemTime::now().duration_since(start_time).unwrap();
