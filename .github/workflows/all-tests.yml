@@ -52,8 +52,6 @@ jobs:
         only_list_changed_files: true
         badge: true
         fail_on_negative_difference: true
-        # Token with write perms
-        github_token: ${{ secrets.TAG_TOKEN }}
 
     - name: Add Coverage PR Comment
       uses: marocchino/sticky-pull-request-comment@v2

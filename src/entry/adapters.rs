@@ -136,6 +136,8 @@ impl<R: Read> BlockingFn for SyncAsAsyncReadBg<R> {
             if let Some(w) = self.waker.lock().unwrap().take() {
                 w.wake()
             }
+
+            drop(read_send);
         }
     }
 }
@@ -200,6 +202,7 @@ impl AsyncBufRead for SyncAsAsyncRead {
                         return Poll::Pending;
                     }
                 };
+                drop(read);
             }
 
             self.buffered = temp_buffer;

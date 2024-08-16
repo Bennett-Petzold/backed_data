@@ -67,7 +67,9 @@ jobs:
 
     - uses: awalsh128/cache-apt-pkgs-action@v1
       with:
-        packages: libsodium-dev
+        packages: libsodium-dev \
+          jq \
+          wget
 
     - uses: dtolnay/rust-toolchain@nightly
       with:
@@ -81,8 +83,19 @@ jobs:
     - name: Doc Tests
       run: cargo llvm-cov test --no-report --doc --all-features
 
+    - name: Coverage Shield
+      run: |
+        printf \
+          'https://img.shields.io/badge/Code_Coverage-%.2f%%25-blue' \
+          "$(cargo llvm-cov --quiet --summary-only --doctests --json | \
+          jq '.data[0].totals.lines.percent')" | \
+          wget -i - -O badge.svg
+
     - name: Coverage Report
       run: cargo llvm-cov report --doctests --html
+
+    - name: Add Shield to Report
+      run: mv badge.svg target/llvm-cov/html
 
     - uses: ben-z/gh-action-mutex@v1.0-alpha-8
       with:
