@@ -57,82 +57,82 @@ test = [] # For doctests to access test utils
 
 [dependencies]
 # Core dependencies
-either = "1.13.0"
-serde = { version = "1.0.197", features = ["derive", "rc"] }
-derive-getters = "0.3.0"
-error-stack = "0.5.0"
+either = "1"
+serde = { version = "1", features = ["derive", "rc"] }
+derive-getters = "0.3"
+error-stack = "0.5"
+cfg-if = { version = "1", optional = true }
+nix = "0.29"
+thiserror = "1"
 
 # Zstd dependencies
-zstd = { version = "0.13.1", optional = true }
-num-traits = { version = "0.2.19", optional = true }
+zstd = { version = "0.13", optional = true }
+num-traits = { version = "0.2", optional = true }
 
 # Format dependencies
-bincode = { version = "1.3.3", optional = true }
-serde_json = { version = "1.0.120", optional = true }
-simd-json = { version = "0.13.10", optional = true }
-csv = { version = "1.3.0", optional = true }
+bincode = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
+simd-json = { version = "0.13", optional = true }
+csv = { version = "1", optional = true }
 
 # Disk dependencies
-memmap2 = { version = "0.9.4", optional = true }
+memmap2 = { version = "0.9", optional = true }
 secrets = { git = "https://github.com/Bennett-Petzold/secrets", optional = true, features = ["use-libsodium-sys"] }
-aes-gcm = { version = "0.10.3", optional = true }
-stable_deref_trait = { version = "1.2.0", optional = true }
-reqwest = { version = "0.12.5", optional = true }
-url = { version = "2.5.2", optional = true, features = ["serde"] }
+aes-gcm = { version = "0.10", optional = true }
+stable_deref_trait = { version = "1", optional = true }
+reqwest = { version = "0.12", optional = true }
+url = { version = "2", optional = true, features = ["serde"] }
 bytes = { version = "*", optional = true } # Synced with reqwest
 
 # Async dependencies
-async-compression = { version = "0.4.8", optional = true, features = ["futures-io"] }
-futures =  { version = "0.3.30", optional = true }
-async-scoped = { version = "0.9.0", optional = true, features = ["use-tokio"] }
+async-compression = { version = "0.4", optional = true, features = ["futures-io"] }
+futures =  { version = "0.3", optional = true }
+async-scoped = { version = "0.9", optional = true, features = ["use-tokio"] }
 
 # Async executors
-tokio = { version = "1.37.0", optional = true, default-features = false, features = ["fs"] }
-tokio-util = { version = "0.7.10", optional = true, features = ["compat"] }
-smol = { version = "2.0.0", optional = true }
+tokio = { version = "1", optional = true, default-features = false, features = ["fs"] }
+tokio-util = { version = "0.7", optional = true, features = ["compat"] }
+smol = { version = "2", optional = true }
 
 # Async format dependencies
-async-bincode = { version = "0.7.2", optional = true, default-features = false, features = ["futures"] }
-csv-async = { version = "1.3.0", optional = true, features = ["with_serde"] }
+async-bincode = { version = "0.7", optional = true, default-features = false, features = ["futures"] }
+csv-async = { version = "1", optional = true, features = ["with_serde"] }
 
 # Directory dependencies
-uuid = { version = "1.8.0", features = ["v4"], optional = true }
-http-serde = { version = "2.1.1", optional = true }
-cfg-if = { version = "1.0.0", optional = true }
-nix = "0.29.0"
-thiserror = "1.0.63"
+uuid = { version = "1", features = ["v4"], optional = true }
+http-serde = { version = "2", optional = true }
 
 # Linux OS call dependency, used for mmap
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.29.0", features = ["fs"] }
+nix = { version = '*', features = ["fs"] }
 
 [build-dependencies]
-cfg_aliases = "0.2.1" # Reducing cfg boilerplate
+cfg_aliases = "0.2" # Reducing cfg boilerplate
 
 [dev-dependencies]
 # Multithread test runtime
-tokio = { version = "1.37.0", features = ["rt", "rt-multi-thread", "io-util", "fs", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "io-util", "fs", "macros"] }
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-fs_extra = "1.3.0"
+fs_extra = "1"
 
 # General utilities
-chrono = "0.4.37"
-seq-macro = "0.3.5"
-uuid = { version = "1.8.0", features = ["v4"] }
+chrono = "0.4"
+seq-macro = "0.3"
+uuid = { version = "1", features = ["v4"] }
 
 # For examples
-humansize = "2.1.3"
+humansize = "2"
 async_zip = { version = "0.0.17", features = ["deflate"] }
-tokio-stream = "0.1.15"
-get-size = { version = "0.1.4", features = ["derive"] }
-indicatif = "0.17.8"
-reqwest = "0.12.5"
+tokio-stream = "0.1"
+get-size = { version = "0.1", features = ["derive"] }
+indicatif = "0.17"
+reqwest = "0.12"
 
 # Benchmarking utility, only on non-Windows.
 [target.'cfg(not(target_os = "windows"))'.dev-dependencies]
-pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
 [[bench]]
 name = "io_bench"

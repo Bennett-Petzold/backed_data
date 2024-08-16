@@ -368,6 +368,9 @@ impl<W: Write> BlockingFn for SyncAsAsyncWriteBg<W> {
                             }
                         }
                     }
+
+                    // Send ok status for complete write
+                    let _ = self.status_tx.send(Ok(()));
                 }
                 AsyncWriteCommand::Flush => {
                     let _ = self.status_tx.send(
@@ -375,8 +378,9 @@ impl<W: Write> BlockingFn for SyncAsAsyncWriteBg<W> {
                             .flush()
                             .map_err(|error| WriteError { error, retry: None }),
                     );
-                    if let Some(flush_waker) = self.flush_waker.lock().unwrap().take() {
-                        flush_waker.wake();
+                    let flush_waker = self.flush_waker.lock().unwrap();
+                    if let Some(flush_waker) = &*flush_waker {
+                        flush_waker.wake_by_ref();
                     }
                 }
             }
@@ -458,6 +462,7 @@ impl AsyncWrite for SyncAsAsyncWrite {
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         if self.flush_waker.lock().unwrap().is_none() {
             self.cmd_tx.send(AsyncWriteCommand::Flush).unwrap();
+            self.num_cmds_pending += 1;
         }
 
         while let Ok(status) = self.status_rx.try_recv() {
