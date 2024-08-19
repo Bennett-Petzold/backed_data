@@ -159,8 +159,8 @@ pub use array::VecBackedArray;
 #[cfg(feature = "directory")]
 pub use directory::StdDirBackedArray;
 
-#[cfg(feature = "zstd")]
+#[cfg(all(feature = "directory", feature = "zstd"))]
 pub use directory::ZstdDirBackedArray;
 
-#[cfg(feature = "async_zstd")]
+#[cfg(all(feature = "directory", feature = "async_zstd"))]
 pub use directory::AsyncZstdDirBackedArray;
