@@ -23,7 +23,7 @@ async fn main() {
     let backing_file = temp_dir().join("backed_array_async_simd");
     let data: HashMap<usize, usize> = (0..10_000).map(|x| (x, x * 2)).collect();
 
-    let disk = Plainfile::new(backing_file.clone());
+    let mut disk = Plainfile::new(backing_file.clone());
 
     // Create an adapter to run encoding and decoding in tokio's blocking
     // threadpool.

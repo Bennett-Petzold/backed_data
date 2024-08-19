@@ -38,7 +38,7 @@ pub struct CustomRead<F>(pub F);
 /// ```
 /// use backed_data::entry::disks::{WriteDisk, custom::CustomWrite};
 ///
-/// let disk = CustomWrite(|| Ok(std::io::sink()));
+/// let mut disk = CustomWrite(|| Ok(std::io::sink()));
 /// let writer: std::io::Sink = disk.write_disk().unwrap();
 /// ```
 pub struct CustomWrite<F>(pub F);
@@ -57,7 +57,7 @@ pub struct CustomWrite<F>(pub F);
 ///     },
 /// };
 ///
-/// let disk = CustomSync(
+/// let mut disk = CustomSync(
 ///     CustomRead(|| Ok(std::io::empty())),
 ///     CustomWrite(|| Ok(std::io::sink()))
 /// );
@@ -86,7 +86,7 @@ where
 {
     type WriteDisk = W;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         (self.0)()
     }
 }
@@ -110,7 +110,7 @@ where
 {
     type WriteDisk = O;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         self.1.write_disk()
     }
 }
@@ -142,7 +142,7 @@ pub struct CustomAsyncRead<F>(pub F);
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{AsyncWriteDisk, custom::CustomAsyncWrite};
 ///
-/// let disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
+/// let mut disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
 /// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
 /// ```
@@ -164,13 +164,15 @@ pub struct CustomAsyncWrite<F>(pub F);
 ///     },
 /// };
 ///
-/// let disk = CustomAsync(
+/// let mut disk = CustomAsync(
 ///     CustomAsyncRead(|| ready(Ok(smol::io::empty()))),
 ///     CustomAsyncWrite(|| ready(Ok(smol::io::sink())))
 /// );
 ///
-/// let reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
-///     &disk.async_read_disk();
+/// {
+///     let reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
+///         &disk.async_read_disk();
+/// }
 /// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
 /// ```
@@ -200,7 +202,7 @@ where
 {
     type WriteDisk = W;
 
-    fn async_write_disk(&self) -> impl Future<Output = std::io::Result<Self::WriteDisk>> {
+    fn async_write_disk(&mut self) -> impl Future<Output = std::io::Result<Self::WriteDisk>> {
         (self.0)()
     }
 }
@@ -230,7 +232,7 @@ where
 {
     type WriteDisk = O;
 
-    fn async_write_disk(&self) -> impl Future<Output = std::io::Result<Self::WriteDisk>> {
+    fn async_write_disk(&mut self) -> impl Future<Output = std::io::Result<Self::WriteDisk>> {
         self.1.async_write_disk()
     }
 }
@@ -258,7 +260,7 @@ where
 ///     },
 /// };
 ///
-/// let disk = CustomFull(
+/// let mut disk = CustomFull(
 ///     CustomSync(
 ///         CustomRead(|| Ok(std::io::empty())),
 ///         CustomWrite(|| Ok(std::io::sink()))
@@ -271,8 +273,10 @@ where
 ///
 /// let sync_reader: std::io::Empty = disk.read_disk().unwrap();
 /// let sync_writer: std::io::Sink = disk.write_disk().unwrap();
-/// let async_reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
-///     &disk.async_read_disk();
+/// {
+///     let async_reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
+///         &disk.async_read_disk();
+/// }
 /// let async_writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
 /// ```
@@ -300,7 +304,7 @@ where
 {
     type WriteDisk = O;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         self.0.write_disk()
     }
 }
@@ -334,7 +338,7 @@ where
 {
     type WriteDisk = O;
 
-    fn async_write_disk(&self) -> impl Future<Output = std::io::Result<Self::WriteDisk>> {
+    fn async_write_disk(&mut self) -> impl Future<Output = std::io::Result<Self::WriteDisk>> {
         self.1.async_write_disk()
     }
 }

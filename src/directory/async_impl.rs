@@ -224,7 +224,7 @@ where
     where
         C: AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk, Error: Context + Error, T = Self>,
     {
-        let disk: E::Disk = self
+        let mut disk: E::Disk = self
             .directory_root
             .join(META_FILE)
             .try_into()

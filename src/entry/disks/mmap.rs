@@ -246,10 +246,13 @@ impl SwitchingMmap {
 
                     read_ret(mmap)
                 }
-                Err(arc) => Err((
-                    Self::WriteMmap(arc),
-                    std::io::Error::new(ErrorKind::Other, "A write handle is currently open"),
-                )),
+                Err(_) => {
+                    panic!(
+                        "Attempted to open ReadMmap with WriteMmap open.\n
+                        Since WriteMmap is opened with `&mut Mmap`, and this function needs `&Mmap`,
+                        Rust's borrow checking rules should make this impossible."
+                    )
+                }
             },
             Self::ReadMmap(x) => read_ret(x),
             Self::Invalid => match ReadMmap::new_arc(path) {
@@ -297,11 +300,12 @@ impl SwitchingMmap {
                         }
                     },
                 },
-                Err(arc) => {
-                    return Err((
-                        Self::ReadMmap(arc),
-                        std::io::Error::new(ErrorKind::Other, "A read handle is currently open"),
-                    ));
+                Err(_) => {
+                    panic!(
+                        "Attempted to open WriteMmap with ReadMmap open.\n
+                        Since ReadMmap is opened with `&Mmap`, and this function needs `&mut Mmap`,
+                        Rust's borrow checking rules should make this impossible."
+                    )
                 }
             },
             Self::Invalid => match MmapWriter::no_advise(path) {
@@ -711,7 +715,7 @@ impl AsMut<[u8]> for MmapWriter {
 impl WriteDisk for Mmap {
     type WriteDisk = WriteMmapGuard;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         // Shuffle out the current mmap value to replace later.
         let mut held_mmap = self.mmap.lock().unwrap();
         let cur_mmap = std::mem::replace(&mut *held_mmap, SwitchingMmap::Invalid);
@@ -828,7 +832,7 @@ mod tests {
         let temp_file = temp_dir().join(Uuid::new_v4().to_string());
         let _ = remove_file(&temp_file);
 
-        let mmap = Mmap::new(temp_file.clone()).unwrap();
+        let mut mmap = Mmap::new(temp_file.clone()).unwrap();
 
         let mut write_disk = mmap.write_disk().unwrap();
         assert_eq!(
@@ -869,9 +873,9 @@ mod tests {
         file_mut.set_len(GARBAGE_LEN as u64).unwrap();
         file_mut.flush().unwrap();
 
-        let mmap = Mmap::new(temp_file.clone()).unwrap();
+        let mut mmap = Mmap::new(temp_file.clone()).unwrap();
 
-        let read_check = |expected| {
+        let read_check = |expected, mmap: &Mmap| {
             let mut read_data = Vec::new();
             mmap.read_disk()
                 .unwrap()
@@ -896,7 +900,7 @@ mod tests {
         drop(write_disk);
 
         // Should see an only the actual data after flush.
-        read_check(SEQUENCE.len());
+        read_check(SEQUENCE.len(), &mmap);
 
         let _ = remove_file(temp_file);
     }

@@ -67,7 +67,7 @@ impl ReadDisk for Plainfile {
 impl WriteDisk for Plainfile {
     type WriteDisk = BufWriter<File>;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         Ok(BufWriter::new(
             File::options()
                 .write(true)
@@ -93,7 +93,7 @@ impl AsyncReadDisk for Plainfile {
 impl AsyncWriteDisk for Plainfile {
     type WriteDisk = futures::io::BufWriter<super::async_file::AsyncFile>;
 
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         Ok(futures::io::BufWriter::new(
             super::async_file::write_file(self.path.clone()).await?,
         ))

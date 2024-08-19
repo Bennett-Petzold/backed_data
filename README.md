@@ -29,7 +29,6 @@ success contacting the owner. The following options are under consideration:
 * Add descriptions to all examples, and refactor for clarity if necessary.
 * Ensure `adapters` has no race conditions that can cause program hang.
 * Trim the `BackedArray` methods. 
-* Consider refactoring WriteDisk to remove the need for runtime borrow checks in `mmap`.
 * Implement missing standard library traits (e.g. `[]` access).
 * Add array iterators that minimize memory usage by dropping backing stores when no longer borrowed.
 

@@ -63,7 +63,7 @@ impl ReadDisk for WriteUnbuffered {
 impl WriteDisk for WriteUnbuffered {
     type WriteDisk = File;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         File::options()
             .write(true)
             .create(true)
@@ -87,7 +87,7 @@ impl AsyncReadDisk for WriteUnbuffered {
 impl AsyncWriteDisk for WriteUnbuffered {
     type WriteDisk = super::async_file::AsyncFile;
 
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         super::async_file::write_file(self.path.clone()).await
     }
 }
