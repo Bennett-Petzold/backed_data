@@ -292,7 +292,38 @@
 <a href="#292" id="292">292</a>
 <a href="#293" id="293">293</a>
 <a href="#294" id="294">294</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::panic;
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="doccomment">/*!
+Defines tools used for ONLY testing.
+
+This should not be used by any library consumer code. Some of this module is
+deliberately undefined/unsafe for testing purposes.
+*/
+
+</span><span class="kw">use </span>core::panic;
 <span class="kw">use </span>std::{
     io::{Cursor, Seek},
     marker::PhantomData,
@@ -307,7 +338,10 @@
 
 <span class="kw">use </span><span class="kw">crate</span>::entry::disks::{ReadDisk, WriteDisk};
 
-<span class="attr">#[derive(Debug, Serialize)]
+<span class="doccomment">/// Unsafe storage disk that allows for memory peeking during modification.
+///
+/// FOR TESTING PURPOSES ONLY.
+</span><span class="attr">#[derive(Debug, Serialize)]
 </span><span class="kw">pub struct </span>CursorVec&lt;<span class="lifetime">'a</span>&gt; {
     <span class="attr">#[serde(skip)]
     </span><span class="kw">pub </span>inner: Mutex&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Cursor&lt;Vec&lt;u8&gt;&gt;&gt;,
@@ -322,6 +356,8 @@
 }
 
 <span class="doccomment">/// Creates a default [`CursorVec`] for testing.
+///
+/// FOR TESTING PURPOSES ONLY.
 </span><span class="attr">#[macro_export]
 </span><span class="macro">macro_rules!</span> cursor_vec {
     (<span class="macro-nonterminal">$x</span>: ident, <span class="macro-nonterminal">$peek</span>: ident) =&gt; {

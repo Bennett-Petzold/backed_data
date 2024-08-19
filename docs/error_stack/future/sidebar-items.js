@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["FutureWithAttachment","FutureWithContext","FutureWithLazyAttachment","FutureWithLazyContext","FutureWithLazyPrintableAttachment","FutureWithPrintableAttachment"],"trait":["FutureExt"]};

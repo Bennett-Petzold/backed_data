@@ -142,14 +142,44 @@
 <a href="#142" id="142">142</a>
 <a href="#143" id="143">143</a>
 <a href="#144" id="144">144</a>
-</pre></div><pre class="rust"><code><span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="doccomment">/*!
+Defines [`BackedArray`] and the [`Container`]/[`ResizingContainer`] traits it uses.
+*/
+
+</span><span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
 </span><span class="kw">pub mod </span>async_impl;
 <span class="kw">pub mod </span>container;
 <span class="kw">pub mod </span>sync_impl;
 
+<span class="kw">pub use </span>container::{Container, ResizingContainer};
+
 <span class="kw">use </span>std::ops::Range;
 
-<span class="kw">use </span>container::Container;
 <span class="kw">use </span>derive_getters::Getters;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
@@ -167,7 +197,8 @@
     <span class="kw">pub </span>inside_entry_idx: usize,
 }
 
-<span class="attr">#[derive(Debug, Getters)]
+<span class="doccomment">/// A single entry pair in [`BackedArray`].
+</span><span class="attr">#[derive(Debug, Getters)]
 </span><span class="kw">pub struct </span>BackedArrayEntry&lt;<span class="lifetime">'a</span>, T&gt; {
     range: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Range&lt;usize&gt;,
     entry: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>T,
@@ -189,10 +220,17 @@
 /// store. Use [`Self::clear_memory`] or [`Self::shrink_to_query`] to move the
 /// cached sub-arrays back out of memory.
 ///
-/// For repeated modifications, use [`Self::chunk_mut_iter`] to get perform
-/// multiple modifications on a backing block before saving to disk.
-/// Getting and overwriting the entries without these handles will write to
-/// disk on every single change.
+/// All mutation must be through the iterator types, which guarantee flushes to
+/// underlying storage.
+///
+/// Some container types provide handles instead of direct `&amp;T` references. They
+/// can only be interfaced through the `*generic_*` methods, which add overhead
+/// to return the references with their handles. Types that dereference
+/// directly to `&amp;[T]` (e.g. [`Vec`]) should not use the generic methods.
+///
+/// # Generics
+/// * `K`: [`Container`] that holds [`usize`] values.
+/// * `E`: [`Container`] that holds [`BackedEntry`][`crate::entry::BackedEntry`] values.
 </span><span class="attr">#[derive(Debug, Serialize, Deserialize, Getters)]
 </span><span class="kw">pub struct </span>BackedArray&lt;K, E&gt; {
     <span class="comment">// keys and entries must always have the same length

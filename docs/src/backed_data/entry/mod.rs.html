@@ -211,7 +211,97 @@
 <a href="#211" id="211">211</a>
 <a href="#212" id="212">212</a>
 <a href="#213" id="213">213</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{cell::OnceCell, sync::OnceLock};
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
+<a href="#236" id="236">236</a>
+<a href="#237" id="237">237</a>
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a>
+<a href="#241" id="241">241</a>
+<a href="#242" id="242">242</a>
+<a href="#243" id="243">243</a>
+<a href="#244" id="244">244</a>
+<a href="#245" id="245">245</a>
+<a href="#246" id="246">246</a>
+<a href="#247" id="247">247</a>
+<a href="#248" id="248">248</a>
+<a href="#249" id="249">249</a>
+<a href="#250" id="250">250</a>
+<a href="#251" id="251">251</a>
+<a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
+<a href="#263" id="263">263</a>
+<a href="#264" id="264">264</a>
+<a href="#265" id="265">265</a>
+<a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="doccomment">/*!
+Defines [`BackedEntry`], the core of this library.
+
+Also defines [`disks`] and [`formats`], which define the backing for [`BackedEntry`].
+*/
+
+</span><span class="kw">use </span>std::{cell::OnceCell, sync::OnceLock};
 
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
@@ -233,7 +323,9 @@
 <span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
 </span><span class="kw">pub use </span>adapters::SyncAsAsync;
 
-<span class="doccomment">/// Entry kept on some backing storage, loaded into memory on request.
+<span class="doccomment">/// Entry kept on some backing storage, loaded into memory on usage.
+///
+/// Unloading is explicit.
 ///
 /// Use a heap pointer type or [`BackedEntryBox`], otherwise this will occupy
 /// the full type size even when unloaded.
@@ -295,7 +387,7 @@
 /// * `Coder`: an implementor of [`AsyncEncoder`](`formats::AsyncEncoder`) and/or [`AsyncDecoder`](`formats::AsyncDecoder`).
 </span><span class="kw">pub type </span>BackedEntryAsync&lt;T, Disk, Coder&gt; = BackedEntry&lt;tokio::sync::OnceCell&lt;T&gt;, Disk, Coder&gt;;
 
-<span class="doccomment">/// Specialized typedef of [`BackedEntry`] for non-pointer types.
+<span class="doccomment">/// Thread-unsafe typedef of [`BackedEntry`] for non-pointer types.
 ///
 /// # Example
 ///
@@ -327,9 +419,41 @@
 /// }
 /// ```
 </span><span class="kw">pub type </span>BackedEntryBox&lt;T, Disk, Coder&gt; = BackedEntryCell&lt;Box&lt;T&gt;, Disk, Coder&gt;;
-<span class="kw">pub type </span>BackedEntryBoxLock&lt;T, Disk, Coder&gt; = BackedEntryLock&lt;Box&lt;T&gt;, Disk, Coder&gt;;
 
-<span class="doccomment">/// Specialized typedef of [`BackedEntry`] for arrays.
+<span class="doccomment">/// Thread-safe typedef of [`BackedEntry`] for non-pointer types.
+///
+/// # Example
+///
+/// ```rust
+/// #[cfg(feature = "bincode")] {
+///     use std::fs::{File, remove_file};
+///     use backed_data::entry::{
+///         BackedEntryBoxLock,
+///         formats::BincodeCoder,
+///         disks::Plainfile,
+///     };
+///
+///     let FILENAME = std::env::temp_dir().join("example_box_safe");
+///     let file = Plainfile::new(FILENAME.clone());
+///
+///     // Write string to file
+///     let mut writer: BackedEntryBoxLock&lt;str, _, BincodeCoder&lt;Box&lt;str&gt;&gt;&gt; =
+///         BackedEntryBoxLock::with_disk(file.clone());
+///     writer.write_unload("HELLO I AM A STRING").unwrap();
+///     drop(writer);
+///
+///     // Read string from file
+///     let mut sparse: BackedEntryBoxLock&lt;str, _, BincodeCoder&lt;_&gt;&gt; =
+///         BackedEntryBoxLock::with_disk(file.clone());
+///     assert_eq!(sparse.load().unwrap().as_ref(), "HELLO I AM A STRING");
+///
+///     // Cleanup
+///     remove_file(FILENAME).unwrap();
+/// }
+/// ```
+</span><span class="kw">pub type </span>BackedEntryBoxLock&lt;T, Disk, Coder&gt; = BackedEntryLock&lt;Box&lt;T&gt;, Disk, Coder&gt;;
+
+<span class="doccomment">/// Thread-unsafe typedef of [`BackedEntry`] for arrays.
 ///
 /// # Example
 ///
@@ -361,7 +485,39 @@
 /// }
 /// ```
 </span><span class="kw">pub type </span>BackedEntryArr&lt;T, Disk, Coder&gt; = BackedEntryBox&lt;[T], Disk, Coder&gt;;
-<span class="kw">pub type </span>BackedEntryArrLock&lt;T, Disk, Coder&gt; = BackedEntryBoxLock&lt;[T], Disk, Coder&gt;;
+
+<span class="doccomment">/// Thread-safe typedef of [`BackedEntry`] for arrays.
+///
+/// # Example
+///
+/// ```rust
+/// #[cfg(feature = "bincode")] {
+///     use std::fs::{File, remove_file};
+///     use backed_data::entry::{
+///         BackedEntryArrLock,
+///         formats::BincodeCoder,
+///         disks::Plainfile,
+///     };
+///    
+///     let FILENAME = std::env::temp_dir().join("example_array_safe");
+///     let file = Plainfile::new(FILENAME.clone());
+///    
+///     // Write array to file
+///     let mut writer: BackedEntryArrLock&lt;u8, _, BincodeCoder&lt;_&gt;&gt; = BackedEntryArrLock::new(file.clone(),
+///         BincodeCoder::default());
+///     writer.write_unload([1, 2, 3]).unwrap();
+///     drop(writer);
+///    
+///     // Read array from file
+///     let mut sparse: BackedEntryArrLock&lt;u8, _, _&gt; = BackedEntryArrLock::new(file.clone(),
+///         BincodeCoder::default());
+///     assert_eq!(sparse.load().unwrap().as_ref(), [1, 2, 3]);
+///    
+///     // Cleanup
+///     remove_file(FILENAME).unwrap();
+/// }
+/// ```
+</span><span class="kw">pub type </span>BackedEntryArrLock&lt;T, Disk, Coder&gt; = BackedEntryBoxLock&lt;[T], Disk, Coder&gt;;
 
 <span class="comment">// ----- Initializations ----- //
 

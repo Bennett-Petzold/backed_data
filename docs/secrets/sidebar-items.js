@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["secret_box","secret_vec","traits"],"struct":["Secret"]};

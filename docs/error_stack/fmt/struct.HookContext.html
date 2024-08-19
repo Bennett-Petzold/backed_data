@@ -1,0 +1,397 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Carrier for contextual information used across hook invocations."><title>HookContext in error_stack::fmt - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="error_stack" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc struct"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../error_stack/index.html">error_<wbr>stack</a><span class="version">0.5.0</span></h2></div><h2 class="location"><a href="#">Hook<wbr>Context</a></h2><div class="sidebar-elems"><section><h3><a href="#implementations">Methods</a></h3><ul class="block method"><li><a href="#method.alternate">alternate</a></li><li><a href="#method.cast">cast</a></li><li><a href="#method.charset">charset</a></li><li><a href="#method.color_mode">color_mode</a></li><li><a href="#method.decrement_counter">decrement_counter</a></li><li><a href="#method.get">get</a></li><li><a href="#method.get_mut">get_mut</a></li><li><a href="#method.increment_counter">increment_counter</a></li><li><a href="#method.insert">insert</a></li><li><a href="#method.push_appendix">push_appendix</a></li><li><a href="#method.push_body">push_body</a></li><li><a href="#method.remove">remove</a></li></ul><h3><a href="#synthetic-implementations">Auto Trait Implementations</a></h3><ul class="block synthetic-implementation"><li><a href="#impl-RefUnwindSafe-for-HookContext%3CT%3E">!RefUnwindSafe</a></li><li><a href="#impl-Send-for-HookContext%3CT%3E">!Send</a></li><li><a href="#impl-Sync-for-HookContext%3CT%3E">!Sync</a></li><li><a href="#impl-UnwindSafe-for-HookContext%3CT%3E">!UnwindSafe</a></li><li><a href="#impl-Freeze-for-HookContext%3CT%3E">Freeze</a></li><li><a href="#impl-Unpin-for-HookContext%3CT%3E">Unpin</a></li></ul><h3><a href="#blanket-implementations">Blanket Implementations</a></h3><ul class="block blanket-implementation"><li><a href="#impl-Any-for-T">Any</a></li><li><a href="#impl-Borrow%3CT%3E-for-T">Borrow&#60;T&#62;</a></li><li><a href="#impl-BorrowMut%3CT%3E-for-T">BorrowMut&#60;T&#62;</a></li><li><a href="#impl-From%3CT%3E-for-T">From&#60;T&#62;</a></li><li><a href="#impl-Into%3CU%3E-for-T">Into&#60;U&#62;</a></li><li><a href="#impl-TryFrom%3CU%3E-for-T">TryFrom&#60;U&#62;</a></li><li><a href="#impl-TryInto%3CU%3E-for-T">TryInto&#60;U&#62;</a></li></ul></section><h2><a href="index.html">In error_<wbr>stack::<wbr>fmt</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Struct <a href="../index.html">error_stack</a>::<wbr><a href="index.html">fmt</a>::<wbr><a class="struct" href="#">HookContext</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><code>pub struct HookContext&lt;T&gt; { <span class="comment">/* private fields */</span> }</code></pre><span class="item-info"><div class="stab portability">Available on <strong>crate features <code>std</code> or <code>hooks</code></strong> only.</div></span><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Carrier for contextual information used across hook invocations.</p>
+<p><code>HookContext</code> has two fundamental use-cases:</p>
+<ol>
+<li>Adding body entries and appendix entries</li>
+<li>Storage</li>
+</ol>
+<h3 id="adding-body-entries-and-appendix-entries"><a class="doc-anchor" href="#adding-body-entries-and-appendix-entries">§</a>Adding body entries and appendix entries</h3>
+<p>A <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> backtrace consists of two different sections, a rendered tree of objects (the
+<strong>body</strong>) and additional text/information that is too large to fit into the tree (the
+<strong>appendix</strong>).</p>
+<p>Entries for the body can be attached to the rendered tree of objects via
+<a href="struct.HookContext.html#method.push_body" title="method error_stack::fmt::HookContext::push_body"><code>HookContext::push_body</code></a>. An appendix entry can be attached via
+<a href="struct.HookContext.html#method.push_appendix" title="method error_stack::fmt::HookContext::push_appendix"><code>HookContext::push_appendix</code></a>.</p>
+<h4 id="example"><a class="doc-anchor" href="#example">§</a>Example</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::{Error, ErrorKind};
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Warning(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+<span class="kw">struct </span>HttpResponseStatusCode(u64);
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+<span class="kw">struct </span>Secret(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;HttpResponseStatusCode&gt;(|HttpResponseStatusCode(value), context| {
+    <span class="comment">// Create a new appendix, which is going to be displayed when someone requests the alternate
+    // version (`:#?`) of the report.
+    </span><span class="kw">if </span>context.alternate() {
+        context.push_appendix(<span class="macro">format!</span>(<span class="string">"error {value}: {} error"</span>, <span class="kw">if </span><span class="kw-2">*</span>value &lt; <span class="number">500 </span>{<span class="string">"client"</span>} <span class="kw">else </span>{<span class="string">"server"</span>}))
+    }
+
+    <span class="comment">// This will push a new entry onto the body with the specified value
+    </span>context.push_body(<span class="macro">format!</span>(<span class="string">"error code: {value}"</span>));
+});
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    <span class="kw">let </span>idx = context.increment_counter();
+
+    <span class="comment">// Create a new appendix, which is going to be displayed when someone requests the alternate
+    // version (`:#?`) of the report.
+    </span><span class="kw">if </span>context.alternate() {
+        context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion {idx}:\n  {value}"</span>));
+    }
+
+    <span class="comment">// This will push a new entry onto the body with the specified value
+    </span>context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion ({idx})"</span>));
+});
+
+Report::install_debug_hook::&lt;Warning&gt;(|Warning(value), context| {
+    <span class="comment">// You can add multiples entries to the body (and appendix) in the same hook.
+    </span>context.push_body(<span class="string">"abnormal program execution detected"</span>);
+    context.push_body(<span class="macro">format!</span>(<span class="string">"warning: {value}"</span>));
+});
+
+<span class="comment">// By not adding anything you are able to hide an attachment
+// (it will still be counted towards opaque attachments)
+</span>Report::install_debug_hook::&lt;Secret&gt;(|<span class="kw">_</span>, <span class="kw">_</span>| {});
+
+<span class="kw">let </span>report = Report::new(Error::from(ErrorKind::InvalidInput))
+    .attach(HttpResponseStatusCode(<span class="number">404</span>))
+    .attach(Suggestion(<span class="string">"do you have a connection to the internet?"</span>))
+    .attach(HttpResponseStatusCode(<span class="number">405</span>))
+    .attach(Warning(<span class="string">"unable to determine environment"</span>))
+    .attach(Secret(<span class="string">"pssst, don't tell anyone else c;"</span>))
+    .attach(Suggestion(<span class="string">"execute the program from the fish shell"</span>))
+    .attach(HttpResponseStatusCode(<span class="number">501</span>))
+    .attach(Suggestion(<span class="string">"try better next time!"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);
+
+<span class="macro">println!</span>(<span class="string">"{report:#?}"</span>);</code></pre></div>
+<p>The output of <code>println!("{report:?}")</code>:</p>
+ <pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:51:14</i>
+├╴backtrace (1)
+├╴error code: 404
+├╴suggestion (0)
+├╴error code: 405
+├╴abnormal program execution detected
+├╴warning: unable to determine environment
+├╴suggestion (1)
+├╴error code: 501
+╰╴suggestion (2)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+ </pre>
+<p>The output of <code>println!("{report:#?}")</code>:</p>
+ <pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:51:14</i>
+├╴backtrace (1)
+├╴error code: 404
+├╴suggestion 0:
+│   do you have a connection to the internet?
+├╴suggestion (0)
+├╴error code: 405
+├╴abnormal program execution detected
+├╴warning: unable to determine environment
+├╴suggestion 1:
+│   execute the program from the fish shell
+├╴suggestion (1)
+├╴error code: 501
+├╴suggestion 2:
+│   try better next time!
+╰╴suggestion (2)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+
+error 404: client error
+
+error 405: client error
+
+error 501: server error
+ </pre>
+<h3 id="storage"><a class="doc-anchor" href="#storage">§</a>Storage</h3>
+<p><code>HookContext</code> can be used to store and retrieve values that are going to be used on multiple
+hook invocations in a single <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> call.</p>
+<p>Every hook can request their corresponding <code>HookContext</code>.
+This is especially useful for incrementing/decrementing values, but can also be used to store
+any arbitrary value for the duration of the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> invocation.</p>
+<p>All data stored in <code>HookContext</code> is completely separated from all other hooks and can store
+any arbitrary data of any type, and even data of multiple types at the same time.</p>
+<h4 id="example-1"><a class="doc-anchor" href="#example-1">§</a>Example</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::ErrorKind;
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Computation(u64);
+
+Report::install_debug_hook::&lt;Computation&gt;(|Computation(value), context| {
+    <span class="comment">// Get a value of type `u64`, if we didn't insert one yet, default to 0
+    </span><span class="kw">let </span><span class="kw-2">mut </span>acc = context.get::&lt;u64&gt;().copied().unwrap_or(<span class="number">0</span>);
+    acc += <span class="kw-2">*</span>value;
+
+    <span class="comment">// Get a value of type `f64`, if we didn't insert one yet, default to 1.0
+    </span><span class="kw">let </span><span class="kw-2">mut </span>div = context.get::&lt;f32&gt;().copied().unwrap_or(<span class="number">1.0</span>);
+    div /= <span class="kw-2">*</span>value <span class="kw">as </span>f32;
+
+    <span class="comment">// Insert the calculated `u64` and `f32` back into storage, so that we can use them
+    // in the invocations following this one (for the same `Debug` call)
+    </span>context.insert(acc);
+    context.insert(div);
+
+    context.push_body(<span class="macro">format!</span>(
+        <span class="string">"computation for {value} (acc = {acc}, div = {div})"
+    </span>));
+});
+
+<span class="kw">let </span>report = Report::new(std::io::Error::from(ErrorKind::InvalidInput))
+    .attach(Computation(<span class="number">2</span>))
+    .attach(Computation(<span class="number">3</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+ <pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:32:14</i>
+├╴backtrace (1)
+├╴computation for 2 (acc = 2, div = 0.5)
+╰╴computation for 3 (acc = 5, div = 0.16666667)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+ </pre>
+</div></details><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-HookContext%3CT%3E" class="impl"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><a href="#impl-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.cast" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.cast" class="fn">cast</a>&lt;U&gt;(&amp;mut self) -&gt; &amp;mut <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;U&gt;</h4></section></summary><div class="docblock"><p>Cast the <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a> to a new type <code>U</code>.</p>
+<p>The storage of <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a> is partitioned, meaning that if <code>T</code> and <code>U</code> are different
+types the values stored in <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext&lt;_, T&gt;</code></a> will be separated from values in
+<a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext&lt;_, U&gt;</code></a>.</p>
+<p>In most situations this functions isn’t needed, as it transparently casts between different
+partitions of the storage. Only hooks that share storage with hooks of different types
+should need to use this function.</p>
+<h6 id="example-2"><a class="doc-anchor" href="#example-2">§</a>Example</h6>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::ErrorKind;
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Warning(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+<span class="kw">struct </span>Error(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Error&gt;(|Error(frame), context| {
+    <span class="kw">let </span>idx = context.increment_counter() + <span class="number">1</span>;
+
+    context.push_body(<span class="macro">format!</span>(<span class="string">"[{idx}] [ERROR] {frame}"</span>));
+});
+Report::install_debug_hook::&lt;Warning&gt;(|Warning(frame), context| {
+    <span class="comment">// We want to share the same counter with `Error`, so that we're able to have
+    // a global counter to keep track of all errors and warnings in order, this means
+    // we need to access the storage of `Error` using `cast()`.
+    </span><span class="kw">let </span>context = context.cast::&lt;Error&gt;();
+    <span class="kw">let </span>idx = context.increment_counter() + <span class="number">1</span>;
+    context.push_body(<span class="macro">format!</span>(<span class="string">"[{idx}] [WARN] {frame}"</span>))
+});
+
+<span class="kw">let </span>report = Report::new(std::io::Error::from(ErrorKind::InvalidInput))
+    .attach(Error(<span class="string">"unable to reach remote host"</span>))
+    .attach(Warning(<span class="string">"disk nearly full"</span>))
+    .attach(Error(<span class="string">"cannot resolve example.com: unknown host"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:28:14</i>
+├╴backtrace (1)
+├╴[1] [ERROR] unable to reach remote host
+├╴[2] [WARN] disk nearly full
+╰╴[3] [ERROR] cannot resolve example.com: unknown host
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-HookContext%3CT%3E-1" class="impl"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><a href="#impl-HookContext%3CT%3E-1" class="anchor">§</a><h3 class="code-header">impl&lt;T: 'static&gt; <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.get" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.get" class="fn">get</a>&lt;U: 'static&gt;(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;U</a>&gt;</h4></section></summary><div class="docblock"><p>Return a reference to a value of type <code>U</code>, if a value of that type exists.</p>
+<p>Values returned are isolated and “bound” to <code>T</code>, this means that <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext&lt;_, Warning&gt;</code></a>
+and <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext&lt;_, Error&gt;</code></a> do not share the same values. Values are only valid during the
+invocation of the corresponding call (e.g. <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a>).</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.get_mut" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.get_mut" class="fn">get_mut</a>&lt;U: 'static&gt;(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;mut U</a>&gt;</h4></section></summary><div class="docblock"><p>Return a mutable reference to a value of type <code>U</code>, if a value of that type exists.</p>
+<p>Values returned are isolated and “bound” to <code>T</code>, this means that <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext&lt;_, Warning&gt;</code></a>
+and <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext&lt;_, Error&gt;</code></a> do not share the same values. Values are only valid during the
+invocation of the corresponding call (e.g. <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a>).</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.insert" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.insert" class="fn">insert</a>&lt;U: 'static&gt;(&amp;mut self, value: U) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;U&gt;</h4></section></summary><div class="docblock"><p>Insert a new value of type <code>U</code> into the storage of <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a>.</p>
+<p>The returned value will the previously stored value of the same type <code>U</code> scoped over type
+<code>T</code>, if it existed, did no such value exist it will return <a href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html#variant.None" title="variant core::option::Option::None"><code>None</code></a>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.remove" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.remove" class="fn">remove</a>&lt;U: 'static&gt;(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;U&gt;</h4></section></summary><div class="docblock"><p>Remove the value of type <code>U</code> from the storage of <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a> if it existed.</p>
+<p>The returned value will be the previously stored value of the same type <code>U</code> if it existed in
+the scope of <code>T</code>, did no such value exist, it will return <a href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html#variant.None" title="variant core::option::Option::None"><code>None</code></a>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.increment_counter" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.increment_counter" class="fn">increment_counter</a>(&amp;mut self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.isize.html">isize</a></h4></section></summary><div class="docblock"><p>One of the most common interactions with <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a> is a counter to reference previous
+frames in an entry to the appendix that was added using <a href="struct.HookContext.html#method.push_appendix" title="method error_stack::fmt::HookContext::push_appendix"><code>HookContext::push_appendix</code></a>.</p>
+<p>This is a utility method, which uses the other primitive methods provided to automatically
+increment a counter, if the counter wasn’t initialized this method will return <code>0</code>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::ErrorKind;
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    <span class="kw">let </span>idx = context.increment_counter();
+    context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion {idx}: {value}"</span>));
+});
+
+<span class="kw">let </span>report = Report::new(std::io::Error::from(ErrorKind::InvalidInput))
+    .attach(Suggestion(<span class="string">"use a file you can read next time!"</span>))
+    .attach(Suggestion(<span class="string">"don't press any random keys!"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:18:14</i>
+├╴backtrace (1)
+├╴suggestion 0: use a file you can read next time!
+╰╴suggestion 1: don&#39;t press any random keys!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.decrement_counter" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#46-227">source</a><h4 class="code-header">pub fn <a href="#method.decrement_counter" class="fn">decrement_counter</a>(&amp;mut self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.isize.html">isize</a></h4></section></summary><div class="docblock"><p>One of the most common interactions with <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a> is a counter to reference previous
+frames in an entry to the appendix that was added using <a href="struct.HookContext.html#method.push_appendix" title="method error_stack::fmt::HookContext::push_appendix"><code>HookContext::push_appendix</code></a>.</p>
+<p>This is a utility method, which uses the other primitive method provided to automatically
+decrement a counter, if the counter wasn’t initialized this method will return <code>-1</code> to stay
+consistent with <a href="struct.HookContext.html#method.increment_counter" title="method error_stack::fmt::HookContext::increment_counter"><code>HookContext::increment_counter</code></a>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::ErrorKind;
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    <span class="kw">let </span>idx = context.decrement_counter();
+    context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion {idx}: {value}"</span>));
+});
+
+<span class="kw">let </span>report = Report::new(std::io::Error::from(ErrorKind::InvalidInput))
+    .attach(Suggestion(<span class="string">"use a file you can read next time!"</span>))
+    .attach(Suggestion(<span class="string">"don't press any random keys!"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:18:14</i>
+├╴backtrace (1)
+├╴suggestion -1: use a file you can read next time!
+╰╴suggestion -2: don&#39;t press any random keys!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-HookContext%3CT%3E-2" class="impl"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#229-372">source</a><a href="#impl-HookContext%3CT%3E-2" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.color_mode" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#239-241">source</a><h4 class="code-header">pub const fn <a href="#method.color_mode" class="fn">color_mode</a>(&amp;self) -&gt; <a class="enum" href="enum.ColorMode.html" title="enum error_stack::fmt::ColorMode">ColorMode</a></h4></section></summary><div class="docblock"><p>The requested <a href="enum.ColorMode.html" title="enum error_stack::fmt::ColorMode"><code>ColorMode</code></a> for this invocation of hooks.</p>
+<p>Hooks can be invoked in different color modes, which represent the preferences of an
+end-user.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.charset" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#248-250">source</a><h4 class="code-header">pub const fn <a href="#method.charset" class="fn">charset</a>(&amp;self) -&gt; <a class="enum" href="enum.Charset.html" title="enum error_stack::fmt::Charset">Charset</a></h4></section></summary><div class="docblock"><p>The requested <a href="enum.Charset.html" title="enum error_stack::fmt::Charset"><code>Charset</code></a> for this invocation of hooks</p>
+<p>Hooks can be invoked in using different charsets, which reflect the capabilities of the
+terminal.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.push_appendix" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#310-312">source</a><h4 class="code-header">pub fn <a href="#method.push_appendix" class="fn">push_appendix</a>(&amp;mut self, content: impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;)</h4></section></summary><div class="docblock"><p>The contents of the appendix are going to be displayed after the body in the order they have
+been pushed into the <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a>.</p>
+<p>This is useful for dense information like backtraces, or span traces.</p>
+<h5 id="example-3"><a class="doc-anchor" href="#example-3">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::ErrorKind;
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Error {
+    code: usize,
+    reason: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+}
+
+Report::install_debug_hook::&lt;Error&gt;(|Error { code, reason }, context| {
+    <span class="kw">if </span>context.alternate() {
+        <span class="comment">// Add an entry to the appendix
+        </span>context.push_appendix(<span class="macro">format!</span>(<span class="string">"error {code}:\n  {reason}"</span>));
+    }
+
+    context.push_body(<span class="macro">format!</span>(<span class="string">"error {code}"</span>));
+});
+
+<span class="kw">let </span>report = Report::new(std::io::Error::from(ErrorKind::InvalidInput))
+    .attach(Error {
+        code: <span class="number">404</span>,
+        reason: <span class="string">"not found - server cannot find requested resource"</span>,
+    })
+    .attach(Error {
+        code: <span class="number">405</span>,
+        reason: <span class="string">"bad request - server cannot or will not process request"</span>,
+    });
+
+<span class="macro">println!</span>(<span class="string">"{report:#?}"</span>);</code></pre></div>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:25:14</i>
+├╴backtrace (1)
+├╴error 404
+╰╴error 405
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+
+error 404:
+  not found - server cannot find requested resource
+
+error 405:
+  bad request - server cannot or will not process request
+</pre></div></details><details class="toggle method-toggle" open><summary><section id="method.push_body" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#357-359">source</a><h4 class="code-header">pub fn <a href="#method.push_body" class="fn">push_body</a>(&amp;mut self, content: impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;)</h4></section></summary><div class="docblock"><p>Add a new entry to the body.</p>
+<h5 id="example-4"><a class="doc-anchor" href="#example-4">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io;
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion: {value}"</span>));
+    <span class="comment">// We can push multiples entries in a single hook, these lines will be added one after
+    // another.
+    </span>context.push_body(<span class="string">"sorry for the inconvenience!"</span>);
+});
+
+<span class="kw">let </span>report = Report::new(io::Error::from(io::ErrorKind::InvalidInput))
+    .attach(Suggestion(<span class="string">"try better next time"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/hook.rs:20:14</i>
+├╴backtrace (1)
+├╴suggestion: try better next time
+╰╴sorry for the inconvenience!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre></div></details><details class="toggle method-toggle" open><summary><section id="method.alternate" class="method"><a class="src rightside" href="../../src/error_stack/fmt/hook.rs.html#365-367">source</a><h4 class="code-header">pub const fn <a href="#method.alternate" class="fn">alternate</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></h4></section></summary><div class="docblock"><p>Returns if the currently requested format should render the alternate representation.</p>
+<p>This corresponds to the output of <a href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html#method.alternate" title="method core::fmt::Formatter::alternate"><code>std::fmt::Formatter::alternate</code></a>.</p>
+</div></details></div></details></div><h2 id="synthetic-implementations" class="section-header">Auto Trait Implementations<a href="#synthetic-implementations" class="anchor">§</a></h2><div id="synthetic-implementations-list"><section id="impl-Freeze-for-HookContext%3CT%3E" class="impl"><a href="#impl-Freeze-for-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Freeze.html" title="trait core::marker::Freeze">Freeze</a> for <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section><section id="impl-RefUnwindSafe-for-HookContext%3CT%3E" class="impl"><a href="#impl-RefUnwindSafe-for-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; !<a class="trait" href="https://doc.rust-lang.org/nightly/core/panic/unwind_safe/trait.RefUnwindSafe.html" title="trait core::panic::unwind_safe::RefUnwindSafe">RefUnwindSafe</a> for <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section><section id="impl-Send-for-HookContext%3CT%3E" class="impl"><a href="#impl-Send-for-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; !<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> for <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section><section id="impl-Sync-for-HookContext%3CT%3E" class="impl"><a href="#impl-Sync-for-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; !<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> for <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section><section id="impl-Unpin-for-HookContext%3CT%3E" class="impl"><a href="#impl-Unpin-for-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Unpin.html" title="trait core::marker::Unpin">Unpin</a> for <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section><section id="impl-UnwindSafe-for-HookContext%3CT%3E" class="impl"><a href="#impl-UnwindSafe-for-HookContext%3CT%3E" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; !<a class="trait" href="https://doc.rust-lang.org/nightly/core/panic/unwind_safe/trait.UnwindSafe.html" title="trait core::panic::unwind_safe::UnwindSafe">UnwindSafe</a> for <a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;</h3></section></div><h2 id="blanket-implementations" class="section-header">Blanket Implementations<a href="#blanket-implementations" class="anchor">§</a></h2><div id="blanket-implementations-list"><details class="toggle implementors-toggle"><summary><section id="impl-Any-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/any.rs.html#138">source</a><a href="#impl-Any-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/any/trait.Any.html" title="trait core::any::Any">Any</a> for T<div class="where">where
+    T: 'static + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.type_id" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/any.rs.html#139">source</a><a href="#method.type_id" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/any/trait.Any.html#tymethod.type_id" class="fn">type_id</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/core/any/struct.TypeId.html" title="struct core::any::TypeId">TypeId</a></h4></section></summary><div class='docblock'>Gets the <code>TypeId</code> of <code>self</code>. <a href="https://doc.rust-lang.org/nightly/core/any/trait.Any.html#tymethod.type_id">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Borrow%3CT%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#209">source</a><a href="#impl-Borrow%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html" title="trait core::borrow::Borrow">Borrow</a>&lt;T&gt; for T<div class="where">where
+    T: ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#211">source</a><a href="#method.borrow" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html#tymethod.borrow" class="fn">borrow</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a></h4></section></summary><div class='docblock'>Immutably borrows from an owned value. <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html#tymethod.borrow">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-BorrowMut%3CT%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#217">source</a><a href="#impl-BorrowMut%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/borrow/trait.BorrowMut.html" title="trait core::borrow::BorrowMut">BorrowMut</a>&lt;T&gt; for T<div class="where">where
+    T: ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow_mut" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#218">source</a><a href="#method.borrow_mut" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.BorrowMut.html#tymethod.borrow_mut" class="fn">borrow_mut</a>(&amp;mut self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;mut T</a></h4></section></summary><div class='docblock'>Mutably borrows from an owned value. <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.BorrowMut.html#tymethod.borrow_mut">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-From%3CT%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#765">source</a><a href="#impl-From%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;T&gt; for T</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#768">source</a><a href="#method.from" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(t: T) -&gt; T</h4></section></summary><div class="docblock"><p>Returns the argument unchanged.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Into%3CU%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#748-750">source</a><a href="#impl-Into%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;U&gt; for T<div class="where">where
+    U: <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.into" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#758">source</a><a href="#method.into" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html#tymethod.into" class="fn">into</a>(self) -&gt; U</h4></section></summary><div class="docblock"><p>Calls <code>U::from(self)</code>.</p>
+<p>That is, this conversion is whatever the implementation of
+<code><a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;T&gt; for U</code> chooses to do.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryFrom%3CU%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#805-807">source</a><a href="#impl-TryFrom%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;U&gt; for T<div class="where">where
+    U: <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error-1" class="associatedtype trait-impl"><a href="#associatedtype.Error-1" class="anchor">§</a><h4 class="code-header">type <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" class="associatedtype">Error</a> = <a class="enum" href="https://doc.rust-lang.org/nightly/core/convert/enum.Infallible.html" title="enum core::convert::Infallible">Infallible</a></h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_from" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#812">source</a><a href="#method.try_from" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#tymethod.try_from" class="fn">try_from</a>(value: U) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;T, &lt;T as <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;U&gt;&gt;::<a class="associatedtype" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" title="type core::convert::TryFrom::Error">Error</a>&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryInto%3CU%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#790-792">source</a><a href="#impl-TryInto%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryInto.html" title="trait core::convert::TryInto">TryInto</a>&lt;U&gt; for T<div class="where">where
+    U: <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error" class="associatedtype trait-impl"><a href="#associatedtype.Error" class="anchor">§</a><h4 class="code-header">type <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryInto.html#associatedtype.Error" class="associatedtype">Error</a> = &lt;U as <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;T&gt;&gt;::<a class="associatedtype" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" title="type core::convert::TryFrom::Error">Error</a></h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_into" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#797">source</a><a href="#method.try_into" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryInto.html#tymethod.try_into" class="fn">try_into</a>(self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;U, &lt;U as <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;T&gt;&gt;::<a class="associatedtype" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" title="type core::convert::TryFrom::Error">Error</a>&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details></div></section></div></main></body></html>

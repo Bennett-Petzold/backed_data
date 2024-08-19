@@ -218,7 +218,19 @@
 <a href="#218" id="218">218</a>
 <a href="#219" id="219">219</a>
 <a href="#220" id="220">220</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::ops::{Deref, DerefMut};
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="kw">use </span>std::ops::{Deref, DerefMut};
 
 <span class="attr">#[cfg(feature = <span class="string">"array"</span>)]
 </span><span class="kw">use </span>stable_deref_trait::StableDeref;
@@ -267,7 +279,7 @@
     }
 }
 
-<span class="attr">#[cfg(feature = <span class="string">"array"</span>)]
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
 </span><span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; StableDeref <span class="kw">for </span>ToRef&lt;<span class="lifetime">'_</span>, T&gt; {}
 
 <span class="doccomment">/// Wrapper that allows &amp;mut T to implement [`AsMut&lt;T&gt;`] and [`AsRef&lt;T&gt;`].
@@ -326,7 +338,7 @@
     }
 }
 
-<span class="attr">#[cfg(feature = <span class="string">"array"</span>)]
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
 </span><span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; StableDeref <span class="kw">for </span>ToMut&lt;<span class="lifetime">'_</span>, T&gt; {}
 
 <span class="doccomment">/// Wrapper that allows &amp;T to implement [`AsRef&lt;T&gt;`].
@@ -373,7 +385,7 @@
     }
 }
 
-<span class="attr">#[cfg(feature = <span class="string">"array"</span>)]
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
 </span><span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; StableDeref <span class="kw">for </span>IndirectRef&lt;<span class="lifetime">'_</span>, T&gt; {}
 
 <span class="doccomment">/// Wrapper that allows &amp;mut T to implement [`AsMut&lt;T&gt;`] and [`AsRef&lt;T&gt;`].
@@ -432,7 +444,7 @@
     }
 }
 
-<span class="attr">#[cfg(feature = <span class="string">"array"</span>)]
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
 </span><span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; StableDeref <span class="kw">for </span>IndirectMut&lt;<span class="lifetime">'_</span>, T&gt; {}
 
 <span class="doccomment">/// Combined trait for types with both [`AsRef`] and [`AsMut`].

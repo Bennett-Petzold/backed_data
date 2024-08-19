@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ItemMut","ItemRef","IterMut","IterRef","Ref","RefMut","SecretVec"]};

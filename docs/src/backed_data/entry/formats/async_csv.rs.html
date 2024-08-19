@@ -291,7 +291,19 @@
 <a href="#291" id="291">291</a>
 <a href="#292" id="292">292</a>
 <a href="#293" id="293">293</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::marker::PhantomData;
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="kw">use </span>std::marker::PhantomData;
 
 <span class="kw">use </span>csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, QuoteStyle, Terminator, Trim};
 <span class="kw">use </span>futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};

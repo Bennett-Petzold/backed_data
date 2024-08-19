@@ -370,7 +370,23 @@
 <a href="#370" id="370">370</a>
 <a href="#371" id="371">371</a>
 <a href="#372" id="372">372</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="kw">use </span>std::{
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
@@ -664,18 +680,22 @@
 {
     <span class="doccomment">/// Builds [`self`] from existing backings.
     ///
+    /// The (len, backing) pairs must be equal length. Otherwise this will
+    /// return None.
+    ///
     /// # Parameters
     /// * `iter`: Iterator of (len, backing) pairs.
-    ///
-    /// # Safety
-    /// Each len argument MUST be correct, otherwise this container is
-    /// incorrectly defined and may crash from an incorrect range address.
-    </span><span class="kw">pub unsafe fn </span>from_backing&lt;I&gt;(iter: I) -&gt; <span class="self">Self
-    </span><span class="kw">where
+    </span><span class="kw">pub fn </span>from_backing&lt;I&gt;(iter: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;
+    <span class="kw">where
         </span>I: IntoIterator&lt;Item = (usize, E::Data)&gt;,
     {
         <span class="kw">let </span><span class="kw-2">mut </span>range_start = <span class="number">0</span>;
         <span class="kw">let </span>(keys, entries): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = iter.into_iter().unzip();
+
+        <span class="kw">if </span>keys.len() != entries.len() {
+            <span class="kw">return </span><span class="prelude-val">None</span>;
+        }
+
         <span class="kw">let </span>(key_starts, key_ends): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = keys
             .into_iter()
             .map(|k| {
@@ -684,11 +704,11 @@
                 (k, prev_start)
             })
             .unzip();
-        <span class="self">Self </span>{
+        <span class="prelude-val">Some</span>(<span class="self">Self </span>{
             key_starts: key_starts.into(),
             key_ends: key_ends.into(),
             entries: entries.into(),
-        }
+        })
     }
 }
 

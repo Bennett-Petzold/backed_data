@@ -86,7 +86,29 @@
 <a href="#86" id="86">86</a>
 <a href="#87" id="87">87</a>
 <a href="#88" id="88">88</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>serde::{Deserialize, Serialize};
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="doccomment">/*!
+Defines the encoding/decoding formats for backed disks.
+*/
+
+</span><span class="kw">use </span>serde::{Deserialize, Serialize};
 
 <span class="doccomment">/// A format decoder that can be used synchronously.
 </span><span class="kw">pub trait </span>Decoder&lt;Source: <span class="question-mark">?</span>Sized&gt; {
@@ -101,7 +123,7 @@
 ///
 /// # Implementation
 /// It is the responsibility of trait implementors to call
-/// [`WriteExt::flush`] to ensure encodings write out to disk. Any implementor
+/// [`Write::flush`][`std::io::Write::flush`] to ensure encodings write out to disk. Any implementor
 /// that does not to call these may fail to put all data on disk, making the
 /// encoding invalid and causing read failure.
 </span><span class="kw">pub trait </span>Encoder&lt;Target: <span class="question-mark">?</span>Sized&gt; {
@@ -129,7 +151,9 @@
 ///
 /// # Implementation
 /// It is the responsibility of trait implementors to call
-/// [`AsyncWriteExt::flush`] and [`AsyncWriteExt::close`] to ensure encodings
+/// [`AsyncWriteExt::flush`][`futures::io::AsyncWriteExt::flush`]
+/// and [`AsyncWriteExt::close`][`futures::io::AsyncWriteExt::close`]
+/// to ensure encodings
 /// write out to disk. Any implementor that does not to call these may fail to
 /// put all data on disk, making the encoding invalid and causing read failure.
 </span><span class="attr">#[cfg(feature = <span class="string">"async"</span>)]

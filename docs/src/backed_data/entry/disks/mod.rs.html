@@ -101,7 +101,37 @@
 <a href="#101" id="101">101</a>
 <a href="#102" id="102">102</a>
 <a href="#103" id="103">103</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::io::{Read, Write};
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="doccomment">/*!
+Defines the underlying storage for [`BackedEntry`][`super::BackedEntry`].
+
+The types [`Plainfile`], [`WriteUnbuffered`], [`Unbuffered`], and [`Mmap`] are
+completely interchangeable. A disk written to by one can be read by another.
+*/
+
+</span><span class="kw">use </span>std::io::{Read, Write};
 
 <span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
 </span><span class="kw">use </span>{
@@ -109,17 +139,20 @@
     std::future::Future,
 };
 
-<span class="kw">pub trait </span>ReadDisk {
+<span class="doccomment">/// Produces storage that can be read from synchronously.
+</span><span class="kw">pub trait </span>ReadDisk {
     <span class="kw">type </span>ReadDisk: Read;
     <span class="kw">fn </span>read_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::ReadDisk&gt;;
 }
 
-<span class="kw">pub trait </span>WriteDisk {
+<span class="doccomment">/// Produces storage that can be written to synchronously.
+</span><span class="kw">pub trait </span>WriteDisk {
     <span class="kw">type </span>WriteDisk: Write;
     <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;;
 }
 
 <span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
+</span><span class="doccomment">/// Produces storage that can be read from asynchronously.
 </span><span class="kw">pub trait </span>AsyncReadDisk {
     <span class="kw">type </span>ReadDisk: AsyncRead + Unpin;
     <span class="kw">fn </span>async_read_disk(
@@ -128,6 +161,7 @@
 }
 
 <span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
+</span><span class="doccomment">/// Produces storage that can be written to asynchronously.
 </span><span class="kw">pub trait </span>AsyncWriteDisk {
     <span class="kw">type </span>WriteDisk: AsyncWrite + Unpin;
     <span class="kw">fn </span>async_write_disk(

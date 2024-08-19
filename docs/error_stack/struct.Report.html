@@ -1,0 +1,517 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Contains a `Frame` stack consisting of `Context`s and attachments."><title>Report in error_stack - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="error_stack" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc struct"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../error_stack/index.html">error_<wbr>stack</a><span class="version">0.5.0</span></h2></div><h2 class="location"><a href="#">Report</a></h2><div class="sidebar-elems"><section><h3><a href="#implementations">Methods</a></h3><ul class="block method"><li><a href="#method.as_error">as_error</a></li><li><a href="#method.attach">attach</a></li><li><a href="#method.attach_printable">attach_printable</a></li><li><a href="#method.change_context">change_context</a></li><li><a href="#method.contains">contains</a></li><li><a href="#method.current_context">current_context</a></li><li><a href="#method.current_frames">current_frames</a></li><li><a href="#method.downcast_mut">downcast_mut</a></li><li><a href="#method.downcast_ref">downcast_ref</a></li><li><a href="#method.extend_one">extend_one</a></li><li><a href="#method.frames">frames</a></li><li><a href="#method.frames_mut">frames_mut</a></li><li><a href="#method.install_debug_hook">install_debug_hook</a></li><li><a href="#method.into_error">into_error</a></li><li><a href="#method.new">new</a></li><li><a href="#method.request_ref">request_ref</a></li><li><a href="#method.request_value">request_value</a></li><li><a href="#method.set_charset">set_charset</a></li><li><a href="#method.set_color_mode">set_color_mode</a></li></ul><h3><a href="#trait-implementations">Trait Implementations</a></h3><ul class="block trait-implementation"><li><a href="#impl-Debug-for-Report%3CC%3E">Debug</a></li><li><a href="#impl-Display-for-Report%3CContext%3E">Display</a></li><li><a href="#impl-Extend%3CReport%3CContext%3E%3E-for-Report%3CContext%3E">Extend&#60;Report&#60;Context&#62;&#62;</a></li><li><a href="#impl-From%3CC%3E-for-Report%3CC%3E">From&#60;C&#62;</a></li><li><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error%3E">From&#60;Report&#60;C&#62;&#62;</a></li><li><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Send%3E">From&#60;Report&#60;C&#62;&#62;</a></li><li><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Send+%2B+Sync%3E">From&#60;Report&#60;C&#62;&#62;</a></li><li><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Sync%3E">From&#60;Report&#60;C&#62;&#62;</a></li><li><a href="#impl-FromIterator%3CReport%3CContext%3E%3E-for-Option%3CReport%3CContext%3E%3E">FromIterator&#60;Report&#60;Context&#62;&#62;</a></li><li><a href="#impl-Termination-for-Report%3CContext%3E">Termination</a></li></ul><h3><a href="#synthetic-implementations">Auto Trait Implementations</a></h3><ul class="block synthetic-implementation"><li><a href="#impl-RefUnwindSafe-for-Report%3CC%3E">!RefUnwindSafe</a></li><li><a href="#impl-UnwindSafe-for-Report%3CC%3E">!UnwindSafe</a></li><li><a href="#impl-Freeze-for-Report%3CC%3E">Freeze</a></li><li><a href="#impl-Send-for-Report%3CC%3E">Send</a></li><li><a href="#impl-Sync-for-Report%3CC%3E">Sync</a></li><li><a href="#impl-Unpin-for-Report%3CC%3E">Unpin</a></li></ul><h3><a href="#blanket-implementations">Blanket Implementations</a></h3><ul class="block blanket-implementation"><li><a href="#impl-Any-for-T">Any</a></li><li><a href="#impl-Borrow%3CT%3E-for-T">Borrow&#60;T&#62;</a></li><li><a href="#impl-BorrowMut%3CT%3E-for-T">BorrowMut&#60;T&#62;</a></li><li><a href="#impl-From%3C!%3E-for-T">From&#60;!&#62;</a></li><li><a href="#impl-From%3CT%3E-for-T">From&#60;T&#62;</a></li><li><a href="#impl-Into%3CU%3E-for-T">Into&#60;U&#62;</a></li><li><a href="#impl-ToString-for-T">ToString</a></li><li><a href="#impl-TryFrom%3CU%3E-for-T">TryFrom&#60;U&#62;</a></li><li><a href="#impl-TryInto%3CU%3E-for-T">TryInto&#60;U&#62;</a></li></ul></section><h2><a href="index.html">In crate error_<wbr>stack</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Struct <a href="index.html">error_stack</a>::<wbr><a class="struct" href="#">Report</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/error_stack/report.rs.html#245-254">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><code>pub struct Report&lt;C&gt; { <span class="comment">/* private fields */</span> }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Contains a <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack consisting of <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>s and attachments.</p>
+<p>Attachments can be added by using <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach()</code></a>. The <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack can be iterated by using
+<a href="struct.Report.html#method.frames" title="method error_stack::Report::frames"><code>frames()</code></a>.</p>
+<p>When creating a <code>Report</code> by using <a href="struct.Report.html#method.new" title="associated function error_stack::Report::new"><code>new()</code></a>, the passed <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> is used to set the <em>current
+context</em> on the <code>Report</code>. To provide a new one, use <a href="struct.Report.html#method.change_context" title="method error_stack::Report::change_context"><code>change_context()</code></a>.</p>
+<p>Attachments, and objects <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>provide</code></a>d by a <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>, are directly retrievable by calling
+<a href="struct.Report.html#method.request_ref" title="method error_stack::Report::request_ref"><code>request_ref()</code></a> or <a href="struct.Report.html#method.request_value" title="method error_stack::Report::request_value"><code>request_value()</code></a>.</p>
+<h3 id="formatting"><a class="doc-anchor" href="#formatting">§</a>Formatting</h3>
+<p><code>Report</code> implements <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> and <a href="https://doc.rust-lang.org/nightly/core/fmt/macros/derive.Debug.html" title="derive core::fmt::macros::Debug"><code>Debug</code></a>. When utilizing the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> implementation,
+the current context of the <code>Report</code> is printed, e.g. <code>println!("{report}")</code>. For the alternate
+<a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> output (<code>"{:#}"</code>), all <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>s are printed. To print the full stack of
+<a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>s and attachments, use the <a href="https://doc.rust-lang.org/nightly/core/fmt/macros/derive.Debug.html" title="derive core::fmt::macros::Debug"><code>Debug</code></a> implementation (<code>"{:?}"</code>). To customize the
+output of the attachments in the <a href="https://doc.rust-lang.org/nightly/core/fmt/macros/derive.Debug.html" title="derive core::fmt::macros::Debug"><code>Debug</code></a> output, please see the <a href="fmt/index.html" title="mod error_stack::fmt"><code>error_stack::fmt</code></a> module.</p>
+<p>Please see the examples below for more information.</p>
+<h3 id="multiple-errors"><a class="doc-anchor" href="#multiple-errors">§</a>Multiple Errors</h3>
+<p><code>Report</code> is able to represent multiple errors that have occurred. Errors can be combined using
+the <a href="struct.Report.html#method.extend_one" title="method error_stack::Report::extend_one"><code>extend_one()</code></a>, which will add the <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack of the other error as an additional
+source to the current report.</p>
+<h3 id="backtrace-and-spantrace"><a class="doc-anchor" href="#backtrace-and-spantrace">§</a><code>Backtrace</code> and <code>SpanTrace</code></h3>
+<p><code>Report</code> is able to <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>provide</code></a> a <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a> and a [<code>SpanTrace</code>], which can be retrieved by
+calling <a href="struct.Report.html#method.request_ref" title="method error_stack::Report::request_ref"><code>request_ref::&lt;Backtrace&gt;()</code></a> or <a href="struct.Report.html#method.request_ref" title="method error_stack::Report::request_ref"><code>request_ref::&lt;SpanTrace&gt;()</code></a>
+(<a href="struct.Report.html#method.downcast_ref" title="method error_stack::Report::downcast_ref"><code>downcast_ref::&lt;SpanTrace&gt;()</code></a> on stable) respectively. If the root context <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>provide</code></a>s a
+<a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a> or a [<code>SpanTrace</code>], those are returned, otherwise, if configured, an attempt is
+made to capture them when creating a <code>Report</code>. To enable capturing of the backtrace, make sure
+<code>RUST_BACKTRACE</code> or <code>RUST_LIB_BACKTRACE</code> is set according to the <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code>
+documentation</a>. To enable capturing of the span trace, an <a href="tracing_error::ErrorLayer"><code>ErrorLayer</code></a> has to be
+enabled. Please also see the <a href="index.html#feature-flags">Feature Flags</a> section. A single <code>Report</code> can have multiple
+<a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a>s and [<code>SpanTrace</code>]s, depending on the amount of related errors the <code>Report</code>
+consists of. Therefore it isn’t guaranteed that <a href="struct.Report.html#method.request_ref" title="method error_stack::Report::request_ref"><code>request_ref()</code></a> will only ever return a single
+<a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a> or [<code>SpanTrace</code>].</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2><h3 id="provide-a-context-for-an-error"><a class="doc-anchor" href="#provide-a-context-for-an-error">§</a>Provide a context for an error</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>error_stack::{ResultExt, <span class="prelude-ty">Result</span>};
+
+<span class="kw">let </span>config_path = <span class="string">"./path/to/config.file"</span>;
+<span class="kw">let </span>content = std::fs::read_to_string(config_path)
+    .attach_printable_lazy(|| <span class="macro">format!</span>(<span class="string">"failed to read config file {config_path:?}"</span>))<span class="question-mark">?</span>;
+
+...</code></pre></div>
+<h3 id="enforce-a-context-for-an-error"><a class="doc-anchor" href="#enforce-a-context-for-an-error">§</a>Enforce a context for an error</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::{fmt, path::{Path, PathBuf}};
+
+<span class="kw">use </span>error_stack::{Context, Report, ResultExt};
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">enum </span>RuntimeError {
+    InvalidConfig(PathBuf),
+    ...
+}
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">enum </span>ConfigError {
+    IoError,
+    ...
+}
+
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>RuntimeError {
+    ...
+}
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>ConfigError {
+    ...
+}
+
+<span class="kw">impl </span>Context <span class="kw">for </span>RuntimeError {}
+<span class="kw">impl </span>Context <span class="kw">for </span>ConfigError {}
+
+<span class="kw">fn </span>read_config(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, Report&lt;ConfigError&gt;&gt; {
+    std::fs::read_to_string(path.as_ref()).change_context(ConfigError::IoError)
+}
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;(), Report&lt;RuntimeError&gt;&gt; {
+    <span class="kw">let </span>config_path = <span class="string">"./path/to/config.file"</span>;
+    <span class="kw">let </span>config = read_config(config_path)
+            .change_context_lazy(|| RuntimeError::InvalidConfig(PathBuf::from(config_path)))<span class="question-mark">?</span>;
+
+    ...
+}</code></pre></div>
+<h3 id="formatting-1"><a class="doc-anchor" href="#formatting-1">§</a>Formatting</h3>
+<p>For the example from above, the report could be formatted as follows:</p>
+<p>If the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> implementation of <code>Report</code> will be invoked, this will print something like:</p>
+<pre>
+could not parse &quot;./path/to/config.file&quot;
+</pre>
+<p>If the alternate <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> implementation of <code>Report</code> is invoked (<code>{report:#}</code>), this will
+print something like:</p>
+<pre>
+could not parse &quot;./path/to/config.file&quot;: config file is invalid: No such file or directory (os error 2)
+</pre>
+<p>The <a href="https://doc.rust-lang.org/nightly/core/fmt/macros/derive.Debug.html" title="derive core::fmt::macros::Debug"><code>Debug</code></a> implementation of <code>Report</code> will print something like:</p>
+<pre>
+<b>could not parse &quot;./path/to/config.file&quot;</b>
+├╴at <i>libs/error-stack/src/report.rs:58:14</i>
+│
+├─▶ <b>config file is invalid</b>
+│   ╰╴at <i>libs/error-stack/src/report.rs:50:44</i>
+│
+╰─▶ <b>No such file or directory (os error 2)</b>
+    ├╴at <i>libs/error-stack/src/report.rs:50:44</i>
+    ╰╴backtrace (1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<h3 id="get-the-attached-backtrace-and-spantrace"><a class="doc-anchor" href="#get-the-attached-backtrace-and-spantrace">§</a>Get the attached <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a> and [<code>SpanTrace</code>]:</h3>
+<div class="example-wrap should_panic"><a href="#" class="tooltip" title="This example panics">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>error_stack::{ResultExt, <span class="prelude-ty">Result</span>};
+
+<span class="kw">let </span>config_path = <span class="string">"./path/to/config.file"</span>;
+<span class="kw">let </span>content = std::fs::read_to_string(config_path)
+    .attach_printable_lazy(|| <span class="macro">format!</span>(<span class="string">"failed to read config file {config_path:?}"</span>));
+
+<span class="kw">let </span>content = <span class="kw">match </span>content {
+    <span class="prelude-val">Err</span>(err) =&gt; {
+        <span class="kw">for </span>backtrace <span class="kw">in </span>err.request_ref::&lt;std::backtrace::Backtrace&gt;() {
+            <span class="macro">println!</span>(<span class="string">"backtrace: {backtrace}"</span>);
+        }
+
+        <span class="kw">for </span>span_trace <span class="kw">in </span>err.request_ref::&lt;tracing_error::SpanTrace&gt;() {
+            <span class="macro">println!</span>(<span class="string">"span trace: {span_trace}"</span>)
+        }
+
+        <span class="kw">return </span><span class="prelude-val">Err</span>(err)
+    }
+
+    <span class="prelude-val">Ok</span>(ok) =&gt; ok
+};
+
+...</code></pre></div>
+</div></details><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-Report%3CC%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#256-677">source</a><a href="#impl-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.new" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#267-295">source</a><h4 class="code-header">pub fn <a href="#method.new" class="fn">new</a>(context: C) -&gt; Self<div class="where">where
+    C: <a class="trait" href="trait.Context.html" title="trait error_stack::Context">Context</a>,</div></h4></section></summary><div class="docblock"><p>Creates a new <code>Report&lt;Context&gt;</code> from a provided scope.</p>
+<p>If <code>context</code> does not provide <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a>/[<code>SpanTrace</code>] then this attempts to capture
+them directly. Please see the <a href="#backtrace-and-spantrace"><code>Backtrace</code> and <code>SpanTrace</code> section</a> of the <code>Report</code>
+documentation for more information.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.extend_one" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#408-410">source</a><h4 class="code-header">pub fn <a href="#method.extend_one" class="fn">extend_one</a>(&amp;mut self, report: Self)</h4></section></summary><div class="docblock"><p>Merge two <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>s together</p>
+<p>This function appends the <a href="struct.Report.html#method.current_frames" title="method error_stack::Report::current_frames"><code>current_frames()</code></a> of the other <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> to the
+<a href="struct.Report.html#method.current_frames" title="method error_stack::Report::current_frames"><code>current_frames()</code></a> of this report.
+Meaning <code>A.extend_one(B) -&gt; A.current_frames() = A.current_frames() + B.current_frames()</code></p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::{
+    fmt::{Display, Formatter},
+    path::Path,
+};
+
+<span class="kw">use </span>error_stack::{Context, Report, ResultExt};
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>IoError;
+
+<span class="kw">impl </span>Display <span class="kw">for </span>IoError {
+            ...
+}
+
+
+<span class="kw">fn </span>read_config(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, Report&lt;IoError&gt;&gt; {
+    std::fs::read_to_string(path.as_ref())
+        .change_context(IoError)
+}
+
+<span class="kw">let </span><span class="kw-2">mut </span>error1 = read_config(<span class="string">"config.txt"</span>).unwrap_err();
+<span class="kw">let </span>error2 = read_config(<span class="string">"config2.txt"</span>).unwrap_err();
+<span class="kw">let </span><span class="kw-2">mut </span>error3 = read_config(<span class="string">"config3.txt"</span>).unwrap_err();
+
+error1.extend_one(error2);
+error3.extend_one(error1);
+
+<span class="comment">// ^ This is equivalent to:
+// error3.extend_one(error1);
+// error3.extend_one(error2);</span></code></pre></div>
+<p>This function implements the same functionality as
+<a href="https://github.com/rust-lang/rust/issues/72631"><code>Extend::extend_one</code> (#7261)</a>.
+Once stabilised this function will be removed in favor of <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html" title="trait core::iter::traits::collect::Extend"><code>Extend</code></a>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.attach" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#424-434">source</a><h4 class="code-header">pub fn <a href="#method.attach" class="fn">attach</a>&lt;A&gt;(self, attachment: A) -&gt; Self<div class="where">where
+    A: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static,</div></h4></section></summary><div class="docblock"><p>Adds additional information to the <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack.</p>
+<p>This behaves like <a href="struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>attach_printable()</code></a> but will not be shown when printing the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.
+To benefit from seeing attachments in normal error outputs, use <a href="struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>attach_printable()</code></a></p>
+<p><strong>Note:</strong> <a href="struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>attach_printable()</code></a> will be deprecated when specialization is stabilized and
+it becomes possible to merge these two methods.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.attach_printable" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#474-484">source</a><h4 class="code-header">pub fn <a href="#method.attach_printable" class="fn">attach_printable</a>&lt;A&gt;(self, attachment: A) -&gt; Self<div class="where">where
+    A: <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display">Display</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static,</div></h4></section></summary><div class="docblock"><p>Adds additional (printable) information to the <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack.</p>
+<p>This behaves like <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach()</code></a> but the display implementation will be called when
+printing the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</p>
+<p><strong>Note:</strong> This will be deprecated in favor of <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach()</code></a> when specialization is
+stabilized it becomes possible to merge these two methods.</p>
+<h6 id="example"><a class="doc-anchor" href="#example">§</a>Example</h6>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>core::fmt;
+<span class="kw">use </span>std::fs;
+
+<span class="kw">use </span>error_stack::ResultExt;
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">pub struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>Suggestion {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, fmt: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        fmt.write_str(<span class="self">self</span>.<span class="number">0</span>)
+    }
+}
+
+<span class="kw">let </span>error = fs::read_to_string(<span class="string">"config.txt"</span>)
+    .attach(Suggestion(<span class="string">"better use a file which exists next time!"</span>));
+<span class="kw">let </span>report = error.unwrap_err();
+<span class="kw">let </span>suggestion = report.request_ref::&lt;Suggestion&gt;().next().unwrap();
+
+<span class="macro">assert_eq!</span>(suggestion.<span class="number">0</span>, <span class="string">"better use a file which exists next time!"</span>);</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.change_context" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#491-505">source</a><h4 class="code-header">pub fn <a href="#method.change_context" class="fn">change_context</a>&lt;T&gt;(self, context: T) -&gt; <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;T&gt;<div class="where">where
+    T: <a class="trait" href="trait.Context.html" title="trait error_stack::Context">Context</a>,</div></h4></section></summary><div class="docblock"><p>Add a new <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> object to the top of the <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack, changing the type of the
+<code>Report</code>.</p>
+<p>Please see the <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> documentation for more information.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.current_frames" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#526-528">source</a><h4 class="code-header">pub fn <a href="#method.current_frames" class="fn">current_frames</a>(&amp;self) -&gt; &amp;[<a class="struct" href="struct.Frame.html" title="struct error_stack::Frame">Frame</a>]</h4></section></summary><div class="docblock"><p>Return the direct current frames of this report,
+to get an iterator over the topological sorting of all frames refer to <a href="struct.Report.html#method.frames" title="method error_stack::Report::frames"><code>frames()</code></a></p>
+<p>This is not the same as <a href="struct.Report.html#method.current_context" title="method error_stack::Report::current_context"><code>Report::current_context</code></a>, this function gets the underlying
+frames that make up this report, while <a href="struct.Report.html#method.current_context" title="method error_stack::Report::current_context"><code>Report::current_context</code></a> traverses the stack of
+frames to find the current context. A <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> and be made up of multiple <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a>s,
+which stack on top of each other. Considering <code>PrintableA&lt;PrintableA&lt;Context&gt;&gt;</code>,
+<a href="struct.Report.html#method.current_frames" title="method error_stack::Report::current_frames"><code>Report::current_frames</code></a> will return the “outer” layer <code>PrintableA</code>, while
+<a href="struct.Report.html#method.current_context" title="method error_stack::Report::current_context"><code>Report::current_context</code></a> will return the underlying <code>Context</code> (the current type
+parameter of this <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>)</p>
+<p>Using <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html" title="trait core::iter::traits::collect::Extend"><code>Extend</code></a> and <a href="struct.Report.html#method.extend_one" title="method error_stack::Report::extend_one"><code>extend_one()</code></a>, a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> can additionally be made up of multiple
+stacks of frames and builds a “group” of them, but a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> can only ever have a single
+<code>Context</code>, therefore this function returns a slice instead, while
+<a href="struct.Report.html#method.current_context" title="method error_stack::Report::current_context"><code>Report::current_context</code></a> only returns a single reference.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.frames" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#531-533">source</a><h4 class="code-header">pub fn <a href="#method.frames" class="fn">frames</a>(&amp;self) -&gt; <a class="struct" href="iter/struct.Frames.html" title="struct error_stack::iter::Frames">Frames</a>&lt;'_&gt; <a href="#" class="tooltip" data-notable-ty="Frames&lt;&#39;_&gt;">ⓘ</a></h4></section></summary><div class="docblock"><p>Returns an iterator over the <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack of the report.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.frames_mut" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#536-538">source</a><h4 class="code-header">pub fn <a href="#method.frames_mut" class="fn">frames_mut</a>(&amp;mut self) -&gt; <a class="struct" href="iter/struct.FramesMut.html" title="struct error_stack::iter::FramesMut">FramesMut</a>&lt;'_&gt; <a href="#" class="tooltip" data-notable-ty="FramesMut&lt;&#39;_&gt;">ⓘ</a></h4></section></summary><div class="docblock"><p>Returns an iterator over the <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack of the report with mutable elements.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.request_ref" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#543-545">source</a><h4 class="code-header">pub fn <a href="#method.request_ref" class="fn">request_ref</a>&lt;T: ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static&gt;(
+    &amp;self,
+) -&gt; <a class="struct" href="iter/struct.RequestRef.html" title="struct error_stack::iter::RequestRef">RequestRef</a>&lt;'_, T&gt; <a href="#" class="tooltip" data-notable-ty="RequestRef&lt;&#39;_, T&gt;">ⓘ</a></h4></section><span class="item-info"><div class="stab portability">Available on <strong><code>nightly</code></strong> only.</div></span></summary><div class="docblock"><p>Creates an iterator of references of type <code>T</code> that have been <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attached</code></a> or
+that are <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>provide</code></a>d by <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> objects.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.request_value" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#550-552">source</a><h4 class="code-header">pub fn <a href="#method.request_value" class="fn">request_value</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static&gt;(&amp;self) -&gt; <a class="struct" href="iter/struct.RequestValue.html" title="struct error_stack::iter::RequestValue">RequestValue</a>&lt;'_, T&gt; <a href="#" class="tooltip" data-notable-ty="RequestValue&lt;&#39;_, T&gt;">ⓘ</a></h4></section><span class="item-info"><div class="stab portability">Available on <strong><code>nightly</code></strong> only.</div></span></summary><div class="docblock"><p>Creates an iterator of values of type <code>T</code> that have been <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attached</code></a> or
+that are <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>provide</code></a>d by <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> objects.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.contains" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#574-576">source</a><h4 class="code-header">pub fn <a href="#method.contains" class="fn">contains</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static&gt;(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></h4></section></summary><div class="docblock"><p>Returns if <code>T</code> is the type held by any frame inside of the report.</p>
+<p><code>T</code> could either be an attachment or a <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>.</p>
+<h6 id="example-1"><a class="doc-anchor" href="#example-1">§</a>Example</h6>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">fn </span>read_file(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, Report&lt;io::Error&gt;&gt; {
+    ...
+}
+
+<span class="kw">let </span>report = read_file(<span class="string">"test.txt"</span>).unwrap_err();
+<span class="macro">assert!</span>(report.contains::&lt;io::Error&gt;());</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.downcast_ref" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#602-604">source</a><h4 class="code-header">pub fn <a href="#method.downcast_ref" class="fn">downcast_ref</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static&gt;(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a>&gt;</h4></section></summary><div class="docblock"><p>Searches the frame stack for a context provider <code>T</code> and returns the most recent context
+found.</p>
+<p><code>T</code> can either be an attachment or a <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>.</p>
+<h6 id="example-2"><a class="doc-anchor" href="#example-2">§</a>Example</h6>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io;
+
+<span class="kw">fn </span>read_file(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, Report&lt;io::Error&gt;&gt; {
+    ...
+}
+
+<span class="kw">let </span>report = read_file(<span class="string">"test.txt"</span>).unwrap_err();
+<span class="kw">let </span>io_error = report.downcast_ref::&lt;io::Error&gt;().unwrap();
+<span class="macro">assert_eq!</span>(io_error.kind(), io::ErrorKind::NotFound);</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.downcast_mut" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#610-612">source</a><h4 class="code-header">pub fn <a href="#method.downcast_mut" class="fn">downcast_mut</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static&gt;(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;mut T</a>&gt;</h4></section></summary><div class="docblock"><p>Searches the frame stack for an instance of type <code>T</code>, returning the most recent one found.</p>
+<p><code>T</code> can either be an attachment or a <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.current_context" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#643-656">source</a><h4 class="code-header">pub fn <a href="#method.current_context" class="fn">current_context</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;C</a><div class="where">where
+    C: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static,</div></h4></section></summary><div class="docblock"><p>Returns the current context of the <code>Report</code>.</p>
+<p>If the user want to get the latest context, <code>current_context</code> can be called. If the user
+wants to handle the error, the context can then be used to directly access the context’s
+type. This is only possible for the latest context as the Report does not have multiple
+generics as this would either require variadic generics or a workaround like tuple-list.</p>
+<p>This is one disadvantage of the library in comparison to plain Errors, as in these cases,
+all context types are known.</p>
+<h6 id="example-3"><a class="doc-anchor" href="#example-3">§</a>Example</h6>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io;
+
+<span class="kw">fn </span>read_file(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, Report&lt;io::Error&gt;&gt; {
+    ...
+}
+
+<span class="kw">let </span>report = read_file(<span class="string">"test.txt"</span>).unwrap_err();
+<span class="kw">let </span>io_error = report.current_context();
+<span class="macro">assert_eq!</span>(io_error.kind(), io::ErrorKind::NotFound);</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.into_error" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#661-666">source</a><h4 class="code-header">pub fn <a href="#method.into_error" class="fn">into_error</a>(self) -&gt; impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error">Error</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static<div class="where">where
+    C: 'static,</div></h4></section><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code> or <code>rust_1_81</code></strong> only.</div></span></summary><div class="docblock"><p>Converts this <code>Report</code> to an <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.as_error" class="method"><a class="src rightside" href="../src/error_stack/report.rs.html#671-676">source</a><h4 class="code-header">pub fn <a href="#method.as_error" class="fn">as_error</a>(&amp;self) -&gt; &amp;(impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error">Error</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static)<div class="where">where
+    C: 'static,</div></h4></section><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code> or <code>rust_1_81</code></strong> only.</div></span></summary><div class="docblock"><p>Returns this <code>Report</code> as an <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a>.</p>
+</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Report%3C()%3E" class="impl"><a class="src rightside" href="../src/error_stack/fmt/charset.rs.html#54-114">source</a><a href="#impl-Report%3C()%3E" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.unit.html">()</a>&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.set_charset" class="method"><a class="src rightside" href="../src/error_stack/fmt/charset.rs.html#111-113">source</a><h4 class="code-header">pub fn <a href="#method.set_charset" class="fn">set_charset</a>(charset: <a class="enum" href="fmt/enum.Charset.html" title="enum error_stack::fmt::Charset">Charset</a>)</h4></section></summary><div class="docblock"><p>Set the charset preference</p>
+<p>The value defaults to <a href="fmt/enum.Charset.html#variant.Utf8" title="variant error_stack::fmt::Charset::Utf8"><code>Charset::Utf8</code></a>.</p>
+<h5 id="example-4"><a class="doc-anchor" href="#example-4">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::{Error, ErrorKind};
+
+<span class="kw">use </span>error_stack::{report, Report};
+<span class="kw">use </span>error_stack::fmt::{Charset};
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    <span class="kw">match </span>context.charset() {
+        Charset::Utf8 =&gt; context.push_body(<span class="macro">format!</span>(<span class="string">"📝 {value}"</span>)),
+        Charset::Ascii =&gt; context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion: {value}"</span>))
+    };
+});
+
+<span class="kw">let </span>report =
+    <span class="macro">report!</span>(Error::from(ErrorKind::InvalidInput)).attach(Suggestion(<span class="string">"oh no, try again"</span>));
+
+Report::set_charset(Charset::Utf8);
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);
+
+Report::set_charset(Charset::Ascii);
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<p>Which will result in something like:</p>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/charset.rs:22:5</i>
+├╴backtrace (1)
+╰╴📝 oh no, try again
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<pre>
+<b>invalid input parameter</b>
+|-at <i>libs/error-stack/src/fmt/charset.rs:22:5</i>
+|-backtrace (1)
+|-suggestion: oh no, try again
+
+========================================
+
+backtrace no. 1
+  [redacted]
+</pre></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Report%3C()%3E-1" class="impl"><a class="src rightside" href="../src/error_stack/fmt/color.rs.html#63-135">source</a><a href="#impl-Report%3C()%3E-1" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.unit.html">()</a>&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.set_color_mode" class="method"><a class="src rightside" href="../src/error_stack/fmt/color.rs.html#132-134">source</a><h4 class="code-header">pub fn <a href="#method.set_color_mode" class="fn">set_color_mode</a>(mode: <a class="enum" href="fmt/enum.ColorMode.html" title="enum error_stack::fmt::ColorMode">ColorMode</a>)</h4></section></summary><div class="docblock"><p>Set the color mode preference</p>
+<p>If no <a href="fmt/enum.ColorMode.html" title="enum error_stack::fmt::ColorMode"><code>ColorMode</code></a> is set, it defaults to <a href="fmt/enum.ColorMode.html#variant.Emphasis" title="variant error_stack::fmt::ColorMode::Emphasis"><code>ColorMode::Emphasis</code></a>.</p>
+<h5 id="example-5"><a class="doc-anchor" href="#example-5">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::{Error, ErrorKind};
+<span class="kw">use </span>owo_colors::OwoColorize;
+
+<span class="kw">use </span>error_stack::{report, Report};
+<span class="kw">use </span>error_stack::fmt::ColorMode;
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    <span class="kw">let </span>body = <span class="macro">format!</span>(<span class="string">"suggestion: {value}"</span>);
+    <span class="kw">match </span>context.color_mode() {
+        ColorMode::Color =&gt; context.push_body(body.green().to_string()),
+        ColorMode::Emphasis =&gt; context.push_body(body.italic().to_string()),
+        ColorMode::None =&gt; context.push_body(body)
+    };
+});
+
+<span class="kw">let </span>report =
+    <span class="macro">report!</span>(Error::from(ErrorKind::InvalidInput)).attach(Suggestion(<span class="string">"oh no, try again"</span>));
+
+Report::set_color_mode(ColorMode::None);
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);
+
+Report::set_color_mode(ColorMode::Emphasis);
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);
+
+Report::set_color_mode(ColorMode::Color);
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<p>Which will result in something like:</p>
+<pre>
+invalid input parameter
+├╴at libs/error-stack/src/fmt/color.rs:25:5
+├╴backtrace (1)
+╰╴suggestion: oh no, try again
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/color.rs:25:5</i>
+├╴backtrace (1)
+╰╴<i>suggestion: oh no, try again</i>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<pre>
+<b>invalid input parameter</b>
+<span style='color:var(--red,#a00)'>├╴</span>at <span style='color:var(--bright-black,#555)'>libs/error-stack/src/fmt/color.rs:25:5</span>
+<span style='color:var(--red,#a00)'>├╴</span>backtrace (1)
+<span style='color:var(--red,#a00)'>╰╴</span><span style='color:var(--green,#0a0)'>suggestion: oh no, try again</span>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Report%3C()%3E-2" class="impl"><a class="src rightside" href="../src/error_stack/hook/mod.rs.html#21-239">source</a><a href="#impl-Report%3C()%3E-2" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.unit.html">()</a>&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.install_debug_hook" class="method"><a class="src rightside" href="../src/error_stack/hook/mod.rs.html#196-215">source</a><h4 class="code-header">pub fn <a href="#method.install_debug_hook" class="fn">install_debug_hook</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static&gt;(
+    hook: impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/ops/function/trait.Fn.html" title="trait core::ops::function::Fn">Fn</a>(<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a>, &amp;mut <a class="struct" href="fmt/struct.HookContext.html" title="struct error_stack::fmt::HookContext">HookContext</a>&lt;T&gt;) + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static,
+)</h4></section><span class="item-info"><div class="stab portability">Available on <strong>crate features <code>std</code> or <code>hooks</code></strong> only.</div></span></summary><div class="docblock"><p>Can be used to globally set a <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> format hook, for a specific type <code>T</code>.</p>
+<p>This hook will be called on every <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> call, if an attachment with the same type has
+been found.</p>
+<h5 id="examples-1"><a class="doc-anchor" href="#examples-1">§</a>Examples</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::{Error, ErrorKind};
+
+<span class="kw">use </span>error_stack::{
+    report, Report,
+};
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|value, context| {
+    context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion: {}"</span>, value.<span class="number">0</span>));
+});
+
+<span class="kw">let </span>report =
+    <span class="macro">report!</span>(Error::from(ErrorKind::InvalidInput)).attach(Suggestion(<span class="string">"oh no, try again"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<p>Which will result in something like:</p>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/hook/mod.rs:20:5</i>
+├╴backtrace (1)
+╰╴suggestion: oh no, try again
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<p>This example showcases the ability of hooks to be invoked for values provided via the
+Provider API using <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>Error::provide</code></a>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#![feature(error_generic_member_access)]
+
+</span><span class="kw">use </span>core::error::{Request, Error};
+<span class="kw">use </span>core::fmt::{Display, Formatter};
+<span class="kw">use </span>error_stack::{Report, report};
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>ErrorCode(u64);
+
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>UserError {
+    code: ErrorCode
+}
+
+<span class="kw">impl </span>Display <span class="kw">for </span>UserError {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+        f.write_str(<span class="string">"invalid user input"</span>)
+    }
+}
+
+<span class="kw">impl </span>Error <span class="kw">for </span>UserError {
+ <span class="kw">fn </span>provide&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>, req: <span class="kw-2">&amp;mut </span>Request&lt;<span class="lifetime">'a</span>&gt;) {
+   req.provide_value(Suggestion(<span class="string">"try better next time!"</span>));
+   req.provide_ref(<span class="kw-2">&amp;</span><span class="self">self</span>.code);
+ }
+}
+
+Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion: {value}"</span>));
+});
+Report::install_debug_hook::&lt;ErrorCode&gt;(|ErrorCode(value), context| {
+    context.push_body(<span class="macro">format!</span>(<span class="string">"error code: {value}"</span>));
+});
+
+<span class="kw">let </span>report = <span class="macro">report!</span>(UserError {code: ErrorCode(<span class="number">420</span>)});
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<p>Which will result in something like:</p>
+<pre>
+<b>invalid user input</b>
+├╴suggestion: try better next time!
+├╴error code: 420
+├╴at <i>libs/error-stack/src/hook/mod.rs:49:14</i>
+╰╴backtrace (1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<p><code>error-stack</code> comes with some built-in hooks which can be overwritten. This is useful if you
+want to change the output of the built-in hooks, or if you want to add additional
+information to the output. For example, you can override the built-in hook for <a href="https://doc.rust-lang.org/nightly/core/panic/location/struct.Location.html" title="struct core::panic::location::Location"><code>Location</code></a>
+to hide the file path:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::{
+    io::{Error, ErrorKind},
+    panic::Location,
+};
+
+error_stack::Report::install_debug_hook::&lt;Location&gt;(|_location, _context| {
+    <span class="comment">// Intentionally left empty so nothing will be printed
+</span>});
+
+<span class="kw">let </span>report = <span class="macro">error_stack::report!</span>(Error::from(ErrorKind::InvalidInput));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);</code></pre></div>
+<p>Which will result in something like:</p>
+<pre>
+<b>invalid input parameter</b>
+╰╴backtrace (1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+</div></details></div></details></div><h2 id="trait-implementations" class="section-header">Trait Implementations<a href="#trait-implementations" class="anchor">§</a></h2><div id="trait-implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-Debug-for-Report%3CC%3E" class="impl"><a class="src rightside" href="../src/error_stack/fmt/mod.rs.html#1086-1153">source</a><a href="#impl-Debug-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.fmt" class="method trait-impl"><a class="src rightside" href="../src/error_stack/fmt/mod.rs.html#1087-1152">source</a><a href="#method.fmt" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt" class="fn">fmt</a>(&amp;self, fmt: &amp;mut <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html" title="struct core::fmt::Formatter">Formatter</a>&lt;'_&gt;) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/core/fmt/type.Result.html" title="type core::fmt::Result">Result</a></h4></section></summary><div class='docblock'>Formats the value using the given formatter. <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt">Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Display-for-Report%3CContext%3E" class="impl"><a class="src rightside" href="../src/error_stack/fmt/mod.rs.html#1155-1177">source</a><a href="#impl-Display-for-Report%3CContext%3E" class="anchor">§</a><h3 class="code-header">impl&lt;Context&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display">Display</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.fmt-1" class="method trait-impl"><a class="src rightside" href="../src/error_stack/fmt/mod.rs.html#1156-1176">source</a><a href="#method.fmt-1" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html#tymethod.fmt" class="fn">fmt</a>(&amp;self, fmt: &amp;mut <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html" title="struct core::fmt::Formatter">Formatter</a>&lt;'_&gt;) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/core/fmt/type.Result.html" title="type core::fmt::Result">Result</a></h4></section></summary><div class='docblock'>Formats the value using the given formatter. <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html#tymethod.fmt">Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Extend%3CReport%3CContext%3E%3E-for-Report%3CContext%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#734-740">source</a><a href="#impl-Extend%3CReport%3CContext%3E%3E-for-Report%3CContext%3E" class="anchor">§</a><h3 class="code-header">impl&lt;Context&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html" title="trait core::iter::traits::collect::Extend">Extend</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;&gt; for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.extend" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#735-739">source</a><a href="#method.extend" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html#tymethod.extend" class="fn">extend</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.IntoIterator.html" title="trait core::iter::traits::collect::IntoIterator">IntoIterator</a>&lt;Item = Self&gt;&gt;(&amp;mut self, iter: T)</h4></section></summary><div class='docblock'>Extends a collection with the contents of an iterator. <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html#tymethod.extend">Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.extend_one-1" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/iter/traits/collect.rs.html#454">source</a><a href="#method.extend_one-1" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html#method.extend_one" class="fn">extend_one</a>(&amp;mut self, item: A)</h4></section></summary><span class="item-info"><div class="stab unstable"><span class="emoji">🔬</span><span>This is a nightly-only experimental API. (<code>extend_one</code>)</span></div></span><div class='docblock'>Extends a collection with exactly one element.</div></details><details class="toggle method-toggle" open><summary><section id="method.extend_reserve" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/iter/traits/collect.rs.html#462">source</a><a href="#method.extend_reserve" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html#method.extend_reserve" class="fn">extend_reserve</a>(&amp;mut self, additional: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>)</h4></section></summary><span class="item-info"><div class="stab unstable"><span class="emoji">🔬</span><span>This is a nightly-only experimental API. (<code>extend_one</code>)</span></div></span><div class='docblock'>Reserves capacity in a collection for the given number of additional elements. <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html#method.extend_reserve">Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-From%3CC%3E-for-Report%3CC%3E" class="impl"><a class="src rightside" href="../src/error_stack/context.rs.html#109-118">source</a><a href="#impl-From%3CC%3E-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;C&gt; for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;<div class="where">where
+    C: <a class="trait" href="trait.Context.html" title="trait error_stack::Context">Context</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-4" class="method trait-impl"><a class="src rightside" href="../src/error_stack/context.rs.html#115-117">source</a><a href="#method.from-4" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(context: C) -&gt; Self</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#680-684">source</a><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C: 'static&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;&gt; for <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error">Error</a>&gt;</h3><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code> or <code>rust_1_81</code></strong> only.</div></span></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#681-683">source</a><a href="#method.from" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(report: <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;) -&gt; Self</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Send%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#687-691">source</a><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Send%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C: 'static&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;&gt; for <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error">Error</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>&gt;</h3><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code> or <code>rust_1_81</code></strong> only.</div></span></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-1" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#688-690">source</a><a href="#method.from-1" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(report: <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;) -&gt; Self</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Send+%2B+Sync%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#701-705">source</a><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Send+%2B+Sync%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C: 'static&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;&gt; for <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error">Error</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a>&gt;</h3><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code> or <code>rust_1_81</code></strong> only.</div></span></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-3" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#702-704">source</a><a href="#method.from-3" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(report: <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;) -&gt; Self</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Sync%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#694-698">source</a><a href="#impl-From%3CReport%3CC%3E%3E-for-Box%3Cdyn+Error+%2B+Sync%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C: 'static&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;&gt; for <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error">Error</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a>&gt;</h3><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code> or <code>rust_1_81</code></strong> only.</div></span></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-2" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#695-697">source</a><a href="#method.from-2" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(report: <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;) -&gt; Self</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-FromIterator%3CReport%3CContext%3E%3E-for-Option%3CReport%3CContext%3E%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#721-732">source</a><a href="#impl-FromIterator%3CReport%3CContext%3E%3E-for-Option%3CReport%3CContext%3E%3E" class="anchor">§</a><h3 class="code-header">impl&lt;Context&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.FromIterator.html" title="trait core::iter::traits::collect::FromIterator">FromIterator</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;&gt; for <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from_iter" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#722-731">source</a><a href="#method.from_iter" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.FromIterator.html#tymethod.from_iter" class="fn">from_iter</a>&lt;T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.IntoIterator.html" title="trait core::iter::traits::collect::IntoIterator">IntoIterator</a>&lt;Item = <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;&gt;&gt;(iter: T) -&gt; Self</h4></section></summary><div class='docblock'>Creates a value from an iterator. <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.FromIterator.html#tymethod.from_iter">Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Termination-for-Report%3CContext%3E" class="impl"><a class="src rightside" href="../src/error_stack/report.rs.html#708-719">source</a><a href="#impl-Termination-for-Report%3CContext%3E" class="anchor">§</a><h3 class="code-header">impl&lt;Context&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/std/process/trait.Termination.html" title="trait std::process::Termination">Termination</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;Context&gt;</h3><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>std</code></strong> only.</div></span></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.report" class="method trait-impl"><a class="src rightside" href="../src/error_stack/report.rs.html#709-718">source</a><a href="#method.report" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/std/process/trait.Termination.html#tymethod.report" class="fn">report</a>(self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/std/process/struct.ExitCode.html" title="struct std::process::ExitCode">ExitCode</a></h4></section></summary><div class='docblock'>Is called to get the representation of the value as status code.
+This status code is returned to the operating system.</div></details></div></details></div><h2 id="synthetic-implementations" class="section-header">Auto Trait Implementations<a href="#synthetic-implementations" class="anchor">§</a></h2><div id="synthetic-implementations-list"><section id="impl-Freeze-for-Report%3CC%3E" class="impl"><a href="#impl-Freeze-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Freeze.html" title="trait core::marker::Freeze">Freeze</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section><section id="impl-RefUnwindSafe-for-Report%3CC%3E" class="impl"><a href="#impl-RefUnwindSafe-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; !<a class="trait" href="https://doc.rust-lang.org/nightly/core/panic/unwind_safe/trait.RefUnwindSafe.html" title="trait core::panic::unwind_safe::RefUnwindSafe">RefUnwindSafe</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section><section id="impl-Send-for-Report%3CC%3E" class="impl"><a href="#impl-Send-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section><section id="impl-Sync-for-Report%3CC%3E" class="impl"><a href="#impl-Sync-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section><section id="impl-Unpin-for-Report%3CC%3E" class="impl"><a href="#impl-Unpin-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Unpin.html" title="trait core::marker::Unpin">Unpin</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section><section id="impl-UnwindSafe-for-Report%3CC%3E" class="impl"><a href="#impl-UnwindSafe-for-Report%3CC%3E" class="anchor">§</a><h3 class="code-header">impl&lt;C&gt; !<a class="trait" href="https://doc.rust-lang.org/nightly/core/panic/unwind_safe/trait.UnwindSafe.html" title="trait core::panic::unwind_safe::UnwindSafe">UnwindSafe</a> for <a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a>&lt;C&gt;</h3></section></div><h2 id="blanket-implementations" class="section-header">Blanket Implementations<a href="#blanket-implementations" class="anchor">§</a></h2><div id="blanket-implementations-list"><details class="toggle implementors-toggle"><summary><section id="impl-Any-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/any.rs.html#138">source</a><a href="#impl-Any-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/any/trait.Any.html" title="trait core::any::Any">Any</a> for T<div class="where">where
+    T: 'static + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.type_id" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/any.rs.html#139">source</a><a href="#method.type_id" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/any/trait.Any.html#tymethod.type_id" class="fn">type_id</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/core/any/struct.TypeId.html" title="struct core::any::TypeId">TypeId</a></h4></section></summary><div class='docblock'>Gets the <code>TypeId</code> of <code>self</code>. <a href="https://doc.rust-lang.org/nightly/core/any/trait.Any.html#tymethod.type_id">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Borrow%3CT%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#209">source</a><a href="#impl-Borrow%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html" title="trait core::borrow::Borrow">Borrow</a>&lt;T&gt; for T<div class="where">where
+    T: ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#211">source</a><a href="#method.borrow" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html#tymethod.borrow" class="fn">borrow</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a></h4></section></summary><div class='docblock'>Immutably borrows from an owned value. <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html#tymethod.borrow">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-BorrowMut%3CT%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#217">source</a><a href="#impl-BorrowMut%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/borrow/trait.BorrowMut.html" title="trait core::borrow::BorrowMut">BorrowMut</a>&lt;T&gt; for T<div class="where">where
+    T: ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow_mut" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/borrow.rs.html#218">source</a><a href="#method.borrow_mut" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.BorrowMut.html#tymethod.borrow_mut" class="fn">borrow_mut</a>(&amp;mut self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;mut T</a></h4></section></summary><div class='docblock'>Mutably borrows from an owned value. <a href="https://doc.rust-lang.org/nightly/core/borrow/trait.BorrowMut.html#tymethod.borrow_mut">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-From%3C!%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#782">source</a><a href="#impl-From%3C!%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.never.html">!</a>&gt; for T</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-6" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#783">source</a><a href="#method.from-6" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(t: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.never.html">!</a>) -&gt; T</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-From%3CT%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#765">source</a><a href="#impl-From%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;T&gt; for T</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-5" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#768">source</a><a href="#method.from-5" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html#tymethod.from" class="fn">from</a>(t: T) -&gt; T</h4></section></summary><div class="docblock"><p>Returns the argument unchanged.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Into%3CU%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#748-750">source</a><a href="#impl-Into%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;U&gt; for T<div class="where">where
+    U: <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.into" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#758">source</a><a href="#method.into" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html#tymethod.into" class="fn">into</a>(self) -&gt; U</h4></section></summary><div class="docblock"><p>Calls <code>U::from(self)</code>.</p>
+<p>That is, this conversion is whatever the implementation of
+<code><a href="https://doc.rust-lang.org/nightly/core/convert/trait.From.html" title="trait core::convert::From">From</a>&lt;T&gt; for U</code> chooses to do.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-ToString-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/alloc/string.rs.html#2555">source</a><a href="#impl-ToString-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/alloc/string/trait.ToString.html" title="trait alloc::string::ToString">ToString</a> for T<div class="where">where
+    T: <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display">Display</a> + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.to_string" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/alloc/string.rs.html#2561">source</a><a href="#method.to_string" class="anchor">§</a><h4 class="code-header">default fn <a href="https://doc.rust-lang.org/nightly/alloc/string/trait.ToString.html#tymethod.to_string" class="fn">to_string</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></h4></section></summary><div class='docblock'>Converts the given value to a <code>String</code>. <a href="https://doc.rust-lang.org/nightly/alloc/string/trait.ToString.html#tymethod.to_string">Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryFrom%3CU%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#805-807">source</a><a href="#impl-TryFrom%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;U&gt; for T<div class="where">where
+    U: <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error-1" class="associatedtype trait-impl"><a href="#associatedtype.Error-1" class="anchor">§</a><h4 class="code-header">type <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" class="associatedtype">Error</a> = <a class="enum" href="https://doc.rust-lang.org/nightly/core/convert/enum.Infallible.html" title="enum core::convert::Infallible">Infallible</a></h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_from" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#812">source</a><a href="#method.try_from" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#tymethod.try_from" class="fn">try_from</a>(value: U) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;T, &lt;T as <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;U&gt;&gt;::<a class="associatedtype" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" title="type core::convert::TryFrom::Error">Error</a>&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryInto%3CU%3E-for-T" class="impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#790-792">source</a><a href="#impl-TryInto%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryInto.html" title="trait core::convert::TryInto">TryInto</a>&lt;U&gt; for T<div class="where">where
+    U: <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error" class="associatedtype trait-impl"><a href="#associatedtype.Error" class="anchor">§</a><h4 class="code-header">type <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryInto.html#associatedtype.Error" class="associatedtype">Error</a> = &lt;U as <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;T&gt;&gt;::<a class="associatedtype" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" title="type core::convert::TryFrom::Error">Error</a></h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_into" class="method trait-impl"><a class="src rightside" href="https://doc.rust-lang.org/nightly/src/core/convert/mod.rs.html#797">source</a><a href="#method.try_into" class="anchor">§</a><h4 class="code-header">fn <a href="https://doc.rust-lang.org/nightly/core/convert/trait.TryInto.html#tymethod.try_into" class="fn">try_into</a>(self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;U, &lt;U as <a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom">TryFrom</a>&lt;T&gt;&gt;::<a class="associatedtype" href="https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html#associatedtype.Error" title="type core::convert::TryFrom::Error">Error</a>&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details></div><script type="text/json" id="notable-traits-data">{"Frames<'_>":"<h3>Notable traits for <code><a class=\"struct\" href=\"iter/struct.Frames.html\" title=\"struct error_stack::iter::Frames\">Frames</a>&lt;'r&gt;</code></h3><pre><code><div class=\"where\">impl&lt;'r&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html\" title=\"trait core::iter::traits::iterator::Iterator\">Iterator</a> for <a class=\"struct\" href=\"iter/struct.Frames.html\" title=\"struct error_stack::iter::Frames\">Frames</a>&lt;'r&gt;</div><div class=\"where\">    type <a href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html#associatedtype.Item\" class=\"associatedtype\">Item</a> = &amp;'r <a class=\"struct\" href=\"struct.Frame.html\" title=\"struct error_stack::Frame\">Frame</a>;</div>","FramesMut<'_>":"<h3>Notable traits for <code><a class=\"struct\" href=\"iter/struct.FramesMut.html\" title=\"struct error_stack::iter::FramesMut\">FramesMut</a>&lt;'r&gt;</code></h3><pre><code><div class=\"where\">impl&lt;'r&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html\" title=\"trait core::iter::traits::iterator::Iterator\">Iterator</a> for <a class=\"struct\" href=\"iter/struct.FramesMut.html\" title=\"struct error_stack::iter::FramesMut\">FramesMut</a>&lt;'r&gt;</div><div class=\"where\">    type <a href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html#associatedtype.Item\" class=\"associatedtype\">Item</a> = &amp;'r mut <a class=\"struct\" href=\"struct.Frame.html\" title=\"struct error_stack::Frame\">Frame</a>;</div>","RequestRef<'_, T>":"<h3>Notable traits for <code><a class=\"struct\" href=\"iter/struct.RequestRef.html\" title=\"struct error_stack::iter::RequestRef\">RequestRef</a>&lt;'r, T&gt;</code></h3><pre><code><div class=\"where\">impl&lt;'r, T&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html\" title=\"trait core::iter::traits::iterator::Iterator\">Iterator</a> for <a class=\"struct\" href=\"iter/struct.RequestRef.html\" title=\"struct error_stack::iter::RequestRef\">RequestRef</a>&lt;'r, T&gt;<div class=\"where\">where\n    T: ?<a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html\" title=\"trait core::marker::Sized\">Sized</a> + 'static,</div></div><div class=\"where\">    type <a href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html#associatedtype.Item\" class=\"associatedtype\">Item</a> = <a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.reference.html\">&amp;'r T</a>;</div>","RequestValue<'_, T>":"<h3>Notable traits for <code><a class=\"struct\" href=\"iter/struct.RequestValue.html\" title=\"struct error_stack::iter::RequestValue\">RequestValue</a>&lt;'r, T&gt;</code></h3><pre><code><div class=\"where\">impl&lt;'r, T&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html\" title=\"trait core::iter::traits::iterator::Iterator\">Iterator</a> for <a class=\"struct\" href=\"iter/struct.RequestValue.html\" title=\"struct error_stack::iter::RequestValue\">RequestValue</a>&lt;'r, T&gt;<div class=\"where\">where\n    T: 'static,</div></div><div class=\"where\">    type <a href=\"https://doc.rust-lang.org/nightly/core/iter/traits/iterator/trait.Iterator.html#associatedtype.Item\" class=\"associatedtype\">Item</a> = T;</div>"}</script></section></div></main></body></html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Features are broken into four category headers. The default features are `bincode`, `directory`, and `zstd`. With no features available, synchronous `BackedEntry` is available with plainfile disks, but the library needs at least one `coder` feature or custom coder implementation to provide the entry."><title>backed_data::extra_docs::features - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="backed_data" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../backed_data/index.html">backed_<wbr>data</a><span class="version">0.2.0</span></h2></div><h2 class="location"><a href="#">Module features</a></h2><div class="sidebar-elems"><h2><a href="../index.html">In backed_<wbr>data::<wbr>extra_<wbr>docs</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../../index.html">backed_data</a>::<wbr><a href="../index.html">extra_docs</a>::<wbr><a class="mod" href="#">features</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../../src/backed_data/extra_docs/features.rs.html#7-102">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Features are broken into four category headers. The default features are
+<code>bincode</code>, <code>directory</code>, and <code>zstd</code>. With no features available, synchronous
+<a href="../../entry/struct.BackedEntry.html" title="struct backed_data::entry::BackedEntry"><code>BackedEntry</code></a> is available with plainfile disks,
+but the library needs at least one <code>coder</code> feature or custom coder implementation
+to provide the entry.</p>
+<p><code>all_disks</code> enables all disk types, and <code>all_formats</code> enables all coder formats.</p>
+<h2 id="library-functionality"><a class="doc-anchor" href="#library-functionality">§</a>Library Functionality</h2>
+<ul>
+<li><code>async</code>
+<ul>
+<li>Provide asynchronous variants library-wide, usually methods prepended with <code>a_</code>.
+Enabled by any <a href="#async-executors">executor feature</a>.</li>
+</ul>
+</li>
+<li><code>array</code>
+<ul>
+<li>Provide <a href="../../array/struct.BackedArray.html" title="struct backed_data::array::BackedArray"><code>BackedArray</code></a> to split one array
+into multiple smaller <a href="../../entry/struct.BackedEntry.html" title="struct backed_data::entry::BackedEntry"><code>BackedEntry</code></a> arrays in storage,
+but represent as a single array to the user.</li>
+</ul>
+</li>
+<li><code>unsafe_array</code>
+<ul>
+<li>Enable features for <code>array</code> that requires <code>unsafe</code> code. Needed for mutable iterators
+and access on containers that return handles instead of direct references (e.g.
+<a href="../../entry/disks/encrypted/struct.SecretVecWrapper.html" title="struct backed_data::entry::disks::encrypted::SecretVecWrapper"><code>SecretVecWrapper</code></a>).</li>
+</ul>
+</li>
+<li><code>directory</code>
+<ul>
+<li>Provide <a href="../../directory/struct.DirectoryBackedArray.html" title="struct backed_data::directory::DirectoryBackedArray"><code>DirectoryBackedArray</code></a> to wrap
+<a href="../../array/struct.BackedArray.html" title="struct backed_data::array::BackedArray"><code>BackedArray</code></a>. This simplifies appending data to
+the backing arrays and saving/reloading arrays.</li>
+</ul>
+</li>
+</ul>
+<h2 id="async-executors"><a class="doc-anchor" href="#async-executors">§</a>Async Executors</h2>
+<p>None of these features are necessary to use an async executor, but they provide
+a correct <a href="../../entry/disks/type.AsyncFile.html" title="type backed_data::entry::disks::AsyncFile"><code>AsyncFile</code></a> for the <code>Plainfile</code>
+disks to use. They also give convenience handles in
+<a href="../../utils/blocking/index.html" title="mod backed_data::utils::blocking"><code>blocking</code></a>.</p>
+<ul>
+<li><code>tokio</code></li>
+<li><code>smol</code></li>
+</ul>
+<h2 id="disk-types"><a class="doc-anchor" href="#disk-types">§</a>Disk Types</h2>
+<p><code>Plainfile</code> variant disks are available with no features. Some
+<a href="#async-executors">executor feature</a> needs to be chosen in order for those base
+types to have asynchronous file access.
+Custom disks can be defined by implementing
+<a href="../../entry/disks/trait.WriteDisk.html" title="trait backed_data::entry::disks::WriteDisk"><code>WriteDisk</code></a> and <a href="../../entry/disks/trait.ReadDisk.html" title="trait backed_data::entry::disks::ReadDisk"><code>ReadDisk</code></a>
+(and/or the async versions).
+They can also be defined using <a href="../../entry/disks/custom/index.html" title="mod backed_data::entry::disks::custom"><code>crate::entry::disks::custom</code></a> types.</p>
+<ul>
+<li><code>all_disks</code>
+<ul>
+<li>Enable all disk types.</li>
+</ul>
+</li>
+<li><code>encrypted</code> - <a href="../../entry/disks/encrypted/struct.Encrypted.html" title="struct backed_data::entry::disks::encrypted::Encrypted"><code>Encrypted</code></a>
+<ul>
+<li>Uses <a href="https://github.com/stouset/secrets"><code>secrets</code></a> and
+<a href="https://docs.rs/aes-gcm/latest/aes_gcm/"><code>aes-gcm</code></a> to encrypt all
+data stored to disk, and minimize the risk of memory-peeking in the
+encryption/decryption process.</li>
+</ul>
+</li>
+<li><code>mmap</code> - <a href="../../entry/disks/mmap/struct.Mmap.html" title="struct backed_data::entry::disks::mmap::Mmap"><code>Mmap</code></a>
+<ul>
+<li>Enables the use of <a href="https://en.wikipedia.org/wiki/Mmap"><code>mmap</code></a> calls on
+UNIX systems (guarded by <code>mmap_impl</code>) to replace regular file I/O.
+Reuses mapped memory when possible to reduce reading from disk costs.</li>
+</ul>
+</li>
+<li><code>network</code> - <a href="../../entry/disks/struct.Network.html" title="struct backed_data::entry::disks::Network"><code>Network</code></a>
+<ul>
+<li>Uses <a href="https://github.com/seanmonstar/reqwest"><code>reqwest</code></a> to read from a
+remote resource.</li>
+</ul>
+</li>
+<li><code>zstd</code> - <a href="../../entry/disks/zstd/struct.ZstdDisk.html" title="struct backed_data::entry::disks::zstd::ZstdDisk"><code>ZstdDisk</code></a>
+<ul>
+<li><a href="https://github.com/gyscos/zstd-rs"><code>zstd-rs</code></a> compression and decompression.</li>
+</ul>
+</li>
+<li><code>async_zstd</code> - <a href="../../entry/disks/zstd/struct.ZstdDisk.html" title="struct backed_data::entry::disks::zstd::ZstdDisk"><code>ZstdDisk</code></a>
+<ul>
+<li><code>zstd</code>, but asynchronous.</li>
+</ul>
+</li>
+<li><code>zstdmt</code>/<code>async_zstdmt</code> - <a href="../../entry/disks/zstd/struct.ZstdDisk.html" title="struct backed_data::entry::disks::zstd::ZstdDisk"><code>ZstdDisk</code></a>
+<ul>
+<li>Enable <code>zstd</code> with multithreaded compression support. May degrade performance;
+test that the data compression speed actually benefits from this feature. This
+is not necessary to compress multiple files with <code>zstd</code> at once, only to use
+multiple threads for the compression of a single file.</li>
+</ul>
+</li>
+</ul>
+<h2 id="predefined-formats"><a class="doc-anchor" href="#predefined-formats">§</a>Predefined Formats</h2>
+<p>Formats can be custom-defined by implementing
+<a href="../../entry/formats/trait.Encoder.html" title="trait backed_data::entry::formats::Encoder"><code>Encoder</code></a> and
+<a href="../../entry/formats/trait.Decoder.html" title="trait backed_data::entry::formats::Decoder"><code>Decoder</code></a> (and/or the async versions).
+These features give ready to use defaults.</p>
+<p>(All formats use Serde, but the Serde traits do not implement over
+<a href="https://doc.rust-lang.org/nightly/std/io/trait.Read.html" title="trait std::io::Read"><code>Read</code></a> and <a href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html" title="trait std::io::Write"><code>Write</code></a>).</p>
+<ul>
+<li><code>all_formats</code>
+<ul>
+<li>Enable all formats.</li>
+</ul>
+</li>
+</ul>
+<h5 id="synchronous-formats"><a class="doc-anchor" href="#synchronous-formats">§</a>Synchronous Formats</h5>
+<ul>
+<li><code>bincode</code> - <a href="../../entry/formats/struct.BincodeCoder.html" title="struct backed_data::entry::formats::BincodeCoder"><code>BincodeCoder</code></a>
+<ul>
+<li>Binary encoding format.</li>
+</ul>
+</li>
+<li><code>serde_json</code> - <a href="../../entry/formats/struct.SerdeJsonCoder.html" title="struct backed_data::entry::formats::SerdeJsonCoder"><code>SerdeJsonCoder</code></a>
+<ul>
+<li>Serde’s flagship (de)serializer.</li>
+</ul>
+</li>
+<li><code>simd_json</code> - <a href="../../entry/formats/struct.SimdJsonCoder.html" title="struct backed_data::entry::formats::SimdJsonCoder"><code>SimdJsonCoder</code></a>
+<ul>
+<li>Significantly faster than <code>serde_json</code>.</li>
+</ul>
+</li>
+<li><code>csv</code> - <a href="../../entry/formats/csv/struct.CsvCoder.html" title="struct backed_data::entry::formats::csv::CsvCoder"><code>CsvCoder</code></a>
+<ul>
+<li>Allows for reading from/writing to csv files.</li>
+</ul>
+</li>
+</ul>
+<h5 id="async-formats"><a class="doc-anchor" href="#async-formats">§</a>Async Formats</h5>
+<ul>
+<li><code>async_bincode</code> - <a href="../../entry/formats/struct.AsyncBincodeCoder.html" title="struct backed_data::entry::formats::AsyncBincodeCoder"><code>AsyncBincodeCoder</code></a>
+<ul>
+<li>Binary format. NOT compatible with <code>bincode</code>, due to a size header.</li>
+</ul>
+</li>
+<li><code>async_csv</code> - <a href="../../entry/formats/async_csv/struct.AsyncCsvCoder.html" title="struct backed_data::entry::formats::async_csv::AsyncCsvCoder"><code>AsyncCsvCoder</code></a>
+<ul>
+<li>Compatible with <code>csv</code>.</li>
+</ul>
+</li>
+</ul>
+</div></details></section></div></main></body></html>

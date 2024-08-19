@@ -869,7 +869,49 @@
 <a href="#869" id="869">869</a>
 <a href="#870" id="870">870</a>
 <a href="#871" id="871">871</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="doccomment">/*!
+Defines the [`Mmap`] type to wrap `mmap`.
+*/
+
+</span><span class="kw">use </span>std::{
     cell::UnsafeCell,
     cmp::max,
     fs::File,
@@ -888,7 +930,7 @@
 <span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
 </span><span class="kw">use </span>memmap2::RemapOptions;
 
-<span class="kw">use super</span>::{ReadDisk, WriteDisk};
+<span class="kw">use super</span>::{Plainfile, ReadDisk, Unbuffered, WriteDisk, WriteUnbuffered};
 
 <span class="kw">fn </span>open_mmap_file&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; std::io::Result&lt;File&gt; {
     <span class="kw">let </span>f = File::options()
@@ -1184,9 +1226,13 @@
 
 </span><span class="doccomment">/// An mmaped file entry.
 ///
-/// This is used to open a [`File`] on demand, but drop the handle when unused.
-/// Large collections of [`BackedEntry`](`super::super::BackedEntry`)s would otherwise risk overwhelming
-/// OS limts on the number of open file descriptors.
+/// This is used to open a [`File`] via `mmap`. The memory mappings are preserved to
+/// minimize I/O costs on subsequent reads. The OS will transparently handle dropping
+/// and restoring memory mappings according to available system memory.
+///
+/// Note that mmap population is sequential (updating memory addressing is sequential).
+/// If two mmaps in different threads need to be populated at the same time, the second mmap
+/// will need to wait until the first population is complete to proceed.
 </span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub struct </span>Mmap {
     <span class="doccomment">/// File location.
@@ -1583,6 +1629,24 @@
                 <span class="prelude-val">Err</span>(error)
             }
         }
+    }
+}
+
+<span class="kw">impl </span>From&lt;Mmap&gt; <span class="kw">for </span>Plainfile {
+    <span class="kw">fn </span>from(value: Mmap) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new(value.path)
+    }
+}
+
+<span class="kw">impl </span>From&lt;Mmap&gt; <span class="kw">for </span>WriteUnbuffered {
+    <span class="kw">fn </span>from(value: Mmap) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new(value.path)
+    }
+}
+
+<span class="kw">impl </span>From&lt;Mmap&gt; <span class="kw">for </span>Unbuffered {
+    <span class="kw">fn </span>from(value: Mmap) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new(value.path)
     }
 }
 

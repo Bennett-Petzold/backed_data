@@ -1,1 +1,108 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `backed_data` crate."><title>backed_data - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="backed_data" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../backed_data/index.html">backed_<wbr>data</a><span class="version">0.2.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#macros">Macros</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">backed_data</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/backed_data/lib.rs.html#1-13">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="array/index.html" title="mod backed_data::array">array</a><wbr><span class="stab portability" title="Available on crate feature `array` only"><code>array</code></span></div></li><li><div class="item-name"><a class="mod" href="directory/index.html" title="mod backed_data::directory">directory</a><wbr><span class="stab portability" title="Available on crate feature `directory` only"><code>directory</code></span></div></li><li><div class="item-name"><a class="mod" href="entry/index.html" title="mod backed_data::entry">entry</a></div></li><li><div class="item-name"><a class="mod" href="examples/index.html" title="mod backed_data::examples">examples</a></div><div class="desc docblock-short">Example usage re-exports.</div></li><li><div class="item-name"><a class="mod" href="test_utils/index.html" title="mod backed_data::test_utils">test_<wbr>utils</a><wbr><span class="stab portability" title="Available on crate feature `test` only"><code>test</code></span></div></li><li><div class="item-name"><a class="mod" href="utils/index.html" title="mod backed_data::utils">utils</a></div></li></ul><h2 id="macros" class="section-header">Macros<a href="#macros" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="macro" href="macro.cursor_vec.html" title="macro backed_data::cursor_vec">cursor_<wbr>vec</a><wbr><span class="stab portability" title="Available on crate feature `test` only"><code>test</code></span></div><div class="desc docblock-short">Creates a default <a href="test_utils/struct.CursorVec.html" title="struct backed_data::test_utils::CursorVec"><code>CursorVec</code></a> for testing.</div></li></ul></section></div></main></body></html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Cache data outside memory, loading in when referenced."><title>backed_data - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="backed_data" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../backed_data/index.html">backed_<wbr>data</a><span class="version">0.2.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#reexports">Re-exports</a></li><li><a href="#modules">Modules</a></li><li><a href="#macros">Macros</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">backed_data</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/backed_data/lib.rs.html#7-166">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Cache data outside memory, loading in when referenced.</p>
+<p>You may want a more standard data storage solution! See
+<a href="extra_docs/alternatives/index.html" title="mod backed_data::extra_docs::alternatives"><code>alternatives</code></a> to make sure another approach
+doesn’t fit your case better.</p>
+<p>This crate uses some <code>unsafe</code> code on certain features (not the default
+features). See <a href="extra_docs/unsafe_usage/index.html" title="mod backed_data::extra_docs::unsafe_usage"><code>unsafe_usage</code></a> for the listing and explanations.
+Dependencies are listed and explained in <a href="extra_docs/deps/index.html" title="mod backed_data::extra_docs::deps"><code>deps</code></a>.
+<a href="extra_docs/features/index.html" title="mod backed_data::extra_docs::features"><code>features</code></a> runs down selecting which of the (many) features to use.</p>
+<h2 id="motivating-example"><a class="doc-anchor" href="#motivating-example">§</a>Motivating Example</h2>
+<p>More examples that demonstrate more complex uses are in <a href="examples/index.html" title="mod backed_data::examples"><code>examples</code></a>.</p>
+<p>Assume that you have some <code>LargeStruct</code> that takes up significant storage and
+can be reduced to a smaller representation for searching. If it is stored in a
+collection where only a small number of elements are used, keeping them all
+loaded in memory wastes system resources. A
+<a href="https://en.wikipedia.org/wiki/Vector_database">vector store</a> is one such
+structure. This example assumes a large, hashable type with only a few entries
+accessed.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[cfg(all(feature = <span class="string">"bincode"</span>, feature = <span class="string">"directory"</span>))] </span>{
+    <span class="kw">use </span>std::{
+        array::from_fn,
+        env::temp_dir,
+    };
+
+    <span class="kw">use </span>serde::{Serialize, Deserialize};
+
+    <span class="kw">use </span>backed_data::{
+        entry::formats::BincodeCoder,
+        directory::StdDirBackedArray,
+    };
+
+    <span class="attr">#[derive(PartialEq, Eq, Serialize, Deserialize)]
+    </span><span class="kw">struct </span>LargeStruct {
+        ...
+    };
+
+    <span class="kw">impl </span>LargeStruct {
+        <span class="kw">fn </span>new_random() -&gt; <span class="self">Self </span>{
+              ...
+        }
+    }
+
+    <span class="kw">const </span>NUM_ELEMENTS: usize = <span class="number">100_000</span>;
+
+    <span class="comment">// This application only needs to find three random elements.
+    </span><span class="kw">let </span>query = [<span class="number">0</span>, <span class="number">10_000</span>, <span class="number">50_000</span>];
+
+    <span class="comment">// Do not use a temporary directory in real code.
+    // Use some location that actually guarantees memory leaves RAM.
+    </span><span class="kw">let </span>backing_dir = temp_dir().join(BACKING_PATH);
+
+    <span class="comment">// Define an array over `backing_dir` that automatically creates
+    // new files when new data is appended.
+    </span><span class="kw">let </span><span class="kw-2">mut </span>backing = StdDirBackedArray
+        ::&lt;<span class="kw">_</span>, BincodeCoder&lt;<span class="kw">_</span>&gt;&gt;::
+        new(backing_dir.clone())
+        .unwrap();
+
+    <span class="kw">let </span><span class="kw-2">mut </span>generator = (<span class="number">0</span>..NUM_ELEMENTS)
+        .into_iter()
+        .map(|<span class="kw">_</span>| LargeStruct::new_random())
+        .peekable();
+
+    <span class="comment">// Build the indices and backing store in 1,000 item chunks.
+    </span><span class="kw">while </span>generator.peek().is_some() {
+        <span class="kw">let </span>chunk_data: Vec&lt;<span class="kw">_</span>&gt; = generator.by_ref().take(<span class="number">1_000</span>).collect();
+
+        <span class="comment">// Add a new bincode-encoded file that stores 1,000 elements.
+        // After this operation, the elements are on disk only.
+        </span>backing.append(chunk_data);
+    }
+
+    <span class="comment">// Query for three elements. At most 3,000 elements are loaded, because
+    // the data is split into 1,000 element chunks. Only 2,997 useless
+    // elements are kept in memory, instead of 99,997.
+    </span><span class="kw">let </span>results: Vec&lt;<span class="kw">_</span>&gt; = query
+        .iter()
+        .map(|q| backing.get(<span class="kw-2">*</span>q))
+        .collect();
+}</code></pre></div>
+<h2 id="usage"><a class="doc-anchor" href="#usage">§</a>Usage</h2>
+<p>The core structure is <a href="entry/struct.BackedEntry.html" title="struct backed_data::entry::BackedEntry"><code>entry::BackedEntry</code></a>, which is wrapped by <a href="array/index.html" title="mod backed_data::array"><code>array</code></a>
+and <a href="directory/index.html" title="mod backed_data::directory"><code>directory</code></a>. It should be pointed at external data to load when used.
+That data will remain in memory until unloaded (so subsequent reads avoid
+the cost of decoding). Try to only unload in one of the following scenarios:</p>
+<ul>
+<li>The data will not be read again.</li>
+<li>The program’s heap footprint needs to shrink.</li>
+<li>The external store was modified by another process.</li>
+</ul>
+<p>Each entry needs a <a href="entry/formats/index.html" title="mod backed_data::entry::formats">format</a> and (potentially layered)
+<a href="entry/disks/index.html" title="mod backed_data::entry::disks">disks</a> to use. The <a href="array/index.html" title="mod backed_data::array"><code>array</code></a> wrapper also needs choices of
+<a href="array/container/trait.Container.html" title="trait backed_data::array::container::Container">containers</a> to hold its array of keys and array of backed
+entries.</p>
+<h2 id="licensing-and-contributing"><a class="doc-anchor" href="#licensing-and-contributing">§</a>Licensing and Contributing</h2>
+<p>All code is licensed under MPL 2.0. See the <a href="https://www.mozilla.org/en-US/MPL/2.0/FAQ/">FAQ</a>
+for license questions. The license non-viral copyleft and does not block this library from
+being used in closed-source codebases. If you are using this library for a commercial purpose,
+consider reaching out to <code>dansecob.dev@gmail.com</code> to make a financial contribution.</p>
+<p>Contributions are welcome at
+<a href="https://github.com/Bennett-Petzold/backed_data">https://github.com/Bennett-Petzold/backed_data</a>. Please open an issue or
+PR if:</p>
+<ul>
+<li>Some dependency is extraneous, unsafe, or has a versioning issue.</li>
+<li>Any unsafe code is insufficiently explained or tested.</li>
+<li>There is any other issue or missing feature.</li>
+</ul>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name" id="reexport.BackedEntryArr"><code>pub use entry::<a class="type" href="entry/type.BackedEntryArr.html" title="type backed_data::entry::BackedEntryArr">BackedEntryArr</a>;</code></div></li><li><div class="item-name" id="reexport.BackedEntryArrLock"><code>pub use entry::<a class="type" href="entry/type.BackedEntryArrLock.html" title="type backed_data::entry::BackedEntryArrLock">BackedEntryArrLock</a>;</code></div></li><li><div class="item-name" id="reexport.BackedEntryCell"><code>pub use entry::<a class="type" href="entry/type.BackedEntryCell.html" title="type backed_data::entry::BackedEntryCell">BackedEntryCell</a>;</code></div></li><li><div class="item-name" id="reexport.BackedEntryLock"><code>pub use entry::<a class="type" href="entry/type.BackedEntryLock.html" title="type backed_data::entry::BackedEntryLock">BackedEntryLock</a>;</code></div></li><li><div class="item-name" id="reexport.BackedEntryAsync"><code>pub use entry::<a class="type" href="entry/type.BackedEntryAsync.html" title="type backed_data::entry::BackedEntryAsync">BackedEntryAsync</a>;</code></div><div class="desc docblock-short"><wbr><span class="stab portability" title="Available on crate feature `async` only"><code>async</code></span></div></li><li><div class="item-name" id="reexport.VecBackedArray"><code>pub use array::<a class="type" href="array/type.VecBackedArray.html" title="type backed_data::array::VecBackedArray">VecBackedArray</a>;</code></div><div class="desc docblock-short"><wbr><span class="stab portability" title="Available on crate feature `array` only"><code>array</code></span></div></li><li><div class="item-name" id="reexport.StdDirBackedArray"><code>pub use directory::<a class="type" href="directory/type.StdDirBackedArray.html" title="type backed_data::directory::StdDirBackedArray">StdDirBackedArray</a>;</code></div><div class="desc docblock-short"><wbr><span class="stab portability" title="Available on crate feature `directory` only"><code>directory</code></span></div></li><li><div class="item-name" id="reexport.ZstdDirBackedArray"><code>pub use directory::<a class="type" href="directory/type.ZstdDirBackedArray.html" title="type backed_data::directory::ZstdDirBackedArray">ZstdDirBackedArray</a>;</code></div><div class="desc docblock-short"><wbr><span class="stab portability" title="Available on crate feature `directory` and `runtime` and crate feature `zstd` only"><code>directory</code> and <code>runtime</code> and <code>zstd</code></span></div></li><li><div class="item-name" id="reexport.AsyncZstdDirBackedArray"><code>pub use directory::<a class="type" href="directory/type.AsyncZstdDirBackedArray.html" title="type backed_data::directory::AsyncZstdDirBackedArray">AsyncZstdDirBackedArray</a>;</code></div><div class="desc docblock-short"><wbr><span class="stab portability" title="Available on crate feature `directory` and `runtime` and crate feature `async_zstd` only"><code>directory</code> and <code>runtime</code> and <code>async_zstd</code></span></div></li></ul><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="array/index.html" title="mod backed_data::array">array</a><wbr><span class="stab portability" title="Available on crate feature `array` only"><code>array</code></span></div><div class="desc docblock-short">Defines <a href="array/struct.BackedArray.html" title="struct backed_data::array::BackedArray"><code>BackedArray</code></a> and the <a href="array/container/trait.Container.html" title="trait backed_data::array::container::Container"><code>Container</code></a>/<a href="array/container/trait.ResizingContainer.html" title="trait backed_data::array::container::ResizingContainer"><code>ResizingContainer</code></a> traits it uses.</div></li><li><div class="item-name"><a class="mod" href="directory/index.html" title="mod backed_data::directory">directory</a><wbr><span class="stab portability" title="Available on crate feature `directory` only"><code>directory</code></span></div><div class="desc docblock-short">Defines <a href="directory/struct.DirectoryBackedArray.html" title="struct backed_data::directory::DirectoryBackedArray"><code>DirectoryBackedArray</code></a>.</div></li><li><div class="item-name"><a class="mod" href="entry/index.html" title="mod backed_data::entry">entry</a></div><div class="desc docblock-short">Defines <a href="entry/struct.BackedEntry.html" title="struct backed_data::entry::BackedEntry"><code>BackedEntry</code></a>, the core of this library.</div></li><li><div class="item-name"><a class="mod" href="examples/index.html" title="mod backed_data::examples">examples</a></div><div class="desc docblock-short">Example usage re-exports.</div></li><li><div class="item-name"><a class="mod" href="extra_docs/index.html" title="mod backed_data::extra_docs">extra_<wbr>docs</a></div><div class="desc docblock-short">Additional description of the library.</div></li><li><div class="item-name"><a class="mod" href="test_utils/index.html" title="mod backed_data::test_utils">test_<wbr>utils</a><wbr><span class="stab portability" title="Available on crate feature `test` only"><code>test</code></span></div><div class="desc docblock-short">Defines tools used for ONLY testing.</div></li><li><div class="item-name"><a class="mod" href="utils/index.html" title="mod backed_data::utils">utils</a></div><div class="desc docblock-short">Backbone traits and structs for the library implementation.</div></li></ul><h2 id="macros" class="section-header">Macros<a href="#macros" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="macro" href="macro.cursor_vec.html" title="macro backed_data::cursor_vec">cursor_<wbr>vec</a><wbr><span class="stab portability" title="Available on crate feature `test` only"><code>test</code></span></div><div class="desc docblock-short">Creates a default <a href="test_utils/struct.CursorVec.html" title="struct backed_data::test_utils::CursorVec"><code>CursorVec</code></a> for testing.</div></li></ul></section></div></main></body></html>

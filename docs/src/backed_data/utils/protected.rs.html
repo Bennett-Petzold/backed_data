@@ -89,7 +89,22 @@
 <a href="#89" id="89">89</a>
 <a href="#90" id="90">90</a>
 <a href="#91" id="91">91</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+</pre></div><pre class="rust"><code><span class="comment">/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+</span><span class="kw">use </span>std::{
     cell::UnsafeCell,
     sync::{Mutex, MutexGuard},
 };
@@ -114,7 +129,8 @@
     </span>}
 }
 
-<span class="doccomment">/// Trait to combine Mutex (allowing panics) and UnsafeCell in one generic.
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
+</span><span class="doccomment">/// Trait to combine Mutex (allowing panics) and UnsafeCell in one generic.
 ///
 /// Mutex provides the thread-safe access pattern, UnsafeCell optimizes for
 /// single-threaded performance.
@@ -143,7 +159,8 @@
     <span class="kw">fn </span>wrap(val: <span class="self">Self</span>::Val) -&gt; <span class="self">Self</span>;
 }
 
-<span class="kw">impl</span>&lt;T&gt; ProtectedAccess <span class="kw">for </span>Mutex&lt;T&gt; {
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
+</span><span class="kw">impl</span>&lt;T&gt; ProtectedAccess <span class="kw">for </span>Mutex&lt;T&gt; {
     <span class="kw">type </span>Val = T;
     <span class="kw">unsafe fn </span>get_mut_unsafe(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>AsMut&lt;<span class="self">Self</span>::Val&gt; {
         GuardToMut(<span class="self">self</span>.lock().unwrap())
@@ -162,7 +179,8 @@
     }
 }
 
-<span class="kw">impl</span>&lt;T&gt; ProtectedAccess <span class="kw">for </span>UnsafeCell&lt;T&gt; {
+<span class="attr">#[cfg(feature = <span class="string">"unsafe_array"</span>)]
+</span><span class="kw">impl</span>&lt;T&gt; ProtectedAccess <span class="kw">for </span>UnsafeCell&lt;T&gt; {
     <span class="kw">type </span>Val = T;
     <span class="kw">unsafe fn </span>get_mut_unsafe(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>AsMut&lt;<span class="self">Self</span>::Val&gt; {
         ToMut(<span class="kw-2">&amp;mut *</span><span class="self">self</span>.get())

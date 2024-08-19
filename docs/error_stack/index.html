@@ -1,0 +1,313 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A context-aware error library with arbitrary attached user data."><title>error_stack - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="error_stack" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../error_stack/index.html">error_<wbr>stack</a><span class="version">0.5.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#macros">Macros</a></li><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#traits">Traits</a></li><li><a href="#types">Type Aliases</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">error_stack</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/error_stack/lib.rs.html#1-545">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A context-aware error library with arbitrary attached user data.</p>
+<p><a href="https://crates.io/crates/error-stack"><img src="https://img.shields.io/crates/v/error-stack" alt="crates.io" /></a>
+<a href="https://lib.rs/crates/error-stack"><img src="https://img.shields.io/badge/libs.rs-error--stack-orange" alt="libs.rs" /></a>
+<a href="https://www.rust-lang.org"><img src="https://img.shields.io/static/v1?label=Rust&amp;message=1.63.0/nightly-2024-07-08&amp;color=blue" alt="rust-version" /></a>
+<a href="https://hash.ai/discord?utm_medium=organic&amp;utm_source=github_readme_hash-repo_error-stack"><img src="https://img.shields.io/discord/840573247803097118" alt="discord" /></a></p>
+<h2 id="overview"><a class="doc-anchor" href="#overview">§</a>Overview</h2>
+<p><code>error-stack</code> is an error-handling library centered around the idea of building a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> of
+the error as it propagates. A <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> is made up of two concepts:</p>
+<ol>
+<li>Contexts</li>
+<li>Attachments</li>
+</ol>
+<p>A <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> is a view of the world, it helps describe how the current section of code
+interprets the error. This is used to capture how various scopes require differing levels of
+detail and understanding of the error as it propagates. A <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> always captures the
+<em>current context</em> in its generic argument.</p>
+<p>As the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> is built, various pieces of supporting information can be <em>attached</em>. These
+can be anything that can be shared between threads whether it be a supporting message or a
+custom-defined <code>Suggestion</code> struct.</p>
+<h2 id="quick-start-guide"><a class="doc-anchor" href="#quick-start-guide">§</a>Quick-Start Guide</h2><h3 id="in-a-new-project"><a class="doc-anchor" href="#in-a-new-project">§</a>In a new project</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>error_stack::ResultExt;
+<span class="comment">// using `thiserror` is not neccessary, but convenient
+</span><span class="kw">use </span>thiserror::Error;
+
+<span class="comment">// Errors can enumerate variants users care about
+// but notably don't need to chain source/inner error manually.
+</span><span class="attr">#[derive(Error, Debug)]
+</span><span class="kw">enum </span>AppError {
+    <span class="attr">#[error(<span class="string">"serious app error: {consequences}"</span>)]
+    </span>Serious { consequences: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str },
+    <span class="attr">#[error(<span class="string">"trivial app error"</span>)]
+    </span>Trivial,
+}
+
+<span class="kw">type </span>AppResult&lt;T&gt; = error_stack::Result&lt;T, AppError&gt;;
+
+<span class="comment">// Errors can also be a plain `struct`, somewhat like in `anyhow`.
+</span><span class="attr">#[derive(Error, Debug)]
+#[error(<span class="string">"logic error"</span>)]
+</span><span class="kw">struct </span>LogicError;
+
+<span class="kw">type </span>LogicResult&lt;T&gt; = error_stack::Result&lt;T, LogicError&gt;;
+
+<span class="kw">fn </span>do_logic() -&gt; LogicResult&lt;()&gt; {
+    <span class="prelude-val">Ok</span>(())
+}
+
+<span class="kw">fn </span>main() -&gt; AppResult&lt;()&gt; {
+    <span class="comment">// `error-stack` requires developer to properly handle
+    // changing error contexts
+    </span>do_logic().change_context(AppError::Serious {
+        consequences: <span class="string">"math no longer works"</span>,
+    })<span class="question-mark">?</span>;
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+<h3 id="where-to-use-a-report"><a class="doc-anchor" href="#where-to-use-a-report">§</a>Where to use a Report</h3>
+<p><a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> has been designed to be used as the <a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html#variant.Err" title="variant core::result::Result::Err"><code>Err</code></a> variant of a <code>Result</code>. This crate
+provides a <a href="type.Result.html" title="type error_stack::Result"><code>Result&lt;E, C&gt;</code></a> type alias for convenience which uses <a href="struct.Report.html" title="struct error_stack::Report"><code>Report&lt;C&gt;</code></a> as the <a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html#variant.Err" title="variant core::result::Result::Err"><code>Err</code></a>
+variant and can be used as a return type:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>error_stack::{ensure, <span class="prelude-ty">Result</span>};
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;(), AccessError&gt; {
+    <span class="kw">let </span>user = get_user()<span class="question-mark">?</span>;
+    <span class="kw">let </span>resource = get_resource()<span class="question-mark">?</span>;
+
+    <span class="macro">ensure!</span>(
+        has_permission(user, resource),
+        AccessError::PermissionDenied(user, resource)
+    );
+
+    ...
+}</code></pre></div>
+<h4 id="initializing-a-report"><a class="doc-anchor" href="#initializing-a-report">§</a>Initializing a Report</h4>
+<p>A <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> can be created directly from anything that implements <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> by using
+<a href="struct.Report.html#method.new" title="associated function error_stack::Report::new"><code>Report::new()</code></a> or through any of the provided macros (<a href="macro.report.html" title="macro error_stack::report"><code>report!</code></a>, <a href="macro.bail.html" title="macro error_stack::bail"><code>bail!</code></a>, <a href="macro.ensure.html" title="macro error_stack::ensure"><code>ensure!</code></a>).
+Any <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a> can be used as a <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>, so it’s possible to create <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> from an
+existing <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a>:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::{fs, io, path::Path};
+
+<span class="kw">use </span>error_stack::Report;
+
+<span class="comment">// Note: For demonstration purposes this example does not use `error_stack::Result`.
+// As can be seen, it's possible to implicitly convert `io::Error` to `Report&lt;io::Error&gt;`
+</span><span class="kw">fn </span>read_file(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, Report&lt;io::Error&gt;&gt; {
+    <span class="kw">let </span>content = fs::read_to_string(path)<span class="question-mark">?</span>;
+
+    ...
+}</code></pre></div>
+<h3 id="using-and-expanding-the-report"><a class="doc-anchor" href="#using-and-expanding-the-report">§</a>Using and Expanding the Report</h3>
+<p>As mentioned, the library centers around the idea of building a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> as it propagates.</p>
+<h4 id="changing-context"><a class="doc-anchor" href="#changing-context">§</a>Changing Context</h4>
+<p>The generic parameter in <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> is called the <em>current context</em>. When creating a new
+<a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>, the <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> that’s provided will be set as the current context. The current
+context should encapsulate how the current code interprets the error. As the error propagates,
+it will cross boundaries where new information is available, and the previous level of detail is
+no longer applicable. These boundaries will often occur when crossing between major modules, or
+when execution crosses between crates. At this point the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> should start to operate in a
+new context. To change the context, <a href="struct.Report.html#method.change_context" title="method error_stack::Report::change_context"><code>Report::change_context()</code></a> is used:</p>
+<p>(Again, for convenience, using <a href="trait.ResultExt.html" title="trait error_stack::ResultExt"><code>ResultExt</code></a> will do that on the <a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html#variant.Err" title="variant core::result::Result::Err"><code>Err</code></a> variant)</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>error_stack::{Context, <span class="prelude-ty">Result</span>, ResultExt};
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>ParseConfigError;
+
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>ParseConfigError {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, fmt: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        fmt.write_str(<span class="string">"could not parse configuration file"</span>)
+    }
+}
+
+<span class="comment">// It's also possible to implement `Error` instead.
+</span><span class="kw">impl </span>Context <span class="kw">for </span>ParseConfigError {}
+
+<span class="comment">// For clarification, this example is not using `error_stack::Result`.
+</span><span class="kw">fn </span>parse_config(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Config, ParseConfigError&gt; {
+    <span class="kw">let </span>content = fs::read_to_string(path.as_ref())
+        .change_context(ParseConfigError)<span class="question-mark">?</span>;
+
+    ...
+}</code></pre></div>
+<h4 id="building-up-the-report---attachments"><a class="doc-anchor" href="#building-up-the-report---attachments">§</a>Building up the Report - Attachments</h4>
+<p>Module/crate boundaries are not the only places where information can be embedded within the
+<a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> however. Additional information can be attached within the current context, whether
+this be a string, or any thread-safe object. These attachments are added by using
+<a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>Report::attach()</code></a> and <a href="struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>Report::attach_printable()</code></a>:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+<span class="kw">fn </span>parse_config(path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Config, Report&lt;ParseConfigError&gt;&gt; {
+    <span class="kw">let </span>path = path.as_ref();
+
+    <span class="kw">let </span>content = fs::read_to_string(path)
+        .change_context(ParseConfigError::new())
+        .attach(Suggestion(<span class="string">"use a file you can read next time!"</span>))
+        .attach_printable_lazy(|| <span class="macro">format!</span>(<span class="string">"could not read file {path:?}"</span>))<span class="question-mark">?</span>;
+
+    <span class="prelude-val">Ok</span>(content)
+}</code></pre></div>
+<p>As seen above, there are ways on attaching more information to the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>: <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach</code></a> and
+<a href="struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>attach_printable</code></a>. These two functions behave similar, but the latter has a more restrictive
+bound on the attachment: <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> and <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a>. Depending on the function used, printing the
+<a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> will also use the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> and <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> traits to describe the attachment.</p>
+<p>This outputs something like:</p>
+<pre>
+<b>could not parse configuration file</b>
+├╴at <i>libs/error-stack/src/lib.rs:25:10</i>
+├╴could not read file &quot;test.txt&quot;
+├╴1 additional opaque attachment
+│
+╰─▶ <b>No such file or directory (os error 2)</b>
+    ├╴at <i>libs/error-stack/src/lib.rs:25:10</i>
+    ╰╴backtrace (1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<p>The <code>Suggestion</code> which was added via <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach</code></a> is not shown directly and only increases the
+counter of opaque attachments for the containing <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>. The message which was passed to
+<a href="struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>attach_printable</code></a>, however, is displayed in full. To be able to show attachments that have
+been added via <a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach</code></a>, one must make use of <a href="#debug-and-display-hooks">hooks</a> instead.</p>
+<h4 id="multiple-errors"><a class="doc-anchor" href="#multiple-errors">§</a>Multiple Errors</h4>
+<p><a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> supports the combination and propagation of multiple errors natively. This is useful
+in cases like parallel processing where multiple errors might happen independently from each
+other, in these use-cases you are able to use the implementations of <a href="https://doc.rust-lang.org/nightly/core/iter/traits/collect/trait.Extend.html" title="trait core::iter::traits::collect::Extend"><code>Extend</code></a> and
+<a href="struct.Report.html#method.extend_one" title="method error_stack::Report::extend_one"><code>extend_one()</code></a> and are able to propagate all errors instead of just a single one.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>
+<span class="kw">fn </span>parse_configs(paths: <span class="kw-2">&amp;</span>[<span class="kw">impl </span>AsRef&lt;Path&gt;]) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Config&gt;, Report&lt;std::io::Error&gt;&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>configs = Vec::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>error: <span class="prelude-ty">Option</span>&lt;Report&lt;std::io::Error&gt;&gt; = <span class="prelude-val">None</span>;
+
+    <span class="kw">for </span>path <span class="kw">in </span>paths {
+        <span class="kw">let </span>path = path.as_ref();
+
+        <span class="kw">match </span>fs::read_to_string(path) {
+            <span class="prelude-val">Ok</span>(ok) =&gt; {
+                configs.push(ok);
+            }
+            <span class="prelude-val">Err</span>(err) =&gt; {
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(error) = error.as_mut() {
+                    error.extend_one(err.into());
+                } <span class="kw">else </span>{
+                    error = <span class="prelude-val">Some</span>(err.into());
+                }
+            }
+        }
+    }
+
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(error) = error {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(error);
+    }
+
+    <span class="prelude-val">Ok</span>(configs)
+}
+</code></pre></div>
+<h2 id="in-depth-explanation"><a class="doc-anchor" href="#in-depth-explanation">§</a>In-Depth Explanation</h2><h3 id="crate-philosophy"><a class="doc-anchor" href="#crate-philosophy">§</a>Crate Philosophy</h3>
+<p>This crate adds some development overhead in comparison to other error handling strategies,
+especially around creating custom root-errors (specifically <code>error-stack</code> does not allow using
+string-like types). The intention is that this reduces overhead at other parts of the process,
+whether that be implementing error-handling, debugging, or observability. The idea that
+underpins this is that errors should happen in well-scoped environments like reading a file or
+parsing a string into an integer. For these errors, a well-defined error type should be used
+(i.e. <code>io::Error</code> or <code>ParseIntError</code>) instead of creating an error from a string. Requiring a
+well-defined type forces users to be conscious about how they classify and group their
+<strong>custom</strong> error types, which improves their usability in error-<em>handling</em>.</p>
+<h4 id="improving-resulterr-types"><a class="doc-anchor" href="#improving-resulterr-types">§</a>Improving Result::Err Types</h4>
+<p>By capturing the current <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> in the type parameter, return types in function signatures
+continue to explicitly capture the perspective of the current code. This means that <strong>more often
+than not</strong> the user is <em>forced</em> to re-describe the error when entering a substantially different
+part of the code because the constraints of typed return types will require it. This will happen
+most often when crossing module/crate boundaries.</p>
+<p>An example of this is a <code>ConfigParseError</code> when produced when parsing a configuration file at
+a high-level in the code vs. the lower-level <code>io::Error</code> that occurs when reading the file from
+disk. The <code>io::Error</code> may no longer be valuable at the level of the code that’s handling parsing
+a config, and re-framing the error in a new type allows the user to incorporate contextual
+information that’s only available higher-up in the stack.</p>
+<h4 id="compatibility-with-other-libraries"><a class="doc-anchor" href="#compatibility-with-other-libraries">§</a>Compatibility with other Libraries</h4>
+<p>In <code>std</code> (or <code>nightly</code>) environments a blanket implementation for <code>Context</code> for any <code>Error</code> is
+provided. This blanket implementation for <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a> means <code>error-stack</code> is compatible with
+almost all other libraries that use the <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a> trait.</p>
+<p>This has the added benefit that migrating from other error libraries can often be incremental,
+as a lot of popular error library types will work within the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> struct.</p>
+<p>In addition, <code>error-stack</code> supports converting errors generated from the [<code>anyhow</code>] or [<code>eyre</code>]
+crate via <a href="trait.IntoReportCompat.html" title="trait error_stack::IntoReportCompat"><code>IntoReportCompat</code></a>.</p>
+<h4 id="doing-more"><a class="doc-anchor" href="#doing-more">§</a>Doing more</h4>
+<p>Beyond making new <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> types, the library supports the attachment of arbitrary
+thread-safe data. These attachments (and data that is <a href="trait.Context.html#method.provide" title="method error_stack::Context::provide"><code>provide</code></a>d by the <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> can be
+requested through <a href="struct.Report.html#method.request_ref" title="method error_stack::Report::request_ref"><code>Report::request_ref()</code></a>. This gives a novel way to expand standard
+error-handling approaches, without decreasing the ergonomics of creating the actual error
+variants:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">fn </span>main() {
+    <span class="kw">if let </span><span class="prelude-val">Err</span>(report) = parse_config(<span class="string">"config.json"</span>) {
+        <span class="kw">for </span>suggestion <span class="kw">in </span>report.request_ref::&lt;Suggestion&gt;() {
+            <span class="macro">eprintln!</span>(<span class="string">"suggestion: {}"</span>, suggestion.<span class="number">0</span>);
+        }
+    }
+}</code></pre></div>
+<h3 id="additional-features"><a class="doc-anchor" href="#additional-features">§</a>Additional Features</h3>
+<p>The above examples will probably cover 90% of the common use case. This crate does have
+additional features for more specific scenarios:</p>
+<h4 id="automatic-backtraces"><a class="doc-anchor" href="#automatic-backtraces">§</a>Automatic Backtraces</h4>
+<p>When on a Rust 1.65 or later, <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> will try to capture a <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a> if <code>RUST_BACKTRACE</code>
+or <code>RUST_BACKTRACE_LIB</code> is set and the <code>backtrace</code> feature is enabled (by default this is the
+case). If on a nightly toolchain, it will use the <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a> if provided by the base
+<a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>, and will try to capture one otherwise.</p>
+<p>Unlike some other approaches, this does not require the user modifying their custom error types
+to be aware of backtraces, and doesn’t require manual implementations to forward calls down any
+wrapped errors.</p>
+<h4 id="no-std-compatible"><a class="doc-anchor" href="#no-std-compatible">§</a>No-Std compatible</h4>
+<p>The complete crate is written for <code>no-std</code> environments, which can be used by setting
+<code>default-features = false</code> in <em>Cargo.toml</em>.</p>
+<h4 id="provider-api"><a class="doc-anchor" href="#provider-api">§</a>Provider API</h4>
+<p>This crate uses the <a href="https://rust-lang.github.io/rfcs/3192-dyno.html"><code>Provider</code> API</a> to provide arbitrary data. This can be done either by
+<a href="struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>attach</code></a>ing them to a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> or by providing it directly when implementing <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>.
+The blanket implementation of <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> for <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a> will provide any data provided by
+<a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html#method.provide" title="method core::error::Error::provide"><code>Error::provide</code></a>.</p>
+<p>To request a provided type, <a href="struct.Report.html#method.request_ref" title="method error_stack::Report::request_ref"><code>Report::request_ref</code></a> or <a href="struct.Report.html#method.request_value" title="method error_stack::Report::request_value"><code>Report::request_value</code></a> are used. Both
+return an iterator of all provided values with the specified type. The value, which was provided
+most recently will be returned first.</p>
+<h4 id="macros-for-convenience"><a class="doc-anchor" href="#macros-for-convenience">§</a>Macros for Convenience</h4>
+<p>Three macros are provided to simplify the generation of a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</p>
+<ul>
+<li><a href="macro.report.html" title="macro error_stack::report"><code>report!</code></a> will only create a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> from its parameter. It will take into account if the
+passed type itself is a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> or a <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>. For the former case, it will retain the
+details stored on a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>, for the latter case it will create a new <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> from the
+<a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>.</li>
+<li><a href="macro.bail.html" title="macro error_stack::bail"><code>bail!</code></a> acts like <a href="macro.report.html" title="macro error_stack::report"><code>report!</code></a> but also immediately returns the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> as <a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html#variant.Err" title="variant core::result::Result::Err"><code>Err</code></a>
+variant.</li>
+<li><a href="macro.ensure.html" title="macro error_stack::ensure"><code>ensure!</code></a> will check an expression and if it’s evaluated to <code>false</code>, it will act like
+<a href="macro.bail.html" title="macro error_stack::bail"><code>bail!</code></a>.</li>
+</ul>
+<h4 id="span-traces"><a class="doc-anchor" href="#span-traces">§</a>Span Traces</h4>
+<p>The crate comes with built-in support for <code>tracing</code>s <a href="tracing_error::SpanTrace"><code>SpanTrace</code></a>. If the <code>spantrace</code> feature
+is enabled and an <a href="tracing_error::ErrorLayer"><code>ErrorLayer</code></a> is set, a <a href="tracing_error::SpanTrace"><code>SpanTrace</code></a> is either used when provided by the
+root <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> or will be captured when creating the <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</p>
+<h4 id="debug-hooks"><a class="doc-anchor" href="#debug-hooks">§</a>Debug Hooks</h4>
+<p>One can provide hooks for types added as attachments when the <code>std</code> feature is enabled. These
+hooks are then used while formatting <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>. This functionality is also used internally by
+<code>error-stack</code> to render <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a>, and <a href="tracing_error::SpanTrace"><code>SpanTrace</code></a>, which means overwriting and
+customizing them is as easy as providing another hook.</p>
+<p>You can add new hooks with <a href="struct.Report.html#method.install_debug_hook" title="associated function error_stack::Report::install_debug_hook"><code>Report::install_debug_hook</code></a>. Refer to the module-level
+documentation of <a href="fmt/index.html" title="mod error_stack::fmt"><code>fmt</code></a> for further information.</p>
+<h4 id="additional-adaptors"><a class="doc-anchor" href="#additional-adaptors">§</a>Additional Adaptors</h4>
+<p><a href="trait.ResultExt.html" title="trait error_stack::ResultExt"><code>ResultExt</code></a> is a convenient wrapper around <code>Result&lt;_, impl Context&gt;</code> and <code>Result&lt;_, Report&lt;impl Context&gt;</code>. It offers <a href="trait.ResultExt.html#tymethod.attach" title="method error_stack::ResultExt::attach"><code>attach</code></a> and
+<a href="trait.ResultExt.html#tymethod.change_context" title="method error_stack::ResultExt::change_context"><code>change_context</code></a> on the <a href="type.Result.html" title="type error_stack::Result"><code>Result</code></a> directly, but also a lazy
+variant that receives a function which is only called if an error happens.</p>
+<p>In addition to <a href="trait.ResultExt.html" title="trait error_stack::ResultExt"><code>ResultExt</code></a>, this crate also comes with <a href="trait.FutureExt.html" title="trait error_stack::FutureExt"><code>FutureExt</code></a>, which provides the same
+functionality for <a href="https://doc.rust-lang.org/nightly/core/future/future/trait.Future.html" title="trait core::future::future::Future"><code>Future</code></a>s.</p>
+<h4 id="colored-output-and-charset-selection"><a class="doc-anchor" href="#colored-output-and-charset-selection">§</a>Colored output and charset selection</h4>
+<p>You can override the color support by using the <a href="struct.Report.html#method.set_color_mode" title="associated function error_stack::Report::set_color_mode"><code>Report::set_color_mode</code></a>. To override the
+charset used, you can use <a href="struct.Report.html#method.set_charset" title="associated function error_stack::Report::set_charset"><code>Report::set_charset</code></a>. The default color mode is emphasis.
+The default charset is <code>UTF-8</code>.</p>
+<p>To automatically detect support if your target output supports unicode and colors you can check
+out the <code>detect.rs</code> example.</p>
+<h4 id="feature-flags"><a class="doc-anchor" href="#feature-flags">§</a>Feature Flags</h4><div><table><thead><tr><th>Feature</th><th>Description</th><th>default</th></tr></thead><tbody>
+<tr><td><code>std</code></td><td>Enables support for <a href="https://doc.rust-lang.org/nightly/core/error/trait.Error.html" title="trait core::error::Error"><code>Error</code></a></td><td>enabled</td></tr>
+<tr><td><code>backtrace</code></td><td>Enables automatic capturing of <a href="https://doc.rust-lang.org/nightly/std/backtrace/struct.Backtrace.html" title="struct std::backtrace::Backtrace"><code>Backtrace</code></a>s (requires Rust 1.65+)</td><td>enabled</td></tr>
+<tr><td><code>spantrace</code></td><td>Enables automatic capturing of <a href="tracing_error::SpanTrace"><code>SpanTrace</code></a>s</td><td>disabled</td></tr>
+<tr><td><code>hooks</code></td><td>Enables hooks on <code>no-std</code> platforms using spin locks</td><td>disabled</td></tr>
+<tr><td><code>serde</code></td><td>Enables serialization support for <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a></td><td>disabled</td></tr>
+<tr><td><code>anyhow</code></td><td>Provides <code>into_report</code> to convert [<code>anyhow::Error</code>] to <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a></td><td>disabled</td></tr>
+<tr><td><code>eyre</code></td><td>Provides <code>into_report</code> to convert [<code>eyre::Report</code>] to <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a></td><td>disabled</td></tr>
+</tbody></table>
+</div></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="fmt/index.html" title="mod error_stack::fmt">fmt</a></div><div class="desc docblock-short">Implementation of formatting, to enable colors and the use of box-drawing characters use the
+<code>pretty-print</code> feature.</div></li><li><div class="item-name"><a class="mod" href="future/index.html" title="mod error_stack::future">future</a></div><div class="desc docblock-short">Extension for convenient usage of <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>s returned by <a href="https://doc.rust-lang.org/nightly/core/future/future/trait.Future.html" title="trait core::future::future::Future"><code>Future</code></a> s.</div></li><li><div class="item-name"><a class="mod" href="iter/index.html" title="mod error_stack::iter">iter</a></div><div class="desc docblock-short">Iterators over <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a>s.</div></li></ul><h2 id="macros" class="section-header">Macros<a href="#macros" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="macro" href="macro.bail.html" title="macro error_stack::bail">bail</a></div><div class="desc docblock-short">Creates a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> and returns it as <a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result"><code>Result</code></a>.</div></li><li><div class="item-name"><a class="macro" href="macro.ensure.html" title="macro error_stack::ensure">ensure</a></div><div class="desc docblock-short">Ensures <code>$cond</code> is met, otherwise return an error.</div></li><li><div class="item-name"><a class="macro" href="macro.report.html" title="macro error_stack::report">report</a></div><div class="desc docblock-short">Creates a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a> from the given parameters.</div></li></ul><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.Frame.html" title="struct error_stack::Frame">Frame</a></div><div class="desc docblock-short">A single context or attachment inside of a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</div></li><li><div class="item-name"><a class="struct" href="struct.Report.html" title="struct error_stack::Report">Report</a></div><div class="desc docblock-short">Contains a <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> stack consisting of <a href="trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>s and attachments.</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.AttachmentKind.html" title="enum error_stack::AttachmentKind">Attachment<wbr>Kind</a></div><div class="desc docblock-short">Classification of an attachment which is determined by the method it was created in.</div></li><li><div class="item-name"><a class="enum" href="enum.FrameKind.html" title="enum error_stack::FrameKind">Frame<wbr>Kind</a></div><div class="desc docblock-short">Classification of the contents of a <a href="struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a>, determined by how it was created.</div></li></ul><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="trait" href="trait.Context.html" title="trait error_stack::Context">Context</a></div><div class="desc docblock-short">Defines the current context of a <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</div></li><li><div class="item-name"><a class="trait" href="trait.FutureExt.html" title="trait error_stack::FutureExt">Future<wbr>Ext</a></div><div class="desc docblock-short">Extension trait for <a href="https://doc.rust-lang.org/nightly/core/future/future/trait.Future.html" title="trait core::future::future::Future"><code>Future</code></a> to provide contextual information on <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>s.</div></li><li><div class="item-name"><a class="trait" href="trait.IntoReportCompat.html" title="trait error_stack::IntoReportCompat">Into<wbr>Report<wbr>Compat</a></div><div class="desc docblock-short">Compatibility trait to convert from external libraries to <a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</div></li><li><div class="item-name"><a class="trait" href="trait.ResultExt.html" title="trait error_stack::ResultExt">Result<wbr>Ext</a></div><div class="desc docblock-short">Extension trait for <a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result"><code>Result</code></a> to provide context information on
+<a href="struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>s.</div></li></ul><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="type" href="type.Result.html" title="type error_stack::Result">Result</a></div><div class="desc docblock-short"><a href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result"><code>Result</code></a><code>&lt;T, </code><a href="struct.Report.html" title="struct error_stack::Report"><code>Report&lt;C&gt;</code></a><code>&gt;</code></div></li></ul></section></div></main></body></html>

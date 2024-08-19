@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Serde support for the HTTP crate"><title>http_serde - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="http_serde" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../http_serde/index.html">http_<wbr>serde</a><span class="version">2.1.1</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#reexports">Re-exports</a></li><li><a href="#modules">Modules</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">http_serde</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/http_serde/lib.rs.html#1-569">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="serde-support-for-the-http-crate"><a class="doc-anchor" href="#serde-support-for-the-http-crate">§</a><a href="https://lib.rs/serde">Serde</a> support for the HTTP crate</h2>
+<p>Adds ability to serialize and deserialize types from the <a href="https://lib.rs/http">HTTP</a> crate.</p>
+<p>If you want to serialize <code>Request</code> or <code>Response</code>, use <code>into_parts()</code> and serialize their parts, and then rebuild them using their <code>Builder</code>.</p>
+<h3 id="usage"><a class="doc-anchor" href="#usage">§</a>Usage</h3>
+<p>You must annotate fields with <code>#[serde(with = "http_serde::&lt;appropriate method&gt;")]</code>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(serde::Serialize, serde::Deserialize)]
+</span><span class="kw">struct </span>MyStruct {
+    <span class="attr">#[serde(with = <span class="string">"http_serde::method"</span>)]
+    </span>method: Method,
+
+    <span class="attr">#[serde(with = <span class="string">"http_serde::status_code"</span>)]
+    </span>status: StatusCode,
+
+    <span class="attr">#[serde(with = <span class="string">"http_serde::uri"</span>)]
+    </span>uri: Uri,
+
+    <span class="attr">#[serde(with = <span class="string">"http_serde::header_map"</span>)]
+    </span>headers: HeaderMap,
+
+    <span class="attr">#[serde(with = <span class="string">"http_serde::authority"</span>)]
+    </span>authority: Authority,
+}</code></pre></div>
+<p>There’s also support for the types wrapped in an <code>Option</code>. To use it, change the <code>with</code> attribute prefix from <code>http_serde::</code> to <code>http_serde::option::</code>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(serde::Serialize, serde::Deserialize)]
+</span><span class="kw">struct </span>MyStruct {
+    <span class="attr">#[serde(with = <span class="string">"http_serde::option::header_map"</span>)]
+    </span><span class="comment">//                          ^^^^^^
+    </span>optional_headers: <span class="prelude-ty">Option</span>&lt;HeaderMap&gt;,
+}</code></pre></div>
+<h3 id="requirements"><a class="doc-anchor" href="#requirements">§</a>Requirements</h3>
+<ul>
+<li>Rust 1.56 or later.</li>
+</ul>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name" id="reexport.http"><code>pub use <a class="mod" href="../http/index.html" title="mod http">http</a>;</code></div></li></ul><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="authority/index.html" title="mod http_serde::authority">authority</a></div><div class="desc docblock-short">For <code>http::uri::Authority</code></div></li><li><div class="item-name"><a class="mod" href="header_map/index.html" title="mod http_serde::header_map">header_<wbr>map</a></div><div class="desc docblock-short">For <code>http::HeaderMap</code></div></li><li><div class="item-name"><a class="mod" href="method/index.html" title="mod http_serde::method">method</a></div><div class="desc docblock-short">For <code>http::Method</code></div></li><li><div class="item-name"><a class="mod" href="option/index.html" title="mod http_serde::option">option</a></div><div class="desc docblock-short">Serializers and deserializers for types wrapped in <code>Option</code>.</div></li><li><div class="item-name"><a class="mod" href="status_code/index.html" title="mod http_serde::status_code">status_<wbr>code</a></div><div class="desc docblock-short">For <code>http::StatusCode</code></div></li><li><div class="item-name"><a class="mod" href="uri/index.html" title="mod http_serde::uri">uri</a></div><div class="desc docblock-short">For <code>http::Uri</code></div></li><li><div class="item-name"><a class="mod" href="version/index.html" title="mod http_serde::version">version</a></div><div class="desc docblock-short">For <code>http::Version</code></div></li></ul></section></div></main></body></html>

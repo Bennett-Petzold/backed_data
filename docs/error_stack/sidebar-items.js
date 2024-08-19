@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AttachmentKind","FrameKind"],"macro":["bail","ensure","report"],"mod":["fmt","future","iter"],"struct":["Frame","Report"],"trait":["Context","FutureExt","IntoReportCompat","ResultExt"],"type":["Result"]};

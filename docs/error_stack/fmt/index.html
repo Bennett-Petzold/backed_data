@@ -1,0 +1,246 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Implementation of formatting, to enable colors and the use of box-drawing characters use the `pretty-print` feature."><title>error_stack::fmt - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="error_stack" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (6de928dce 2024-08-18)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../error_stack/index.html">error_<wbr>stack</a><span class="version">0.5.0</span></h2></div><h2 class="location"><a href="#">Module fmt</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li></ul></section><h2><a href="../index.html">In crate error_<wbr>stack</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">error_stack</a>::<wbr><a class="mod" href="#">fmt</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../src/error_stack/fmt/mod.rs.html#1-1177">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Implementation of formatting, to enable colors and the use of box-drawing characters use the
+<code>pretty-print</code> feature.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>error-stack</code> does not provide any stability guarantees for the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> output.</p>
+</blockquote>
+<h2 id="hooks"><a class="doc-anchor" href="#hooks">§</a>Hooks</h2>
+<p>The <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> implementation can be easily extended using hooks. Hooks are functions of the
+signature <code>Fn(&amp;T, &amp;mut HookContext&lt;T&gt;)</code>, they provide an ergonomic way to partially modify the
+output format and enable custom output for types that are not necessarily added via
+<a href="../struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>Report::attach_printable</code></a> or are unable to implement <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a>.</p>
+<p>Hooks can be attached through the central hooking mechanism which <code>error-stack</code>
+provides via <a href="../struct.Report.html#method.install_debug_hook" title="associated function error_stack::Report::install_debug_hook"><code>Report::install_debug_hook</code></a>.</p>
+<p>Hooks are called for contexts which provide additional values through <a href="../trait.Context.html#method.provide" title="method error_stack::Context::provide"><code>Context::provide</code></a> and
+attachments which are added via <a href="../struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>Report::attach</code></a> or <a href="../struct.Report.html#method.attach_printable" title="method error_stack::Report::attach_printable"><code>Report::attach_printable</code></a>. The order of
+<a href="../struct.Report.html#method.install_debug_hook" title="associated function error_stack::Report::install_debug_hook"><code>Report::install_debug_hook</code></a> calls determines the order of the rendered output. Note, that
+Hooks get called on all values provided by <a href="../trait.Context.html#method.provide" title="method error_stack::Context::provide"><code>Context::provide</code></a>, but not on the <a href="../trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>
+object itself. Therefore if you want to call a hook on a <a href="../trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> to print in addition to its
+<a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display"><code>Display</code></a> implementation, you may want to call <a href="https://doc.rust-lang.org/nightly/core/error/struct.Request.html#method.provide_ref" title="method core::error::Request::provide_ref"><code>request.provide_ref(self)</code></a> inside of
+<a href="../trait.Context.html#method.provide" title="method error_stack::Context::provide"><code>Context::provide</code></a>.</p>
+<p>Hook functions need to be <a href="https://doc.rust-lang.org/nightly/core/ops/function/trait.Fn.html" title="trait core::ops::function::Fn"><code>Fn</code></a> and <strong>not</strong> <a href="https://doc.rust-lang.org/nightly/core/ops/function/trait.FnMut.html" title="trait core::ops::function::FnMut"><code>FnMut</code></a>, which means they are unable to directly
+mutate state outside of the closure.
+You can still achieve mutable state outside of the scope of your closure through interior
+mutability, e.g. by using the <a href="https://doc.rust-lang.org/nightly/std/sync/index.html" title="mod std::sync"><code>std::sync</code></a> module like <a href="https://doc.rust-lang.org/nightly/std/sync/mutex/struct.Mutex.html" title="struct std::sync::mutex::Mutex"><code>Mutex</code></a>, <a href="https://doc.rust-lang.org/nightly/std/sync/rwlock/struct.RwLock.html" title="struct std::sync::rwlock::RwLock"><code>RwLock</code></a>, and <a href="https://doc.rust-lang.org/nightly/core/sync/atomic/index.html" title="mod core::sync::atomic"><code>atomic</code></a>s.</p>
+<p>The type, a hook will be called for, is determined by the type of the first argument to the
+closure. This type can either be specified at the closure level or when calling
+<a href="../struct.Report.html#method.install_debug_hook" title="associated function error_stack::Report::install_debug_hook"><code>Report::install_debug_hook</code></a>.
+This type needs to be <code>'static</code>, <a href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send"><code>Send</code></a>, and <a href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync"><code>Sync</code></a>.</p>
+<p>You can then add additional entries to the body with <a href="struct.HookContext.html#method.push_body" title="method error_stack::fmt::HookContext::push_body"><code>HookContext::push_body</code></a>, and entries to
+the appendix with <a href="struct.HookContext.html#method.push_appendix" title="method error_stack::fmt::HookContext::push_appendix"><code>HookContext::push_appendix</code></a>, refer to the documentation of <a href="struct.HookContext.html" title="struct error_stack::fmt::HookContext"><code>HookContext</code></a>
+for further information.</p>
+<h3 id="example"><a class="doc-anchor" href="#example">§</a>Example</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>core::fmt::{Display, Formatter};
+<span class="kw">use </span>std::io::{Error, ErrorKind};
+<span class="kw">use </span>error_stack::Report;
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>ErrorCode(u64);
+
+<span class="kw">impl </span>Display <span class="kw">for </span>ErrorCode {
+  <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, fmt: <span class="kw-2">&amp;mut </span>Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+    <span class="macro">write!</span>(fmt, <span class="string">"error: {}"</span>, <span class="self">self</span>.<span class="number">0</span>)
+  }
+}
+
+<span class="kw">struct </span>Suggestion(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+<span class="kw">struct </span>Warning(<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str);
+
+<span class="comment">// This hook will never be called, because a later invocation of `install_debug_hook` overwrites
+// the hook for the type `ErrorCode`.
+</span>Report::install_debug_hook::&lt;ErrorCode&gt;(|<span class="kw">_</span>, <span class="kw">_</span>| {
+    <span class="macro">unreachable!</span>(<span class="string">"will never be called"</span>);
+});
+
+<span class="comment">// `HookContext` always has a type parameter, which needs to be the same as the type of the
+// value, we use `HookContext` here as storage, to store values specific to this hook.
+// Here we make use of the auto-incrementing feature.
+// The incrementation is type specific, meaning that `context.increment()` for the `Suggestion` hook
+// will not influence the counter of the `ErrorCode` or `Warning` hook.
+</span>Report::install_debug_hook::&lt;Suggestion&gt;(|Suggestion(value), context| {
+    <span class="kw">let </span>idx = context.increment_counter() + <span class="number">1</span>;
+    context.push_body(<span class="macro">format!</span>(<span class="string">"suggestion {idx}: {value}"</span>));
+});
+
+<span class="comment">// Even though we used `attach_printable`, we can still use hooks, `Display` of a type attached
+// via `attach_printable` is only ever used when no hook was found.
+</span>Report::install_debug_hook::&lt;ErrorCode&gt;(|ErrorCode(value), context| {
+    context.push_body(<span class="macro">format!</span>(<span class="string">"error ({value})"</span>));
+});
+
+Report::install_debug_hook::&lt;Warning&gt;(|Warning(value), context| {
+    <span class="kw">let </span>idx = context.increment_counter() + <span class="number">1</span>;
+
+    <span class="comment">// we set a value, which will be removed on non-alternate views
+    // and is going to be appended to the actual return value.
+    </span><span class="kw">if </span>context.alternate() {
+        context.push_appendix(<span class="macro">format!</span>(<span class="string">"warning {idx}:\n  {value}"</span>));
+    }
+
+    context.push_body(<span class="macro">format!</span>(<span class="string">"warning ({idx}) occurred"</span>));
+ });
+
+
+<span class="kw">let </span>report = Report::new(Error::from(ErrorKind::InvalidInput))
+    .attach_printable(ErrorCode(<span class="number">404</span>))
+    .attach(Suggestion(<span class="string">"try to be connected to the internet."</span>))
+    .attach(Suggestion(<span class="string">"try better next time!"</span>))
+    .attach(Warning(<span class="string">"unable to fetch resource"</span>));
+
+<span class="macro">println!</span>(<span class="string">"{report:?}"</span>);
+
+<span class="macro">println!</span>(<span class="string">"{report:#?}"</span>);</code></pre></div>
+<p>The output of <code>println!("{report:?}")</code>:</p>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/mod.rs:58:14</i>
+├╴backtrace (1)
+├╴error (404)
+├╴suggestion 1: try to be connected to the internet.
+├╴suggestion 2: try better next time!
+╰╴warning (1) occurred
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+</pre>
+<p>The output of <code>println!("{report:#?}")</code>:</p>
+<pre>
+<b>invalid input parameter</b>
+├╴at <i>libs/error-stack/src/fmt/mod.rs:58:14</i>
+├╴backtrace (1)
+├╴error (404)
+├╴suggestion 1: try to be connected to the internet.
+├╴suggestion 2: try better next time!
+╰╴warning (1) occurred
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backtrace no. 1
+  [redacted]
+
+warning 1:
+  unable to fetch resource
+</pre>
+<h3 id="implementation-details"><a class="doc-anchor" href="#implementation-details">§</a>Implementation Details</h3>
+<p>Nothing explained here is under any semver guarantee. This section explains the algorithm used
+to produce the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> output of a <a href="../struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>.</p>
+<p>During the explanation we will make use of two different <a href="../struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>s, the overview tree (shown
+first) only visualizes contexts, while the second, more detailed tree shows attachments and
+contexts.</p>
+<p>In the detailed tree the type of <a href="../struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> is distinguished using a superscript letter, <code>ᵃ</code> is
+used to indicate attachments and <code>ᶜ</code> is used to indicate contexts. For clarity the overview tree
+uses digits, while the detailed tree uses letters for different <a href="../struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a>s.</p>
+<p>Overview (Context only) Tree:</p>
+<div class="example-wrap"><pre class="language-text"><code>    0
+    |
+    1
+   / \
+  2   6
+ / \  |
+3   4 7
+    | |
+    5 8
+</code></pre></div>
+<p>Detailed (Context + Attachment) Tree:</p>
+<div class="example-wrap"><pre class="language-text"><code>   Aᶜ
+   |
+   Bᵃ
+  / \
+ Cᵃ  Eᵃ
+ |   |
+ Dᶜ  Fᵃ
+    / \
+   Gᵃ  Iᶜ
+   |
+   Hᶜ
+</code></pre></div>
+<p>During formatting we distinguish between two cases (for contexts):</p>
+<ul>
+<li>Lists</li>
+<li>Groups</li>
+</ul>
+<p>in this explanation lists are delimited by <code>[</code> and <code>]</code>, while groups are delimited by <code>(</code> and
+<code>)</code>.</p>
+<p>While formatting we view the <a href="../struct.Report.html" title="struct error_stack::Report"><code>Report</code></a>s as a tree of <a href="../struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a>s, therefore the following
+explanation will use terminology associated with trees, every <a href="../struct.Frame.html" title="struct error_stack::Frame"><code>Frame</code></a> is a node and can have
+<code>0..n</code> children, a node that has no children (a leaf) is guaranteed to be a <a href="../trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>.</p>
+<p>A list is a list of nodes where each node in the list is the parent of the next node in the list
+and only has a single child. The last node in the list is exempt of that rule of that rule and
+can have <code>0..n</code> children. In the examples above, <code>[6, 7, 8]</code> is considered a list, while <code>[1, 6]</code> is not, because while <code>1</code> is a parent of <code>6</code>, <code>1</code> has more than 1 child.</p>
+<p>A group is a list of nodes where each node shares a common immediate context parent that has
+more than <code>1</code> child, this means that <code>(2, 6)</code> is a group (they share <code>1</code> as an immediate context
+parent), while <code>(3, 4, 6)</code> is not. <code>(3, 4, 6)</code> share the same parent with more than 1 child
+(<code>1</code>), but <code>1</code> is not the immediate context parent of <code>3</code> and <code>4</code> (<code>2</code>) is. In the more detailed
+example <code>(Dᶜ, Hᶜ, Iᶜ)</code> is considered a group because they share the same <em>immediate</em> context
+parent <code>Aᶜ</code>, important to note is that we only refer to immediate context parents, <code>Fᵃ</code> is the
+immediate parent of <code>Iᶜ</code>, but is not a <a href="../trait.Context.html" title="trait error_stack::Context"><code>Context</code></a>, therefore to find the immediate context
+parent, we travel up the tree until we encounter our first <a href="../trait.Context.html" title="trait error_stack::Context"><code>Context</code></a> node. Groups always
+contain lists, for the sake of clarity this explanation only shows the first element.</p>
+<p>The rules stated above also implies some additional rules:</p>
+<ul>
+<li>lists are never empty</li>
+<li>lists are nested in groups</li>
+<li>groups are always preceded by a single list</li>
+<li>groups are ordered left to right</li>
+</ul>
+<p>Using the aforementioned delimiters for lists and groups the end result would be:</p>
+<p>Overview Tree: <code>[0, 1] ([2] ([3], [4, 5]), [6, 7, 8])</code>
+Detailed Tree: <code>[Aᶜ] ([Dᶜ], [Hᶜ], [Iᶜ])</code></p>
+<p>Attachments are not ordered by insertion order but by depth in the tree. The depth in the tree
+is the inverse of the insertion order, this means that the <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug"><code>Debug</code></a> output of all
+attachments is reversed from the calling order of <a href="../struct.Report.html#method.attach" title="method error_stack::Report::attach"><code>Report::attach</code></a>. Each context uses the
+attachments that are it’s parents until the next context node. If attachments are shared between
+multiple contexts, they are duplicated and output twice.</p>
+<p>Groups are always preceded by a single list, the only case where this is not true is at the top
+level, in that case we opt to output separate trees for each member in the group.</p>
+<h4 id="output-formatting"><a class="doc-anchor" href="#output-formatting">§</a>Output Formatting</h4>
+<p>Lists are guaranteed to be non-empty and have at least a single context. The context is the
+heading of the whole list, while all other contexts are intended. The last entry in that
+indentation is (if present) the group that follows, taking the detailed example this means that
+the following output would be rendered:</p>
+<div class="example-wrap"><pre class="language-text"><code>Aᶜ
+│
+╰┬▶ Dᶜ
+ │  ├╴Bᵃ
+ │  ╰╴Cᵃ
+ │
+ ├▶ Hᶜ
+ │  ├╴Bᵃ
+ │  ├╴Eᵃ
+ │  ├╴Fᵃ
+ │  ╰╴Gᵃ
+ │
+ ╰▶ Iᶜ
+    ├╴Bᵃ
+    ├╴Eᵃ
+    ╰╴Fᵃ
+</code></pre></div>
+<p>Groups are visually represented as an additional distinct indentation for other contexts in the
+preceding list, taking the overview tree this means:</p>
+<div class="example-wrap"><pre class="language-text"><code>0
+├╴Attachment
+│
+├─▶ 1
+│   ╰╴Attachment
+│
+╰┬▶ 2
+ │  │
+ │  ╰┬▶ 3
+ │   │
+ │   ╰▶ 4
+ │      │
+ │      ╰─▶ 5
+ ╰▶ 6
+    │
+    ├─▶ 7
+    │
+    ╰─▶ 8
+</code></pre></div>
+<p>Attachments have been added to various places to simulate a real use-case with attachments and
+to visualise their placement.</p>
+<p>The spacing and characters used are chosen carefully, to reduce indentation and increase visual
+legibility in large trees. The indentation of the group following the last entry in the
+preceding list is the same. To indicate that the last entry in the preceding list is the parent
+a new indentation of the connecting line is used.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.HookContext.html" title="struct error_stack::fmt::HookContext">Hook<wbr>Context</a><wbr><span class="stab portability" title="Available on crate features `std` or `hooks` only"><code>std</code> or <code>hooks</code></span></div><div class="desc docblock-short">Carrier for contextual information used across hook invocations.</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.Charset.html" title="enum error_stack::fmt::Charset">Charset</a></div><div class="desc docblock-short">The available supported charsets</div></li><li><div class="item-name"><a class="enum" href="enum.ColorMode.html" title="enum error_stack::fmt::ColorMode">Color<wbr>Mode</a></div><div class="desc docblock-short">The available modes of color support</div></li></ul></section></div></main></body></html>
