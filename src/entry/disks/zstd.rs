@@ -216,7 +216,7 @@ impl<T: Write> Write for ZstdEncoderWrapper<'_, T> {
 impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEVEL, B> {
     type WriteDisk = ZstdEncoderWrapper<'a, B::WriteDisk>;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         #[allow(unused_mut)]
         let mut encoder = Encoder::new(
             self.inner.write_disk()?,
@@ -254,7 +254,7 @@ impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
 {
     type WriteDisk = async_compression::futures::write::ZstdEncoder<B::WriteDisk>;
 
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         let disk = self.inner.async_write_disk().await?;
 
         #[cfg(feature = "async_zstdmt")]
@@ -310,7 +310,7 @@ mod tests {
         };
         assert!(backing.get_ref().is_empty());
 
-        let zstd = ZstdDisk::<0, _>::new(backing);
+        let mut zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.write_disk().unwrap();
         write.write_all(TEST_SEQUENCE).unwrap();
         write.flush().unwrap();
@@ -341,7 +341,7 @@ mod tests {
         };
         assert!(backing.get_ref().is_empty());
 
-        let zstd = ZstdDisk::<0, _>::new(backing);
+        let mut zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.async_write_disk().await.unwrap();
         write.write_all(TEST_SEQUENCE).await.unwrap();
         write.flush().await.unwrap();
@@ -382,7 +382,7 @@ mod tests {
         const TEST_SEQUENCE: &[u8] = &[39, 3, 6, 7, 5];
         let backing = OwnedCursorVec::new(Cursor::default());
 
-        let zstd = ZstdDisk::<0, _>::new(backing);
+        let mut zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.write_disk().unwrap();
         BincodeCoder::<&[u8]>::default()
             .encode(&TEST_SEQUENCE, &mut write)

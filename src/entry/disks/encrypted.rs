@@ -514,7 +514,7 @@ impl<B> EncryptedWriter<'_, B> {
 impl<'a, B: WriteDisk> WriteDisk for Encrypted<'a, B> {
     type WriteDisk = EncryptedWriter<'a, B::WriteDisk>;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         Ok(EncryptedWriter::new(
             self.inner.write_disk()?,
             self.secrets.clone(),
@@ -597,7 +597,7 @@ mod async_impl {
     impl<'a, B: WriteDisk, FE, FD> WriteDisk for AsyncEncrypted<'a, B, FE, FD> {
         type WriteDisk = EncryptedWriter<'a, B::WriteDisk>;
 
-        fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
             self.sync.write_disk()
         }
     }
@@ -826,7 +826,7 @@ mod async_impl {
     {
         type WriteDisk = AsyncEncryptedWriter<'a, B::WriteDisk, FE, R>;
 
-        async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+        async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
             let write_disk = self.inner.async_write_disk().await?;
             let handle_ptr: *const _ = &self.encrypt_handle;
             Ok(AsyncEncryptedWriter::new(

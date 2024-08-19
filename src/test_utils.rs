@@ -94,7 +94,7 @@ impl<'a> ReadDisk for CursorVec<'a> {
 impl<'a> WriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         let mut this = self.inner.lock().unwrap();
         this.get_mut().clear();
         this.rewind()?;
@@ -118,7 +118,7 @@ impl<'a> AsyncReadDisk for CursorVec<'a> {
 impl<'a> AsyncWriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Vec<u8>;
 
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         let mut this = self.inner.lock().unwrap();
         this.get_mut().clear();
         this.rewind()?;
@@ -137,18 +137,6 @@ impl<'a> ReadDisk for &'a mut CursorVec<'a> {
     }
 }
 
-impl<'a> WriteDisk for &'a mut CursorVec<'a> {
-    type WriteDisk = &'a mut Cursor<Vec<u8>>;
-
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        let mut this = self.inner.lock().unwrap();
-        this.get_mut().clear();
-        this.rewind()?;
-        let this: *mut _ = this.deref_mut();
-        unsafe { Ok(&mut *this) }
-    }
-}
-
 #[cfg(feature = "async")]
 impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
     type ReadDisk = &'a [u8];
@@ -157,19 +145,6 @@ impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
         self.inner.lock().unwrap().rewind()?;
         let this: *const _ = &**self.inner.lock().unwrap().get_ref();
         Ok(unsafe { &*this })
-    }
-}
-
-#[cfg(feature = "async")]
-impl<'a> AsyncWriteDisk for &mut CursorVec<'a> {
-    type WriteDisk = &'a mut Vec<u8>;
-
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        let mut this = self.inner.lock().unwrap();
-        this.get_mut().clear();
-        this.rewind()?;
-        let this: *mut _ = this.get_mut();
-        unsafe { Ok(&mut *this) }
     }
 }
 
@@ -235,7 +210,7 @@ impl ReadDisk for OwnedCursorVec<'_> {
 impl<'a> WriteDisk for OwnedCursorVec<'a> {
     type WriteDisk = &'a mut Cursor<Vec<u8>>;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         let mut this = self.inner.lock().unwrap();
         this.get_mut().clear();
         this.rewind()?;
@@ -259,7 +234,7 @@ impl<'a> AsyncReadDisk for OwnedCursorVec<'a> {
 impl<'a> AsyncWriteDisk for OwnedCursorVec<'a> {
     type WriteDisk = &'a mut Vec<u8>;
 
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         let mut this = self.inner.lock().unwrap();
         this.get_mut().clear();
         this.rewind()?;

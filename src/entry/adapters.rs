@@ -400,7 +400,7 @@ impl<W: Write> BlockingFn for SyncAsAsyncWriteBg<W> {
 }
 
 impl SyncAsAsyncWrite {
-    fn new<W, F>(writer: &W, handle: &F, buffer_min_size: usize) -> std::io::Result<Self>
+    fn new<W, F>(writer: &mut W, handle: &F, buffer_min_size: usize) -> std::io::Result<Self>
     where
         W: WriteDisk,
         F: Fn(SyncAsAsyncWriteBg<W::WriteDisk>),
@@ -515,7 +515,7 @@ where
 {
     type WriteDisk = W::WriteDisk;
 
-    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         self.inner.write_disk()
     }
 }
@@ -523,13 +523,17 @@ where
 impl<W, RF, WF> AsyncWriteDisk for SyncAsAsync<W, RF, WF>
 where
     W: WriteDisk + Send + Sync,
-    RF: Unpin + Sync,
+    RF: Unpin + Sync + Send,
     WF: Fn(SyncAsAsyncWriteBg<W::WriteDisk>) + Send + Sync,
 {
     type WriteDisk = SyncAsAsyncWrite;
 
-    async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
-        SyncAsAsyncWrite::new(&self.inner, &self.write_handle, self.write_buffer_min_size)
+    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+        SyncAsAsyncWrite::new(
+            &mut self.inner,
+            &self.write_handle,
+            self.write_buffer_min_size,
+        )
     }
 }
 

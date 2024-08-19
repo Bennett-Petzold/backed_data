@@ -43,7 +43,7 @@ mod not_windows {
     pub async fn example() {
         let backing_file = temp_dir().join("backed_array_async_mmap");
 
-        let disk = SyncAsAsync::new(
+        let mut disk = SyncAsAsync::new(
             Mmap::try_from(backing_file.clone()).unwrap(),
             |x: SyncAsAsyncReadBg<ReadMmapCursor>| {
                 spawn_blocking(|| x.call());

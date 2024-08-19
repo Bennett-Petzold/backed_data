@@ -42,7 +42,7 @@ mod not_windows {
 
         let backing_file = temp_dir().join("backed_array_mmap");
 
-        let disk = Mmap::try_from(backing_file.clone()).unwrap();
+        let mut disk = Mmap::try_from(backing_file.clone()).unwrap();
 
         let mut write_disk = disk.write_disk().unwrap();
 
