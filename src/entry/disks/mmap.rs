@@ -246,13 +246,10 @@ impl SwitchingMmap {
 
                     read_ret(mmap)
                 }
-                Err(_) => {
-                    panic!(
-                        "Attempted to open ReadMmap with WriteMmap open.\n
-                        Since WriteMmap is opened with `&mut Mmap`, and this function needs `&Mmap`,
-                        Rust's borrow checking rules should make this impossible."
-                    )
-                }
+                Err(arc) => Err((
+                    Self::WriteMmap(arc),
+                    std::io::Error::new(ErrorKind::Other, "A write handle is currently open"),
+                )),
             },
             Self::ReadMmap(x) => read_ret(x),
             Self::Invalid => match ReadMmap::new_arc(path) {
@@ -300,12 +297,11 @@ impl SwitchingMmap {
                         }
                     },
                 },
-                Err(_) => {
-                    panic!(
-                        "Attempted to open WriteMmap with ReadMmap open.\n
-                        Since ReadMmap is opened with `&Mmap`, and this function needs `&mut Mmap`,
-                        Rust's borrow checking rules should make this impossible."
-                    )
+                Err(arc) => {
+                    return Err((
+                        Self::ReadMmap(arc),
+                        std::io::Error::new(ErrorKind::Other, "A read handle is currently open"),
+                    ));
                 }
             },
             Self::Invalid => match MmapWriter::no_advise(path) {
