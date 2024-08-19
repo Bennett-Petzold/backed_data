@@ -62,4 +62,13 @@ modifying the file. `unsafe` is also used for mutable mmaps, so that it can
 be preserved after the write handle is dropped but enforce mutability rules
 at runtime. Otherwise the mmap would be pointlessly read again from disk
 when the write handle is dropped and read handles are opened.
+
+### `encrypted`
+[`Bytes`][`secrets::traits::Bytes`] needs an unsafe block to extend a blanket implementation.
+[`Send`] and [`Sync`] standard library *lints* around pointers (not necessarily protecting from
+unsafe behavior, just the potential of pointer hackery that breaks those rules) also need unsafe to bypass.
+
+There is also a use of [`BorrowExtender`][`crate::utils::BorrowExtender`] that requires a bit of lifetime
+hacking to match the valid lifetime of the borrow.
+
 */
