@@ -1,3 +1,14 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Defines adapters that allow synchronous [`disks`][`super::disks`] and/or
+[format encoders][`super::formats`] to be used asynchronously.
+*/
+
 use std::{
     cmp::min,
     future::Future,

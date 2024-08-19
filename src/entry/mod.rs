@@ -1,3 +1,15 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Defines [`BackedEntry`], the core of this library.
+
+Also defines [`disks`] and [`formats`], which define the backing for [`BackedEntry`].
+*/
+
 use std::{cell::OnceCell, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};
@@ -20,7 +32,9 @@ pub mod adapters;
 #[cfg(feature = "async")]
 pub use adapters::SyncAsAsync;
 
-/// Entry kept on some backing storage, loaded into memory on request.
+/// Entry kept on some backing storage, loaded into memory on usage.
+///
+/// Unloading is explicit.
 ///
 /// Use a heap pointer type or [`BackedEntryBox`], otherwise this will occupy
 /// the full type size even when unloaded.
@@ -82,7 +96,7 @@ pub type BackedEntryLock<T, Disk, Coder> = BackedEntry<OnceLock<T>, Disk, Coder>
 /// * `Coder`: an implementor of [`AsyncEncoder`](`formats::AsyncEncoder`) and/or [`AsyncDecoder`](`formats::AsyncDecoder`).
 pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<tokio::sync::OnceCell<T>, Disk, Coder>;
 
-/// Specialized typedef of [`BackedEntry`] for non-pointer types.
+/// Thread-unsafe typedef of [`BackedEntry`] for non-pointer types.
 ///
 /// # Example
 ///
@@ -114,9 +128,41 @@ pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<tokio::sync::OnceCell<T>
 /// }
 /// ```
 pub type BackedEntryBox<T, Disk, Coder> = BackedEntryCell<Box<T>, Disk, Coder>;
+
+/// Thread-safe typedef of [`BackedEntry`] for non-pointer types.
+///
+/// # Example
+///
+/// ```rust
+/// #[cfg(feature = "bincode")] {
+///     use std::fs::{File, remove_file};
+///     use backed_data::entry::{
+///         BackedEntryBoxLock,
+///         formats::BincodeCoder,
+///         disks::Plainfile,
+///     };
+///
+///     let FILENAME = std::env::temp_dir().join("example_box_safe");
+///     let file = Plainfile::new(FILENAME.clone());
+///
+///     // Write string to file
+///     let mut writer: BackedEntryBoxLock<str, _, BincodeCoder<Box<str>>> =
+///         BackedEntryBoxLock::with_disk(file.clone());
+///     writer.write_unload("HELLO I AM A STRING").unwrap();
+///     drop(writer);
+///
+///     // Read string from file
+///     let mut sparse: BackedEntryBoxLock<str, _, BincodeCoder<_>> =
+///         BackedEntryBoxLock::with_disk(file.clone());
+///     assert_eq!(sparse.load().unwrap().as_ref(), "HELLO I AM A STRING");
+///
+///     // Cleanup
+///     remove_file(FILENAME).unwrap();
+/// }
+/// ```
 pub type BackedEntryBoxLock<T, Disk, Coder> = BackedEntryLock<Box<T>, Disk, Coder>;
 
-/// Specialized typedef of [`BackedEntry`] for arrays.
+/// Thread-unsafe typedef of [`BackedEntry`] for arrays.
 ///
 /// # Example
 ///
@@ -148,6 +194,38 @@ pub type BackedEntryBoxLock<T, Disk, Coder> = BackedEntryLock<Box<T>, Disk, Code
 /// }
 /// ```
 pub type BackedEntryArr<T, Disk, Coder> = BackedEntryBox<[T], Disk, Coder>;
+
+/// Thread-safe typedef of [`BackedEntry`] for arrays.
+///
+/// # Example
+///
+/// ```rust
+/// #[cfg(feature = "bincode")] {
+///     use std::fs::{File, remove_file};
+///     use backed_data::entry::{
+///         BackedEntryArrLock,
+///         formats::BincodeCoder,
+///         disks::Plainfile,
+///     };
+///    
+///     let FILENAME = std::env::temp_dir().join("example_array_safe");
+///     let file = Plainfile::new(FILENAME.clone());
+///    
+///     // Write array to file
+///     let mut writer: BackedEntryArrLock<u8, _, BincodeCoder<_>> = BackedEntryArrLock::new(file.clone(),
+///         BincodeCoder::default());
+///     writer.write_unload([1, 2, 3]).unwrap();
+///     drop(writer);
+///    
+///     // Read array from file
+///     let mut sparse: BackedEntryArrLock<u8, _, _> = BackedEntryArrLock::new(file.clone(),
+///         BincodeCoder::default());
+///     assert_eq!(sparse.load().unwrap().as_ref(), [1, 2, 3]);
+///    
+///     // Cleanup
+///     remove_file(FILENAME).unwrap();
+/// }
+/// ```
 pub type BackedEntryArrLock<T, Disk, Coder> = BackedEntryBoxLock<[T], Disk, Coder>;
 
 // ----- Initializations ----- //

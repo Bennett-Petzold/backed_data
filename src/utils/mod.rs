@@ -1,9 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Backbone traits and structs for the library implementation.
+*/
+
 #[cfg(feature = "async")]
 pub mod blocking;
 
-#[cfg(any(feature = "array", feature = "encrypted", feature = "mmap"))]
+#[cfg(any(feature = "unsafe_array", feature = "encrypted", feature = "mmap"))]
 mod extender;
-#[cfg(any(feature = "array", feature = "encrypted", feature = "mmap"))]
+#[cfg(any(feature = "unsafe_array", feature = "encrypted", feature = "mmap"))]
 pub use extender::*;
 
 mod protected;

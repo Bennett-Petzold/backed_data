@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
@@ -6,7 +12,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::{ReadDisk, WriteDisk};
+use super::{ReadDisk, Unbuffered, WriteDisk, WriteUnbuffered};
+
+#[cfg(mmap_impl)]
+use super::Mmap;
 
 #[cfg(feature = "async")]
 use super::{AsyncReadDisk, AsyncWriteDisk};
@@ -88,5 +97,25 @@ impl AsyncWriteDisk for Plainfile {
         Ok(futures::io::BufWriter::new(
             super::async_file::write_file(self.path.clone()).await?,
         ))
+    }
+}
+
+impl From<Plainfile> for WriteUnbuffered {
+    fn from(value: Plainfile) -> Self {
+        Self::new(value.path)
+    }
+}
+
+impl From<Plainfile> for Unbuffered {
+    fn from(value: Plainfile) -> Self {
+        Self::new(value.path)
+    }
+}
+
+#[cfg(mmap_impl)]
+impl TryFrom<Plainfile> for Mmap {
+    type Error = std::io::Error;
+    fn try_from(value: Plainfile) -> std::io::Result<Self> {
+        Self::new(value.path)
     }
 }

@@ -1,7 +1,16 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Defines generic container types.
+*/
+
 use std::ops::{Deref, DerefMut};
 
 use serde::{Deserialize, Serialize};
-use stable_deref_trait::StableDeref;
 
 use crate::{
     entry::{
@@ -12,15 +21,40 @@ use crate::{
     utils::Once,
 };
 
+#[cfg(feature = "unsafe_array")]
+use stable_deref_trait::StableDeref;
+
+/// Requires [`stable_deref_trait::StableDeref`] when `unsafe` code is enabled.
+///
+/// If unsafe code is not enabled, this implements for everything. This hackery
+/// gets around a trap between borrow checker limitations and
+/// `forbid(unsafe_code)` limitations.
+#[cfg(not(feature = "unsafe_array"))]
+pub trait StableDerefFeatureOpt {}
+
+#[cfg(not(feature = "unsafe_array"))]
+impl<T: ?Sized> StableDerefFeatureOpt for T {}
+
+/// Requires [`stable_deref_trait::StableDeref`] when `unsafe` code is enabled.
+///
+/// If unsafe code is not enabled, this implements for everything. This hackery
+/// gets around a trap between borrow checker limitations and
+/// `forbid(unsafe_code)` limitations.
+#[cfg(feature = "unsafe_array")]
+pub trait StableDerefFeatureOpt: StableDeref {}
+
+#[cfg(feature = "unsafe_array")]
+impl<T> StableDerefFeatureOpt for T where T: StableDeref + ?Sized {}
+
 pub trait RefIter<T> {
-    type IterRef<'b>: AsRef<T> + Deref<Target = T> + StableDeref
+    type IterRef<'b>: AsRef<T> + Deref<Target = T> + StableDerefFeatureOpt
     where
         Self: 'b;
     fn ref_iter(&self) -> impl Iterator<Item = Self::IterRef<'_>>;
 }
 
 pub trait MutIter<T> {
-    type IterMut<'b>: AsMut<T> + DerefMut<Target = T> + StableDeref
+    type IterMut<'b>: AsMut<T> + DerefMut<Target = T> + StableDerefFeatureOpt
     where
         Self: 'b;
     fn mut_iter(&mut self) -> impl Iterator<Item = Self::IterMut<'_>>;
@@ -28,23 +62,25 @@ pub trait MutIter<T> {
 
 /// Generic wrapper for any container type.
 ///
-/// Methods are prepended with `c_*` to avoid namespace conflicts.
-///
+/// This is implemented over standard Rust containers ([`Vec`], boxed slices,
+/// etc.) in addition to more exotic types.
 /// `&[T]` is insufficiently generic for types that return a ref handle to `T`,
 /// instead of `&T` directly, so this allows for more complex container types.
+///
+/// Methods are prepended with `c_*` to avoid namespace conflicts.
 pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
     /// The data container entries give references to.
     type Data;
-    type Ref<'b>: AsRef<Self::Data> + Deref<Target = Self::Data> + StableDeref
+    type Ref<'b>: AsRef<Self::Data> + Deref<Target = Self::Data> + StableDerefFeatureOpt
     where
         Self: 'b;
-    type Mut<'b>: AsMut<Self::Data> + DerefMut<Target = Self::Data> + StableDeref
+    type Mut<'b>: AsMut<Self::Data> + DerefMut<Target = Self::Data> + StableDerefFeatureOpt
     where
         Self: 'b;
-    type RefSlice<'b>: AsRef<[Self::Data]> + Deref<Target = [Self::Data]> + StableDeref
+    type RefSlice<'b>: AsRef<[Self::Data]> + Deref<Target = [Self::Data]> + StableDerefFeatureOpt
     where
         Self: 'b;
-    type MutSlice<'b>: AsMut<[Self::Data]> + DerefMut<Target = [Self::Data]> + StableDeref
+    type MutSlice<'b>: AsMut<[Self::Data]> + DerefMut<Target = [Self::Data]> + StableDerefFeatureOpt
     where
         Self: 'b;
 
@@ -66,7 +102,7 @@ pub trait ResizingContainer:
 
 /// A [`BackedEntry`] holding a valid [`Container`] type.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainer {
     type Container;
     type Disk;
@@ -95,7 +131,7 @@ impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc> {
 
 /// A [`BackedEntryContainer`] inside a [`Container`].
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNested:
     Container<
     Data: BackedEntryContainer<
@@ -133,9 +169,9 @@ where
     type Coder = <T::Data as BackedEntryContainer>::Coder;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`] variant that has reading.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedRead:
     BackedEntryContainerNested<
     Unwrapped: for<'de> Deserialize<'de>,
@@ -161,9 +197,9 @@ where
     type ReadError = <Self::Coder as Decoder<<Self::Disk as ReadDisk>::ReadDisk>>::Error;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`] variant that has writing.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedWrite:
     BackedEntryContainerNested<
     Unwrapped: Serialize,
@@ -189,9 +225,9 @@ where
     type WriteError = <Self::Coder as Encoder<<Self::Disk as WriteDisk>::WriteDisk>>::Error;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`] variant that has writing and reading.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedAll:
     BackedEntryContainerNestedRead + BackedEntryContainerNestedWrite
 {

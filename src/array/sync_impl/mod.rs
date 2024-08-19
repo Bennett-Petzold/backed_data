@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::{
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
@@ -292,18 +298,22 @@ where
 {
     /// Builds [`self`] from existing backings.
     ///
+    /// The (len, backing) pairs must be equal length. Otherwise this will
+    /// return None.
+    ///
     /// # Parameters
     /// * `iter`: Iterator of (len, backing) pairs.
-    ///
-    /// # Safety
-    /// Each len argument MUST be correct, otherwise this container is
-    /// incorrectly defined and may crash from an incorrect range address.
-    pub unsafe fn from_backing<I>(iter: I) -> Self
+    pub fn from_backing<I>(iter: I) -> Option<Self>
     where
         I: IntoIterator<Item = (usize, E::Data)>,
     {
         let mut range_start = 0;
         let (keys, entries): (Vec<_>, Vec<_>) = iter.into_iter().unzip();
+
+        if keys.len() != entries.len() {
+            return None;
+        }
+
         let (key_starts, key_ends): (Vec<_>, Vec<_>) = keys
             .into_iter()
             .map(|k| {
@@ -312,11 +322,11 @@ where
                 (k, prev_start)
             })
             .unzip();
-        Self {
+        Some(Self {
             key_starts: key_starts.into(),
             key_ends: key_ends.into(),
             entries: entries.into(),
-        }
+        })
     }
 }
 

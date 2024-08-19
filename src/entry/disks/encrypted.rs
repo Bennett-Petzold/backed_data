@@ -1,3 +1,13 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Defines memory protected storage that encrypts to disk.
+*/
+
 use std::{
     io::{Cursor, Read, Write},
     marker::PhantomData,
@@ -158,14 +168,20 @@ fn random_key_nonce() -> SecretBox<KeyNonce> {
     SecretBox::random()
 }
 
-/// A resource encrypted with Aes256Gcm.
+/// A resource encrypted with Aes256Gcm on some underlying [`disk`][`super`].
 ///
-/// Secrets and decrypted data are stored in [`SecretBox`], which minimizes
-/// the risk of memory being snooped (see [`secrets`] for details).
+/// Secrets and intermediate processing are stored in [`SecretBox`], which minimizes
+/// the risk of memory being snooped (see [`secrets`] for details). This does not
+/// protect the code read from this disk, so read into [`SecretVecWrapper`] to keep
+/// memory guards in place beyond encryption and decryption.
 ///
 /// The secrets are excluded from serialization and deserialization, being
 /// set with garbage data on deserialization. Use [`Self::set_key`] and
 /// [`Self::set_nonce`] to initialize secrets after deserialization.
+///
+/// Since encryption uses an internal buffer for reading/writing,
+/// [`Unbuffered`][`super::Unbuffered`] is more efficient than
+/// [`Plainfile`][`super::Plainfile`].
 #[derive(Serialize, Deserialize)]
 pub struct Encrypted<'a, B> {
     inner: B,

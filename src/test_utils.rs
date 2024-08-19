@@ -1,3 +1,16 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Defines tools used for ONLY testing.
+
+This should not be used by any library consumer code. Some of this module is
+deliberately undefined/unsafe for testing purposes.
+*/
+
 use core::panic;
 use std::{
     io::{Cursor, Seek},
@@ -13,6 +26,9 @@ use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
 
 use crate::entry::disks::{ReadDisk, WriteDisk};
 
+/// Unsafe storage disk that allows for memory peeking during modification.
+///
+/// FOR TESTING PURPOSES ONLY.
 #[derive(Debug, Serialize)]
 pub struct CursorVec<'a> {
     #[serde(skip)]
@@ -28,6 +44,8 @@ impl<'a> CursorVec<'a> {
 }
 
 /// Creates a default [`CursorVec`] for testing.
+///
+/// FOR TESTING PURPOSES ONLY.
 #[macro_export]
 macro_rules! cursor_vec {
     ($x: ident, $peek: ident) => {

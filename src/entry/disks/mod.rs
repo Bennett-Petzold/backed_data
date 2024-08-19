@@ -1,3 +1,16 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+Defines the underlying storage for [`BackedEntry`][`super::BackedEntry`].
+
+The types [`Plainfile`], [`WriteUnbuffered`], [`Unbuffered`], and [`Mmap`] are
+completely interchangeable. A disk written to by one can be read by another.
+*/
+
 use std::io::{Read, Write};
 
 #[cfg(feature = "async")]
@@ -6,17 +19,20 @@ use {
     std::future::Future,
 };
 
+/// Produces storage that can be read from synchronously.
 pub trait ReadDisk {
     type ReadDisk: Read;
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk>;
 }
 
+/// Produces storage that can be written to synchronously.
 pub trait WriteDisk {
     type WriteDisk: Write;
     fn write_disk(&self) -> std::io::Result<Self::WriteDisk>;
 }
 
 #[cfg(feature = "async")]
+/// Produces storage that can be read from asynchronously.
 pub trait AsyncReadDisk {
     type ReadDisk: AsyncRead + Unpin;
     fn async_read_disk(
@@ -25,6 +41,7 @@ pub trait AsyncReadDisk {
 }
 
 #[cfg(feature = "async")]
+/// Produces storage that can be written to asynchronously.
 pub trait AsyncWriteDisk {
     type WriteDisk: AsyncWrite + Unpin;
     fn async_write_disk(

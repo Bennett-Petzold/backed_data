@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build docs
-        run: RUSTDOCFLAGS='--cfg docsrs' cargo doc --all-features --no-deps
+        run: RUSTDOCFLAGS='--cfg docsrs' cargo doc --all-features
 
       - name: Add redirect
         run: echo '<meta http-equiv="refresh" content="0;url=backed_data/index.html">' > target/doc/index.html
