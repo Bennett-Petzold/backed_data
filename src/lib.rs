@@ -137,6 +137,7 @@ PR if:
 
 pub mod entry;
 pub mod examples;
+pub mod extra_docs;
 pub mod utils;
 
 #[cfg(feature = "array")]
@@ -147,15 +148,15 @@ pub mod directory;
 #[cfg(any(test, feature = "test"))]
 pub mod test_utils;
 
-pub mod extra_docs;
-
 pub use entry::{BackedEntryArr, BackedEntryArrLock, BackedEntryCell, BackedEntryLock};
 
 #[cfg(feature = "async")]
 pub use entry::BackedEntryAsync;
 
+#[cfg(feature = "array")]
 pub use array::VecBackedArray;
 
+#[cfg(feature = "directory")]
 pub use directory::StdDirBackedArray;
 
 #[cfg(feature = "zstd")]
