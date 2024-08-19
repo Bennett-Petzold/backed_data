@@ -620,7 +620,7 @@ to build a program that is LTO compatible with `zstd`'s generated C LTO.
 </span><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, <span class="kw">const </span>ZSTD_LEVEL: u8, B: WriteDisk&gt; WriteDisk <span class="kw">for </span>ZstdDisk&lt;<span class="lifetime">'a</span>, ZSTD_LEVEL, B&gt; {
     <span class="kw">type </span>WriteDisk = ZstdEncoderWrapper&lt;<span class="lifetime">'a</span>, B::WriteDisk&gt;;
 
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         <span class="attr">#[allow(unused_mut)]
         </span><span class="kw">let </span><span class="kw-2">mut </span>encoder = Encoder::new(
             <span class="self">self</span>.inner.write_disk()<span class="question-mark">?</span>,
@@ -658,7 +658,7 @@ to build a program that is LTO compatible with `zstd`'s generated C LTO.
 {
     <span class="kw">type </span>WriteDisk = async_compression::futures::write::ZstdEncoder&lt;B::WriteDisk&gt;;
 
-    <span class="kw">async fn </span>async_write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">async fn </span>async_write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         <span class="kw">let </span>disk = <span class="self">self</span>.inner.async_write_disk().<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="attr">#[cfg(feature = <span class="string">"async_zstdmt"</span>)]
@@ -714,7 +714,7 @@ to build a program that is LTO compatible with `zstd`'s generated C LTO.
         };
         <span class="macro">assert!</span>(backing.get_ref().is_empty());
 
-        <span class="kw">let </span>zstd = ZstdDisk::&lt;<span class="number">0</span>, <span class="kw">_</span>&gt;::new(backing);
+        <span class="kw">let </span><span class="kw-2">mut </span>zstd = ZstdDisk::&lt;<span class="number">0</span>, <span class="kw">_</span>&gt;::new(backing);
         <span class="kw">let </span><span class="kw-2">mut </span>write = zstd.write_disk().unwrap();
         write.write_all(TEST_SEQUENCE).unwrap();
         write.flush().unwrap();
@@ -745,7 +745,7 @@ to build a program that is LTO compatible with `zstd`'s generated C LTO.
         };
         <span class="macro">assert!</span>(backing.get_ref().is_empty());
 
-        <span class="kw">let </span>zstd = ZstdDisk::&lt;<span class="number">0</span>, <span class="kw">_</span>&gt;::new(backing);
+        <span class="kw">let </span><span class="kw-2">mut </span>zstd = ZstdDisk::&lt;<span class="number">0</span>, <span class="kw">_</span>&gt;::new(backing);
         <span class="kw">let </span><span class="kw-2">mut </span>write = zstd.async_write_disk().<span class="kw">await</span>.unwrap();
         write.write_all(TEST_SEQUENCE).<span class="kw">await</span>.unwrap();
         write.flush().<span class="kw">await</span>.unwrap();
@@ -786,7 +786,7 @@ to build a program that is LTO compatible with `zstd`'s generated C LTO.
         <span class="kw">const </span>TEST_SEQUENCE: <span class="kw-2">&amp;</span>[u8] = <span class="kw-2">&amp;</span>[<span class="number">39</span>, <span class="number">3</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">5</span>];
         <span class="kw">let </span>backing = OwnedCursorVec::new(Cursor::default());
 
-        <span class="kw">let </span>zstd = ZstdDisk::&lt;<span class="number">0</span>, <span class="kw">_</span>&gt;::new(backing);
+        <span class="kw">let </span><span class="kw-2">mut </span>zstd = ZstdDisk::&lt;<span class="number">0</span>, <span class="kw">_</span>&gt;::new(backing);
         <span class="kw">let </span><span class="kw-2">mut </span>write = zstd.write_disk().unwrap();
         BincodeCoder::&lt;<span class="kw-2">&amp;</span>[u8]&gt;::default()
             .encode(<span class="kw-2">&amp;</span>TEST_SEQUENCE, <span class="kw-2">&amp;mut </span>write)

@@ -148,7 +148,7 @@ completely interchangeable. A disk written to by one can be read by another.
 <span class="doccomment">/// Produces storage that can be written to synchronously.
 </span><span class="kw">pub trait </span>WriteDisk {
     <span class="kw">type </span>WriteDisk: Write;
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;;
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;;
 }
 
 <span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
@@ -165,7 +165,7 @@ completely interchangeable. A disk written to by one can be read by another.
 </span><span class="kw">pub trait </span>AsyncWriteDisk {
     <span class="kw">type </span>WriteDisk: AsyncWrite + Unpin;
     <span class="kw">fn </span>async_write_disk(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
     ) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; + Send + Sync;
 }
 
@@ -176,9 +176,9 @@ completely interchangeable. A disk written to by one can be read by another.
     }
 }
 
-<span class="kw">impl</span>&lt;T: WriteDisk&gt; WriteDisk <span class="kw">for </span><span class="kw-2">&amp;</span>T {
+<span class="kw">impl</span>&lt;T: WriteDisk&gt; WriteDisk <span class="kw">for </span><span class="kw-2">&amp;mut </span>T {
     <span class="kw">type </span>WriteDisk = T::WriteDisk;
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         T::write_disk(<span class="self">self</span>)
     }
 }
@@ -194,10 +194,10 @@ completely interchangeable. A disk written to by one can be read by another.
 }
 
 <span class="attr">#[cfg(feature = <span class="string">"async"</span>)]
-</span><span class="kw">impl</span>&lt;T: AsyncWriteDisk + Send&gt; AsyncWriteDisk <span class="kw">for </span><span class="kw-2">&amp;</span>T {
+</span><span class="kw">impl</span>&lt;T: AsyncWriteDisk + Send&gt; AsyncWriteDisk <span class="kw">for </span><span class="kw-2">&amp;mut </span>T {
     <span class="kw">type </span>WriteDisk = T::WriteDisk;
     <span class="kw">fn </span>async_write_disk(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
     ) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; + Send + Sync {
         T::async_write_disk(<span class="self">self</span>)
     }

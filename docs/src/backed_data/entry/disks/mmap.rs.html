@@ -1614,7 +1614,7 @@ Defines the [`Mmap`] type to wrap `mmap`.
 <span class="kw">impl </span>WriteDisk <span class="kw">for </span>Mmap {
     <span class="kw">type </span>WriteDisk = WriteMmapGuard;
 
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         <span class="comment">// Shuffle out the current mmap value to replace later.
         </span><span class="kw">let </span><span class="kw-2">mut </span>held_mmap = <span class="self">self</span>.mmap.lock().unwrap();
         <span class="kw">let </span>cur_mmap = std::mem::replace(<span class="kw-2">&amp;mut *</span>held_mmap, SwitchingMmap::Invalid);
@@ -1731,7 +1731,7 @@ Defines the [`Mmap`] type to wrap `mmap`.
         <span class="kw">let </span>temp_file = temp_dir().join(Uuid::new_v4().to_string());
         <span class="kw">let _ </span>= remove_file(<span class="kw-2">&amp;</span>temp_file);
 
-        <span class="kw">let </span>mmap = Mmap::new(temp_file.clone()).unwrap();
+        <span class="kw">let </span><span class="kw-2">mut </span>mmap = Mmap::new(temp_file.clone()).unwrap();
 
         <span class="kw">let </span><span class="kw-2">mut </span>write_disk = mmap.write_disk().unwrap();
         <span class="macro">assert_eq!</span>(
@@ -1772,9 +1772,9 @@ Defines the [`Mmap`] type to wrap `mmap`.
         file_mut.set_len(GARBAGE_LEN <span class="kw">as </span>u64).unwrap();
         file_mut.flush().unwrap();
 
-        <span class="kw">let </span>mmap = Mmap::new(temp_file.clone()).unwrap();
+        <span class="kw">let </span><span class="kw-2">mut </span>mmap = Mmap::new(temp_file.clone()).unwrap();
 
-        <span class="kw">let </span>read_check = |expected| {
+        <span class="kw">let </span>read_check = |expected, mmap: <span class="kw-2">&amp;</span>Mmap| {
             <span class="kw">let </span><span class="kw-2">mut </span>read_data = Vec::new();
             mmap.read_disk()
                 .unwrap()
@@ -1799,7 +1799,7 @@ Defines the [`Mmap`] type to wrap `mmap`.
         drop(write_disk);
 
         <span class="comment">// Should see an only the actual data after flush.
-        </span>read_check(SEQUENCE.len());
+        </span>read_check(SEQUENCE.len(), <span class="kw-2">&amp;</span>mmap);
 
         <span class="kw">let _ </span>= remove_file(temp_file);
     }

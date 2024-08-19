@@ -666,7 +666,7 @@
     <span class="kw">where
         </span>C: Encoder&lt;&lt;E::Disk <span class="kw">as </span>WriteDisk&gt;::WriteDisk, Error: Context + Error, T = <span class="self">Self</span>&gt;,
     {
-        <span class="kw">let </span>disk: E::Disk = <span class="self">self
+        <span class="kw">let </span><span class="kw-2">mut </span>disk: E::Disk = <span class="self">self
             </span>.directory_root
             .join(META_FILE)
             .try_into()

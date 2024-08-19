@@ -338,6 +338,10 @@
 <a href="#338" id="338">338</a>
 <a href="#339" id="339">339</a>
 <a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
 </pre></div><pre class="rust"><code><span class="comment">/*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -378,7 +382,7 @@
 /// ```
 /// use backed_data::entry::disks::{WriteDisk, custom::CustomWrite};
 ///
-/// let disk = CustomWrite(|| Ok(std::io::sink()));
+/// let mut disk = CustomWrite(|| Ok(std::io::sink()));
 /// let writer: std::io::Sink = disk.write_disk().unwrap();
 /// ```
 </span><span class="kw">pub struct </span>CustomWrite&lt;F&gt;(<span class="kw">pub </span>F);
@@ -397,7 +401,7 @@
 ///     },
 /// };
 ///
-/// let disk = CustomSync(
+/// let mut disk = CustomSync(
 ///     CustomRead(|| Ok(std::io::empty())),
 ///     CustomWrite(|| Ok(std::io::sink()))
 /// );
@@ -426,7 +430,7 @@
 {
     <span class="kw">type </span>WriteDisk = W;
 
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         (<span class="self">self</span>.<span class="number">0</span>)()
     }
 }
@@ -450,7 +454,7 @@
 {
     <span class="kw">type </span>WriteDisk = O;
 
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         <span class="self">self</span>.<span class="number">1</span>.write_disk()
     }
 }
@@ -482,7 +486,7 @@
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{AsyncWriteDisk, custom::CustomAsyncWrite};
 ///
-/// let disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
+/// let mut disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
 /// let writer: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Sink&gt;&gt; =
 ///     &amp;disk.async_write_disk();
 /// ```
@@ -504,13 +508,15 @@
 ///     },
 /// };
 ///
-/// let disk = CustomAsync(
+/// let mut disk = CustomAsync(
 ///     CustomAsyncRead(|| ready(Ok(smol::io::empty()))),
 ///     CustomAsyncWrite(|| ready(Ok(smol::io::sink())))
 /// );
 ///
-/// let reader: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Empty&gt;&gt; =
-///     &amp;disk.async_read_disk();
+/// {
+///     let reader: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Empty&gt;&gt; =
+///         &amp;disk.async_read_disk();
+/// }
 /// let writer: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Sink&gt;&gt; =
 ///     &amp;disk.async_write_disk();
 /// ```
@@ -540,7 +546,7 @@
 {
     <span class="kw">type </span>WriteDisk = W;
 
-    <span class="kw">fn </span>async_write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; {
+    <span class="kw">fn </span>async_write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; {
         (<span class="self">self</span>.<span class="number">0</span>)()
     }
 }
@@ -570,7 +576,7 @@
 {
     <span class="kw">type </span>WriteDisk = O;
 
-    <span class="kw">fn </span>async_write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; {
+    <span class="kw">fn </span>async_write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; {
         <span class="self">self</span>.<span class="number">1</span>.async_write_disk()
     }
 }
@@ -598,7 +604,7 @@
 ///     },
 /// };
 ///
-/// let disk = CustomFull(
+/// let mut disk = CustomFull(
 ///     CustomSync(
 ///         CustomRead(|| Ok(std::io::empty())),
 ///         CustomWrite(|| Ok(std::io::sink()))
@@ -611,8 +617,10 @@
 ///
 /// let sync_reader: std::io::Empty = disk.read_disk().unwrap();
 /// let sync_writer: std::io::Sink = disk.write_disk().unwrap();
-/// let async_reader: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Empty&gt;&gt; =
-///     &amp;disk.async_read_disk();
+/// {
+///     let async_reader: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Empty&gt;&gt; =
+///         &amp;disk.async_read_disk();
+/// }
 /// let async_writer: &amp;dyn Future&lt;Output = std::io::Result&lt;smol::io::Sink&gt;&gt; =
 ///     &amp;disk.async_write_disk();
 /// ```
@@ -640,7 +648,7 @@
 {
     <span class="kw">type </span>WriteDisk = O;
 
-    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
+    <span class="kw">fn </span>write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt; {
         <span class="self">self</span>.<span class="number">0</span>.write_disk()
     }
 }
@@ -674,7 +682,7 @@
 {
     <span class="kw">type </span>WriteDisk = O;
 
-    <span class="kw">fn </span>async_write_disk(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; {
+    <span class="kw">fn </span>async_write_disk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Future&lt;Output = std::io::Result&lt;<span class="self">Self</span>::WriteDisk&gt;&gt; {
         <span class="self">self</span>.<span class="number">1</span>.async_write_disk()
     }
 }
