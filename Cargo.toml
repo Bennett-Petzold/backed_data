@@ -22,6 +22,8 @@ array = ["dep:stable_deref_trait"]
 unsafe_array = ["array"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
 async = ["dep:futures", "dep:async-scoped", "dep:cfg-if", "tokio"]
+
+# Async executors
 tokio = ["async", "dep:tokio", "dep:tokio-util"]
 smol = ["async", "dep:smol"]
 

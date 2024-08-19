@@ -32,6 +32,9 @@ success contacting the owner. The following options are under consideration:
 * Implement missing standard library traits (e.g. `[]` access).
 * Add array iterators that minimize memory usage by dropping backing stores when no longer borrowed.
 
+# General TODO
+* Add support for more disk formats and encoders
+
 [CrateStatus]: https://img.shields.io/crates/v/backed_data.svg
 [Crate]: https://crates.io/crates/backed_data
 [TestsStatus]: https://github.com/Bennett-Petzold/backed_data/actions/workflows/all-tests.yml/badge.svg?branch=main
