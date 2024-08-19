@@ -28,7 +28,7 @@ pub trait ReadDisk {
 /// Produces storage that can be written to synchronously.
 pub trait WriteDisk {
     type WriteDisk: Write;
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk>;
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk>;
 }
 
 #[cfg(feature = "async")]
@@ -45,7 +45,7 @@ pub trait AsyncReadDisk {
 pub trait AsyncWriteDisk {
     type WriteDisk: AsyncWrite + Unpin;
     fn async_write_disk(
-        &mut self,
+        &self,
     ) -> impl Future<Output = std::io::Result<Self::WriteDisk>> + Send + Sync;
 }
 
@@ -56,9 +56,9 @@ impl<T: ReadDisk> ReadDisk for &T {
     }
 }
 
-impl<T: WriteDisk> WriteDisk for &mut T {
+impl<T: WriteDisk> WriteDisk for &T {
     type WriteDisk = T::WriteDisk;
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&self) -> std::io::Result<Self::WriteDisk> {
         T::write_disk(self)
     }
 }
