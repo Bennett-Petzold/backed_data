@@ -4,6 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Additional description of the library.
+
+No code is kept in this module.
+*/
+
 pub mod alternatives;
 pub mod deps;
 pub mod features;

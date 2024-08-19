@@ -4,6 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines the encoding/decoding formats for backed disks.
+*/
+
 use serde::{Deserialize, Serialize};
 
 /// A format decoder that can be used synchronously.

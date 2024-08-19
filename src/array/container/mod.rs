@@ -4,6 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines generic container types.
+*/
+
 use std::ops::{Deref, DerefMut};
 
 use serde::{Deserialize, Serialize};
@@ -98,7 +102,7 @@ pub trait ResizingContainer:
 
 /// A [`BackedEntry`] holding a valid [`Container`] type.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainer {
     type Container;
     type Disk;
@@ -127,7 +131,7 @@ impl<C, D, Enc> BackedEntryContainer for BackedEntry<C, D, Enc> {
 
 /// A [`BackedEntryContainer`] inside a [`Container`].
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNested:
     Container<
     Data: BackedEntryContainer<
@@ -165,9 +169,9 @@ where
     type Coder = <T::Data as BackedEntryContainer>::Coder;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`] variant that has reading.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedRead:
     BackedEntryContainerNested<
     Unwrapped: for<'de> Deserialize<'de>,
@@ -193,9 +197,9 @@ where
     type ReadError = <Self::Coder as Decoder<<Self::Disk as ReadDisk>::ReadDisk>>::Error;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`] variant that has writing.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedWrite:
     BackedEntryContainerNested<
     Unwrapped: Serialize,
@@ -221,9 +225,9 @@ where
     type WriteError = <Self::Coder as Encoder<<Self::Disk as WriteDisk>::WriteDisk>>::Error;
 }
 
-/// [`BackedEntryContainerNested`] variant.
+/// [`BackedEntryContainerNested`] variant that has writing and reading.
 ///
-/// For internal use, reduces size of generics boilerplate.
+/// For internal implementation, reduces size of generics boilerplate.
 pub trait BackedEntryContainerNestedAll:
     BackedEntryContainerNestedRead + BackedEntryContainerNestedWrite
 {

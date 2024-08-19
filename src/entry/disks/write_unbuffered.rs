@@ -12,7 +12,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::{ReadDisk, WriteDisk};
+use super::{Plainfile, ReadDisk, Unbuffered, WriteDisk};
+
+#[cfg(mmap_impl)]
+use super::Mmap;
 
 #[cfg(feature = "async")]
 use super::{AsyncReadDisk, AsyncWriteDisk};
@@ -86,5 +89,25 @@ impl AsyncWriteDisk for WriteUnbuffered {
 
     async fn async_write_disk(&self) -> std::io::Result<Self::WriteDisk> {
         super::async_file::write_file(self.path.clone()).await
+    }
+}
+
+impl From<WriteUnbuffered> for Plainfile {
+    fn from(value: WriteUnbuffered) -> Self {
+        Self::new(value.path)
+    }
+}
+
+impl From<WriteUnbuffered> for Unbuffered {
+    fn from(value: WriteUnbuffered) -> Self {
+        Self::new(value.path)
+    }
+}
+
+#[cfg(mmap_impl)]
+impl TryFrom<WriteUnbuffered> for Mmap {
+    type Error = std::io::Error;
+    fn try_from(value: WriteUnbuffered) -> std::io::Result<Self> {
+        Self::new(value.path)
     }
 }

@@ -4,6 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Backbone traits and structs for the library implementation.
+*/
+
 #[cfg(feature = "async")]
 pub mod blocking;
 

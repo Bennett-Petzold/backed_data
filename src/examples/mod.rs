@@ -4,10 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//! Example usage re-exports.
-//!
-//! All examples are re-exported from `$CRATE_ROOT/examples`, and can be
-//! executed via `cargo run --example NAME` with the necessary feature flags.
+/*!
+Example usage re-exports.
+
+All examples are re-exported from `$CRATE_ROOT/examples`, and can be
+executed via `cargo run --example NAME` with the necessary feature flags.
+*/
 
 pub mod async_mmap;
 pub mod async_simd;

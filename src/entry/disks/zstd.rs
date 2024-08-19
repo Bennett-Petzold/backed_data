@@ -130,10 +130,14 @@ impl ZstdLevel {
     }
 }
 
-/// Uses ZSTD to encode/decode to an underlying disk.
+/// Uses ZSTD to encode/decode to an underlying [`disk`][`super`].
 ///
 /// ZSTD_LEVEL is bounded by [`ZstdLevel`]'s constraints, returning an error
 /// when out of bounds.
+///
+/// Since `zstd` uses an internal write buffer for encoding,
+/// [`WriteUnbuffered`][`super::WriteUnbuffered`] is more efficient than
+/// [`Plainfile`][`super::Plainfile`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZstdDisk<'a, const ZSTD_LEVEL: u8, B> {
     inner: B,

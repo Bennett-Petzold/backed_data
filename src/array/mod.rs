@@ -4,6 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines [`BackedArray`] and the [`Container`]/[`ResizingContainer`] traits it uses.
+*/
+
 #[cfg(feature = "async")]
 pub mod async_impl;
 pub mod container;
@@ -30,6 +34,7 @@ struct ArrayLoc {
     pub inside_entry_idx: usize,
 }
 
+/// A single entry pair in [`BackedArray`].
 #[derive(Debug, Getters)]
 pub struct BackedArrayEntry<'a, T> {
     range: &'a Range<usize>,
@@ -52,10 +57,17 @@ impl<'a, T> From<(&'a Range<usize>, &'a T)> for BackedArrayEntry<'a, T> {
 /// store. Use [`Self::clear_memory`] or [`Self::shrink_to_query`] to move the
 /// cached sub-arrays back out of memory.
 ///
-/// For repeated modifications, use [`Self::chunk_mut_iter`] to get perform
-/// multiple modifications on a backing block before saving to disk.
-/// Getting and overwriting the entries without these handles will write to
-/// disk on every single change.
+/// All mutation must be through the iterator types, which guarantee flushes to
+/// underlying storage.
+///
+/// Some container types provide handles instead of direct `&T` references. They
+/// can only be interfaced through the `*generic_*` methods, which add overhead
+/// to return the references with their handles. Types that dereference
+/// directly to `&[T]` (e.g. [`Vec`]) should not use the generic methods.
+///
+/// # Generics
+/// * `K`: [`Container`] that holds [`usize`] values.
+/// * `E`: [`Container`] that holds [`BackedEntry`][`crate::entry::BackedEntry`] values.
 #[derive(Debug, Serialize, Deserialize, Getters)]
 pub struct BackedArray<K, E> {
     // keys and entries must always have the same length

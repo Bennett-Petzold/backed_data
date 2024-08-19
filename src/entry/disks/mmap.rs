@@ -4,6 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines the [`Mmap`] type to wrap `mmap`.
+*/
+
 use std::{
     cell::UnsafeCell,
     cmp::max,
@@ -23,7 +27,7 @@ use memmap2::Advice;
 #[cfg(target_os = "linux")]
 use memmap2::RemapOptions;
 
-use super::{ReadDisk, WriteDisk};
+use super::{Plainfile, ReadDisk, Unbuffered, WriteDisk, WriteUnbuffered};
 
 fn open_mmap_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
     let f = File::options()
@@ -319,9 +323,13 @@ impl SwitchingMmap {
 
 /// An mmaped file entry.
 ///
-/// This is used to open a [`File`] on demand, but drop the handle when unused.
-/// Large collections of [`BackedEntry`](`super::super::BackedEntry`)s would otherwise risk overwhelming
-/// OS limts on the number of open file descriptors.
+/// This is used to open a [`File`] via `mmap`. The memory mappings are preserved to
+/// minimize I/O costs on subsequent reads. The OS will transparently handle dropping
+/// and restoring memory mappings according to available system memory.
+///
+/// Note that mmap population is sequential (updating memory addressing is sequential).
+/// If two mmaps in different threads need to be populated at the same time, the second mmap
+/// will need to wait until the first population is complete to proceed.
 #[derive(Debug)]
 pub struct Mmap {
     /// File location.
@@ -718,6 +726,24 @@ impl WriteDisk for Mmap {
                 Err(error)
             }
         }
+    }
+}
+
+impl From<Mmap> for Plainfile {
+    fn from(value: Mmap) -> Self {
+        Self::new(value.path)
+    }
+}
+
+impl From<Mmap> for WriteUnbuffered {
+    fn from(value: Mmap) -> Self {
+        Self::new(value.path)
+    }
+}
+
+impl From<Mmap> for Unbuffered {
+    fn from(value: Mmap) -> Self {
+        Self::new(value.path)
     }
 }
 

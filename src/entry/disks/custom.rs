@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//! Convenience `Disk` define structs
+//! Convenience `Disk` define structs.
 
 use std::io::{Read, Write};
 

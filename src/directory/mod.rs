@@ -4,6 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines [`DirectoryBackedArray`].
+*/
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

@@ -4,6 +4,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines adapters that allow synchronous [`disks`][`super::disks`] and/or
+[format encoders][`super::formats`] to be used asynchronously.
+*/
+
 use std::{
     cmp::min,
     future::Future,

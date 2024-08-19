@@ -4,6 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+/*!
+Defines [`BackedEntry`], the core of this library.
+
+Also defines [`disks`] and [`formats`], which define the backing for [`BackedEntry`].
+*/
+
 use std::{cell::OnceCell, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};

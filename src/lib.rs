@@ -153,3 +153,13 @@ pub use entry::{BackedEntryArr, BackedEntryArrLock, BackedEntryCell, BackedEntry
 
 #[cfg(feature = "async")]
 pub use entry::BackedEntryAsync;
+
+pub use array::VecBackedArray;
+
+pub use directory::StdDirBackedArray;
+
+#[cfg(feature = "zstd")]
+pub use directory::ZstdDirBackedArray;
+
+#[cfg(feature = "async_zstd")]
+pub use directory::AsyncZstdDirBackedArray;
