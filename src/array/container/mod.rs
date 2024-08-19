@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::ops::{Deref, DerefMut};
 
 use serde::{Deserialize, Serialize};
@@ -52,10 +58,12 @@ pub trait MutIter<T> {
 
 /// Generic wrapper for any container type.
 ///
-/// Methods are prepended with `c_*` to avoid namespace conflicts.
-///
+/// This is implemented over standard Rust containers ([`Vec`], boxed slices,
+/// etc.) in addition to more exotic types.
 /// `&[T]` is insufficiently generic for types that return a ref handle to `T`,
 /// instead of `&T` directly, so this allows for more complex container types.
+///
+/// Methods are prepended with `c_*` to avoid namespace conflicts.
 pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
     /// The data container entries give references to.
     type Data;

@@ -1,3 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*!
+ZSTD encryption and decryption.
+
+Add `zstd = { version = "*", features = ["fat-lto"] }` to generate the
+underlying [`zstd`](https://docs.rs/zstd/latest/zstd/) library with full link
+time optimization. Then set
+`RUSTFLAGS="-C linker-plugin-lto -C linker=clang -C link-arg=-fuse-ld=lld" CC=clang`
+to build a program that is LTO compatible with `zstd`'s generated C LTO.
+*/
+
 use num_traits::Unsigned;
 use serde::{Deserialize, Serialize};
 use std::{

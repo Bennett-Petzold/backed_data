@@ -1,11 +1,18 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 #[cfg(feature = "async")]
 pub mod async_impl;
 pub mod container;
 pub mod sync_impl;
 
+pub use container::{Container, ResizingContainer};
+
 use std::ops::Range;
 
-use container::Container;
 use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::{
     cell::UnsafeCell,
     sync::{Mutex, MutexGuard},
@@ -23,6 +29,7 @@ impl<T> AsMut<T> for GuardToMut<'_, T> {
     }
 }
 
+#[cfg(feature = "unsafe_array")]
 /// Trait to combine Mutex (allowing panics) and UnsafeCell in one generic.
 ///
 /// Mutex provides the thread-safe access pattern, UnsafeCell optimizes for
@@ -52,6 +59,7 @@ pub trait ProtectedAccess {
     fn wrap(val: Self::Val) -> Self;
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<T> ProtectedAccess for Mutex<T> {
     type Val = T;
     unsafe fn get_mut_unsafe(&self) -> impl AsMut<Self::Val> {
@@ -71,6 +79,7 @@ impl<T> ProtectedAccess for Mutex<T> {
     }
 }
 
+#[cfg(feature = "unsafe_array")]
 impl<T> ProtectedAccess for UnsafeCell<T> {
     type Val = T;
     unsafe fn get_mut_unsafe(&self) -> impl AsMut<Self::Val> {

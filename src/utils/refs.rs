@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "array")]
@@ -47,7 +53,7 @@ where
     }
 }
 
-#[cfg(feature = "array")]
+#[cfg(feature = "unsafe_array")]
 unsafe impl<T: ?Sized> StableDeref for ToRef<'_, T> {}
 
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
@@ -106,7 +112,7 @@ where
     }
 }
 
-#[cfg(feature = "array")]
+#[cfg(feature = "unsafe_array")]
 unsafe impl<T: ?Sized> StableDeref for ToMut<'_, T> {}
 
 /// Wrapper that allows &T to implement [`AsRef<T>`].
@@ -153,7 +159,7 @@ where
     }
 }
 
-#[cfg(feature = "array")]
+#[cfg(feature = "unsafe_array")]
 unsafe impl<T: ?Sized> StableDeref for IndirectRef<'_, T> {}
 
 /// Wrapper that allows &mut T to implement [`AsMut<T>`] and [`AsRef<T>`].
@@ -212,7 +218,7 @@ where
     }
 }
 
-#[cfg(feature = "array")]
+#[cfg(feature = "unsafe_array")]
 unsafe impl<T: ?Sized> StableDeref for IndirectMut<'_, T> {}
 
 /// Combined trait for types with both [`AsRef`] and [`AsMut`].

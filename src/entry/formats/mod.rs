@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use serde::{Deserialize, Serialize};
 
 /// A format decoder that can be used synchronously.
@@ -13,7 +19,7 @@ pub trait Decoder<Source: ?Sized> {
 ///
 /// # Implementation
 /// It is the responsibility of trait implementors to call
-/// [`WriteExt::flush`] to ensure encodings write out to disk. Any implementor
+/// [`Write::flush`][`std::io::Write::flush`] to ensure encodings write out to disk. Any implementor
 /// that does not to call these may fail to put all data on disk, making the
 /// encoding invalid and causing read failure.
 pub trait Encoder<Target: ?Sized> {
@@ -41,7 +47,9 @@ pub trait AsyncDecoder<Source: ?Sized> {
 ///
 /// # Implementation
 /// It is the responsibility of trait implementors to call
-/// [`AsyncWriteExt::flush`] and [`AsyncWriteExt::close`] to ensure encodings
+/// [`AsyncWriteExt::flush`][`futures::io::AsyncWriteExt::flush`]
+/// and [`AsyncWriteExt::close`][`futures::io::AsyncWriteExt::close`]
+/// to ensure encodings
 /// write out to disk. Any implementor that does not to call these may fail to
 /// put all data on disk, making the encoding invalid and causing read failure.
 #[cfg(feature = "async")]
