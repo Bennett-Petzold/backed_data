@@ -5,7 +5,15 @@
 
 Cache data outside memory, loading in when referenced.
 
-See the [documentation][Docs] for more detail.
+This library provides a solution for large data that is sparsely accessed.
+Ideally, it can minimize the amount of memory allocated by a program but never read.
+It builds around `BackedEntry`, a struct that encodes and decodes data against a disk
+(some type providing `Read` and `Write` handles). The data can then kept solely on disk when
+not referenced to save memory space. The `BackedArray` and `DirectoryBackedArray` types
+allow splitting datasets into multiple disks, reducing memory usage when significant
+chunks are unused by program logic.
+
+See the [documentation][Docs] for usage and more details.
 
 # Development Commands
 
