@@ -1,0 +1,9 @@
+[package]
+name = "media"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+graphviz-rust = "0.9.0"
+image = { version = "0.25.2", default-features = false, features = ["png", "gif", "rayon"] }
+rayon = "1.10.0"

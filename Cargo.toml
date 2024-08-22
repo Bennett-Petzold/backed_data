@@ -10,7 +10,7 @@ license = "MPL-2.0"
 keywords = ["disk", "backed", "array"]
 # Applicability to these tags is dubious
 #categories = ["caching", "memory-management"]
-exclude = ["benches", "zstd", "shakespeare-dataset", ".git*"]
+exclude = ["benches", "media", "test_data", "shakespeare-dataset", ".git*"]
 
 resolver = "2"
 
@@ -79,7 +79,7 @@ csv = { version = "1", optional = true }
 
 # Disk dependencies
 memmap2 = { version = "0.9", optional = true }
-secrets = { git = "https://github.com/Bennett-Petzold/secrets", optional = true, features = ["use-libsodium-sys"] }
+secrets = { version = "*", git = "https://github.com/Bennett-Petzold/secrets", optional = true, features = ["use-libsodium-sys"] }
 aes-gcm = { version = "0.10", optional = true }
 stable_deref_trait = { version = "1", optional = true }
 reqwest = { version = "0.12", optional = true }

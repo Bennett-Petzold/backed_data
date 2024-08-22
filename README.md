@@ -15,10 +15,19 @@ chunks are unused by program logic.
 
 See the [documentation][Docs] for usage and more details.
 
+<h3 align = "center"> Core BackedEntry Flow </h3>
+
+![Backed Load Graphic][BackedLoad]
+
 # Development Commands
 
 When testing with Miri, use 'MIRIFLAGS="-Zmiri-disable-isolation"' to allow I/O.
 Build docs with `RUSTDOCFLAGS='--cfg docsrs' cargo +nightly doc --open --all-features --no-deps`.
+
+`media` has a crate to generate the documentation gifs. It requires `graphviz`
+to create the frames and `gifsicle` to optimize for a drastic size decrease.
+The gifs are stored in version control for linking into documentation; do not
+overwrite the gifs in a commit unless another graphic was added.
 
 # crates.io blocker
 This relies on a fork of `secrets` (<https://github.com/stouset/secrets>) for a feature flag.
@@ -51,3 +60,5 @@ success contacting the owner. The following options are under consideration:
 [Docs]: https://bennett-petzold.github.io/backed_data/docs/backed_data/
 [Coverage]: https://bennett-petzold.github.io/backed_data/coverage/badge.svg
 [CoveragePages]: https://bennett-petzold.github.io/backed_data/coverage/
+
+[BackedLoad]: /media_output/backed_load.gif
