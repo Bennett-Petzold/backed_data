@@ -258,15 +258,17 @@ impl<
         coder: E::Coder,
     ) -> Result<&mut Self, E::AsyncWriteError> {
         let values = values.into();
-
-        // End of a range is exclusive
-        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
-        self.key_starts.c_push(start_idx);
-        self.key_ends.c_push(start_idx + values.c_len());
+        let values_len = values.c_len();
 
         let mut entry = BackedEntryAsync::new(backing_store, coder);
         entry.a_write_unload(values).await?;
         self.entries.c_push(entry.into());
+
+        // End of a range is exclusive
+        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+        self.key_starts.c_push(start_idx);
+        self.key_ends.c_push(start_idx + values_len);
+
         Ok(self)
     }
 
@@ -309,15 +311,17 @@ impl<
         coder: E::Coder,
     ) -> Result<&mut Self, E::AsyncWriteError> {
         let values = values.into();
-
-        // End of a range is exclusive
-        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
-        self.key_starts.c_push(start_idx);
-        self.key_ends.c_push(start_idx + values.c_len());
+        let values_len = values.c_len();
 
         let mut entry = BackedEntryAsync::new(backing_store, coder);
         entry.a_write(values).await?;
         self.entries.c_push(entry.into());
+
+        // End of a range is exclusive
+        let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
+        self.key_starts.c_push(start_idx);
+        self.key_ends.c_push(start_idx + values_len);
+
         Ok(self)
     }
 }
