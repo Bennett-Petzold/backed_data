@@ -1,6 +1,6 @@
 [package]
 name = "backed_data"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Bennett Petzold <dansecob.dev@gmail.com>"]
 edition = "2021"
 rust-version = "1.80"
