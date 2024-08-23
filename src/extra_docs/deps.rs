@@ -9,37 +9,49 @@ Dependencies are broken down by feature category, then feature.
 
 # Library Functionality
 * `async`
-    * `futures` - The most popular library for core [`future`][`std::future`] functionality.
-    * `async-scoped` -
-* `array`
-    * TODO
+    * [`futures`] - The most popular library for core [`future`][`std::future`] functionality.
+    * [`cfg_if`] - Prevents copy-pasting for complex feature definitions.
 * `unsafe_array`
-    * TODO
+    * [`stable_deref_trait`] - [`StableDeref`][`stable_deref_trait::StableDeref`] Guarantees that a container variable can be moved without
+        invalidating element references.
 * `directory`
-    * TODO
+    * [`uuid`] - [`Uuid::new_v4`][`uuid::Uuid::new_v4`] is used for random file names.
 
 # Async Executors
 
 * `tokio`
-    * TODO
+    * [`tokio`]
+    * [`tokio_util`] - Convert from tokio I/O traits to [`futures`] I/O traits.
+    * [`async_scoped`] - Provides a scoped async block not available in base [`futures`], so blocking
+    * thread handles can have less than `'static` lifetimes.
 * `smol`
-    * TODO
+    * [`smol`]
 
 # Disk Types
 * `all_disks`
-    * All dependencies below
+    * All dependencies below.
 * `encrypted`
-    * TODO
+    * [`secrets`] - Provides protected memory via [`libsodium`](https://doc.libsodium.org/) to make
+        memory snooping difficult.
+    * [`aes_gcm`] - Provides an encryption algorithm to protect data written to disks.
+    * [`stable_deref_trait`] - [`StableDeref`][`stable_deref_trait::StableDeref`] Guarantees that the secret container can be moved without
+        invalidating element references.
 * `mmap`
-    * TODO
+    * [`memmap2`] - Cross-OS memory mapping wrapper.
+    * [`stable_deref_trait`] - [`StableDeref`][`stable_deref_trait::StableDeref`] Guarantees that the mmap array is valid, even when the handle is moved.
 * `network`
-    * TODO
+    * Dependencies from `async`
+    * [`reqwest`] - Backend for remote communications.
+    * [`bytes`], [`http_serde`], [`url`] - (De)serialization definitions for [`reqwest`].
 * `zstd`
-    * TODO
+    * [`zstd`]
+    * [`num_traits`] - Generic for unsigned numbers.
 * `async_zstd`
-    * TODO
+    * `async` dependencies.
+    * [`num_traits`] - Generic for unsigned numbers.
+    * [`async_compression`] - Async zstd implementation.
 * `zstdmt`/`async_zstdmt`
-    * TODO
+    * `zstd`/`async_zstd` dependencies.
 
 # Predefined Formats
 * `all_formats`
@@ -47,17 +59,17 @@ Dependencies are broken down by feature category, then feature.
 
 #### Synchronous Formats
 * `bincode`
-    * TODO
+    * [`bincode`]
 * `serde_json`
-    * TODO
+    * [`serde_json`]
 * `simd_json`
-    * TODO
+    * [`simd_json`]
 * `csv`
-    * TODO
+    * [`csv`]
 
 #### Async Formats
 * `async_bincode`
-    * TODO
+    * [`async_bincode`]
 * `async_csv`
-    * TODO
+    * [`csv_async`]
 */

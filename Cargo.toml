@@ -18,8 +18,8 @@ resolver = "2"
 
 [features]
 default = ["bincode", "directory", "zstd"]
-array = ["dep:stable_deref_trait"]
-unsafe_array = ["array"] # Array methods using unsafe code
+array = []
+unsafe_array = ["array", "dep:stable_deref_trait"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
 async = ["dep:futures", "dep:cfg-if"]
 
@@ -48,7 +48,7 @@ mmap = ["dep:memmap2", "dep:stable_deref_trait"]
 network = ["async", "dep:reqwest", "dep:bytes", "dep:http-serde", "dep:url"]
 
 # zstd features
-zstd = ["array", "dep:zstd", "dep:num-traits"]
+zstd = ["dep:zstd", "dep:num-traits"]
 zstdmt = ["zstd", "zstd/zstdmt"]
 async_zstd = ["async", "dep:num-traits", "dep:async-compression", "async-compression/zstd"]
 async_zstdmt = ["async_zstd", "async-compression/zstdmt"]

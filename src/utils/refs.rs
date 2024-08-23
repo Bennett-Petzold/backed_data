@@ -6,7 +6,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-#[cfg(feature = "array")]
+#[cfg(feature = "unsafe_array")]
 use stable_deref_trait::StableDeref;
 
 /// Wrapper that allows &T to implement [`AsRef<T>`].
