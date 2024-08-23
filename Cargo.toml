@@ -174,7 +174,7 @@ required-features = ["mmap", "async"]
 [[example]]
 name = "async_simd"
 path = "examples/async_simd.rs"
-required-features = ["simd_json", "async"]
+required-features = ["simd_json", "tokio"]
 
 [[example]]
 name = "remote_simd"
