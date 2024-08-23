@@ -132,15 +132,18 @@ impl<
         coder: E::Coder,
     ) -> Result<&mut Self, E::WriteError> {
         let values = values.into();
+        let values_len = values.c_len();
+
+        // Need to avoid pushing keys if entry write fails
+        let mut entry = BackedEntry::new(backing_store, coder);
+        entry.write_unload(values)?;
+        self.entries.c_push(entry.into());
 
         // End of a range is exclusive
         let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
         self.key_starts.c_push(start_idx);
-        self.key_ends.c_push(start_idx + values.c_len());
+        self.key_ends.c_push(start_idx + values_len);
 
-        let mut entry = BackedEntry::new(backing_store, coder);
-        entry.write_unload(values)?;
-        self.entries.c_push(entry.into());
         Ok(self)
     }
 
@@ -179,14 +182,16 @@ impl<
         coder: E::Coder,
     ) -> Result<&mut Self, E::WriteError> {
         let values = values.into();
+        let values_len = values.c_len();
+
+        let mut entry = BackedEntry::new(backing_store, coder);
+        entry.write(values)?;
+        self.entries.c_push(entry.into());
 
         // End of a range is exclusive
         let start_idx = *self.key_ends.c_ref().as_ref().last().unwrap_or(&0);
         self.key_starts.c_push(start_idx);
-        self.key_ends.c_push(start_idx + values.c_len());
-        let mut entry = BackedEntry::new(backing_store, coder);
-        entry.write(values)?;
-        self.entries.c_push(entry.into());
+        self.key_ends.c_push(start_idx + values_len);
         Ok(self)
     }
 }

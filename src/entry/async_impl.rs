@@ -12,9 +12,8 @@ use std::{
 use either::Either;
 use futures::Future;
 use serde::{Deserialize, Serialize};
-use tokio::sync::OnceCell;
 
-use crate::utils::{blocking::BlockingFn, Once};
+use crate::utils::{blocking::BlockingFn, sync::AsyncOnceLock, Once};
 
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
@@ -42,7 +41,7 @@ where
 
         // Drop previous value and write in new.
         // value.set() only works when uninitialized.
-        self.value = OnceCell::new();
+        self.value = AsyncOnceLock::new();
         let _ = self.value.set(new_value);
         Ok(())
     }
@@ -56,9 +55,11 @@ where
     /// See [`Self::load`].
     pub async fn a_load(&self) -> Result<&T, Coder::Error> {
         self.value
-            .get_or_try_init(|| async {
-                let disk = self.disk.async_read_disk().await?;
-                self.coder.decode(disk).await
+            .get_or_try_init(|| {
+                Box::pin(async {
+                    let disk = self.disk.async_read_disk().await?;
+                    self.coder.decode(disk).await
+                })
             })
             .await
     }
@@ -79,21 +80,21 @@ where
 pub trait OnceCellWrap {
     type T;
 
-    fn get_cell(self) -> OnceCell<Self::T>;
-    fn get_cell_ref(&self) -> &OnceCell<Self::T>;
-    fn get_cell_mut(&mut self) -> &mut OnceCell<Self::T>;
+    fn get_cell(self) -> AsyncOnceLock<Self::T>;
+    fn get_cell_ref(&self) -> &AsyncOnceLock<Self::T>;
+    fn get_cell_mut(&mut self) -> &mut AsyncOnceLock<Self::T>;
 }
 
-impl<T> OnceCellWrap for OnceCell<T> {
+impl<T> OnceCellWrap for AsyncOnceLock<T> {
     type T = T;
 
-    fn get_cell(self) -> OnceCell<Self::T> {
+    fn get_cell(self) -> AsyncOnceLock<Self::T> {
         self
     }
-    fn get_cell_ref(&self) -> &OnceCell<Self::T> {
+    fn get_cell_ref(&self) -> &AsyncOnceLock<Self::T> {
         self
     }
-    fn get_cell_mut(&mut self) -> &mut OnceCell<Self::T> {
+    fn get_cell_mut(&mut self) -> &mut AsyncOnceLock<Self::T> {
         self
     }
 }
@@ -119,7 +120,7 @@ pub trait BackedEntryAsyncWrite:
 impl<
         U: Serialize + Send + Sync,
         E: BackedEntryTrait<
-            T = OnceCell<U>,
+            T = AsyncOnceLock<U>,
             Disk: AsyncWriteDisk,
             Coder: AsyncEncoder<<E::Disk as AsyncWriteDisk>::WriteDisk, T = U>,
         >,
@@ -152,7 +153,7 @@ pub trait BackedEntryAsyncRead:
 impl<
         U: for<'de> Deserialize<'de> + Send + Sync,
         E: BackedEntryTrait<
-            T = OnceCell<U>,
+            T = AsyncOnceLock<U>,
             Disk: AsyncReadDisk,
             Coder: AsyncDecoder<<E::Disk as AsyncReadDisk>::ReadDisk, T = U>,
         >,
@@ -426,7 +427,7 @@ impl<
         let other = Arc::into_inner(other).unwrap();
 
         let mut this = Self {
-            value: OnceCell::new_with(other.value.into_inner()),
+            value: AsyncOnceLock::new_with(other.value.into_inner()),
             disk,
             coder,
         };

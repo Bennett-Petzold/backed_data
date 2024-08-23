@@ -177,6 +177,7 @@ where
     E::OnceWrapper: Send + Sync,
     for<'b> E::Ref<'b>: Send + Sync,
     for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
+    E::AsyncReadError: Send,
 {
     type Item = Pin<
         Box<
@@ -252,6 +253,7 @@ where
     E::OnceWrapper: Send + Sync,
     for<'b> E::Ref<'b>: Send + Sync,
     for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
+    E::AsyncReadError: Send,
 {
 }
 

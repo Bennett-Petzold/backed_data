@@ -1,6 +1,6 @@
 [package]
 name = "backed_data"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Bennett Petzold <dansecob.dev@gmail.com>"]
 edition = "2021"
 rust-version = "1.80"
@@ -10,7 +10,7 @@ license = "MPL-2.0"
 keywords = ["disk", "backed", "array"]
 # Applicability to these tags is dubious
 #categories = ["caching", "memory-management"]
-exclude = ["benches", "zstd", "shakespeare-dataset", ".git*"]
+exclude = ["benches", "media", "test_data", "shakespeare-dataset", ".git*"]
 
 resolver = "2"
 
@@ -18,13 +18,13 @@ resolver = "2"
 
 [features]
 default = ["bincode", "directory", "zstd"]
-array = ["dep:stable_deref_trait"]
-unsafe_array = ["array"] # Array methods using unsafe code
+array = []
+unsafe_array = ["array", "dep:stable_deref_trait"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
-async = ["dep:futures", "dep:async-scoped", "dep:cfg-if", "tokio"]
+async = ["dep:futures", "dep:cfg-if"]
 
 # Async executors
-tokio = ["async", "dep:tokio", "dep:tokio-util"]
+tokio = ["async", "dep:tokio", "dep:tokio-util", "dep:async-scoped"]
 smol = ["async", "dep:smol"]
 
 # START FORMATS
@@ -48,7 +48,7 @@ mmap = ["dep:memmap2", "dep:stable_deref_trait"]
 network = ["async", "dep:reqwest", "dep:bytes", "dep:http-serde", "dep:url"]
 
 # zstd features
-zstd = ["array", "dep:zstd", "dep:num-traits"]
+zstd = ["dep:zstd", "dep:num-traits"]
 zstdmt = ["zstd", "zstd/zstdmt"]
 async_zstd = ["async", "dep:num-traits", "dep:async-compression", "async-compression/zstd"]
 async_zstdmt = ["async_zstd", "async-compression/zstdmt"]
@@ -79,7 +79,7 @@ csv = { version = "1", optional = true }
 
 # Disk dependencies
 memmap2 = { version = "0.9", optional = true }
-secrets = { git = "https://github.com/Bennett-Petzold/secrets", optional = true, features = ["use-libsodium-sys"] }
+secrets = { version = "*", git = "https://github.com/Bennett-Petzold/secrets", optional = true, features = ["use-libsodium-sys"] }
 aes-gcm = { version = "0.10", optional = true }
 stable_deref_trait = { version = "1", optional = true }
 reqwest = { version = "0.12", optional = true }
@@ -106,7 +106,7 @@ http-serde = { version = "2", optional = true }
 
 # Linux OS call dependency, used for mmap
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = '*', features = ["fs"] }
+nix = { version = "0.29", features = ["fs"] }
 
 [build-dependencies]
 cfg_aliases = "0.2" # Reducing cfg boilerplate
@@ -174,7 +174,7 @@ required-features = ["mmap", "async"]
 [[example]]
 name = "async_simd"
 path = "examples/async_simd.rs"
-required-features = ["simd_json", "async"]
+required-features = ["simd_json", "tokio"]
 
 [[example]]
 name = "remote_simd"

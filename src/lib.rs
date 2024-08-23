@@ -33,22 +33,26 @@ accessed.
 
 ```rust
 # #[cfg(not(miri))] {
-#[cfg(all(feature = "bincode", feature = "directory"))] {
+#[cfg(all(feature = "bincode", feature = "array"))] {
     use std::{
-        array::from_fn,
         env::temp_dir,
+        iter::from_fn,
     };
 
     use serde::{Serialize, Deserialize};
 
     use backed_data::{
-        entry::formats::BincodeCoder,
-        directory::StdDirBackedArray,
+        entry::{
+            disks::Plainfile,
+            formats::BincodeCoder,
+        },
+        array::VecBackedArray,
     };
 
     # const BACKING_PATH: &str = "backed_data_motivating_example";
-    #[derive(PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
     struct LargeStruct {
+        val: u8,
     # /*
         ...
     # */
@@ -59,11 +63,12 @@ accessed.
             # /*
               ...
             # */
-            # Self {}
+            # Self { val: 1 }
         }
     }
 
-    const NUM_ELEMENTS: usize = 100_000;
+    const NUM_BACKINGS: usize = 1_000;
+    const ELEMENTS_PER_BACKING: usize = 1_000;
 
     // This application only needs to find three random elements.
     let query = [0, 10_000, 50_000];
@@ -71,27 +76,28 @@ accessed.
     // Do not use a temporary directory in real code.
     // Use some location that actually guarantees memory leaves RAM.
     let backing_dir = temp_dir().join(BACKING_PATH);
+    std::fs::create_dir_all(&backing_dir).unwrap();
 
-    // Define an array over `backing_dir` that automatically creates
-    // new files when new data is appended.
-    let mut backing = StdDirBackedArray
-        ::<_, BincodeCoder<_>>::
-        new(backing_dir.clone())
-        .unwrap();
-
-    let mut generator = (0..NUM_ELEMENTS)
-        .into_iter()
-        .map(|_| LargeStruct::new_random())
-        .peekable();
+    // Define a backed array using Vec.
+    let mut backing = VecBackedArray
+        ::<LargeStruct, Plainfile, BincodeCoder<_>>::
+        new();
 
     // Build the indices and backing store in 1,000 item chunks.
-    while generator.peek().is_some() {
-        let chunk_data: Vec<_> = generator.by_ref().take(1_000).collect();
+    for _ in 0..NUM_BACKINGS {
+        let chunk_data: Vec<_> = from_fn(|| Some(LargeStruct::new_random()))
+            .take(ELEMENTS_PER_BACKING)
+            .collect();
+
+        // This is handled automatically by `DirectoryBackedArray` types.
+        let target_file = backing_dir.join(uuid::Uuid::new_v4().to_string()).into();
 
         // Add a new bincode-encoded file that stores 1,000 elements.
-        // After this operation, the elements are on disk only.
-        backing.append(chunk_data);
+        // After this operation, the elements are on disk only (chunk_data
+        // is dropped by scope rules).
+        backing.append(chunk_data, target_file, BincodeCoder::default()).unwrap();
     }
+    # assert!(backing.len() > 50_000);
 
     // Query for three elements. At most 3,000 elements are loaded, because
     // the data is split into 1,000 element chunks. Only 2,997 useless

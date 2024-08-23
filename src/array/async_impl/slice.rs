@@ -135,6 +135,7 @@ where
     for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
+    E::AsyncReadError: Send,
 {
     type Item = Pin<
         Box<dyn Future<Output = Result<&'static E::InnerData, E::AsyncReadError>> + Send + 'static>,
@@ -204,6 +205,7 @@ where
     for<'b> <E::Unwrapped as Container>::Ref<'b>: Send + Sync,
     E: AsRef<[E::Data]>,
     E::Unwrapped: AsRef<[E::InnerData]>,
+    E::AsyncReadError: Send,
 {
 }
 

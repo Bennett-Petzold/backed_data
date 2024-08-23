@@ -27,6 +27,7 @@ where
     ready(arg.call())
 }
 
+#[cfg(feature = "tokio")]
 /// Executes on a spawned tokio thread.
 ///
 /// If the safety rules will be met, this can be converted to a safe future

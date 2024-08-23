@@ -76,7 +76,7 @@ impl<T> Once for OnceLock<T> {
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(feature = "tokio")]
 impl<T> Once for tokio::sync::OnceCell<T> {
     type Inner = T;
     fn new() -> Self {
