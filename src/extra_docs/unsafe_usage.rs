@@ -71,4 +71,8 @@ unsafe behavior, just the potential of pointer hackery that breaks those rules) 
 There is also a use of [`BorrowExtender`][`crate::utils::BorrowExtender`] that requires a bit of lifetime
 hacking to match the valid lifetime of the borrow.
 
+### `network`
+Implementing [`Send`] and [`Sync`] on a [`UnsafeCell`][`std::cell::UnsafeCell`] wrapping type.
+[`UnsafeCell`][`std::cell::UnsafeCell`] is used to work around mutability problems in reading the [`reqwest`] response.
+
 */
