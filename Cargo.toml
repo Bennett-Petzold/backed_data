@@ -106,7 +106,7 @@ http-serde = { version = "2", optional = true }
 
 # Linux OS call dependency, used for mmap
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = '*', features = ["fs"] }
+nix = { version = "0.29", features = ["fs"] }
 
 [build-dependencies]
 cfg_aliases = "0.2" # Reducing cfg boilerplate

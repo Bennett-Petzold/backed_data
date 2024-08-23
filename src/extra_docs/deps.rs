@@ -7,6 +7,14 @@
 /*!
 Dependencies are broken down by feature category, then feature.
 
+# Core Dependencies (on all features)
+* [`either`] - [`either::Either`] type for two case results.
+* [`serde`] - Most popular approach for (de)serialization.
+* [`derive_getters`] - Avoiding manual implemenations for getters.
+* [`error_stack`] - More descriptive error handling.
+* [`nix`] - Unix calls, when on Unix platforms.
+* [`thiserror`] - Reduce dev burden for writing errors.
+
 # Library Functionality
 * `async`
     * [`futures`] - The most popular library for core [`future`][`std::future`] functionality.
