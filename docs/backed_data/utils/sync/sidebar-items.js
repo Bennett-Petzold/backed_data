@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TryInitFuture"],"struct":["AsyncOnceLock","CreatingFn","InitializingFn","WaitForInit"]};

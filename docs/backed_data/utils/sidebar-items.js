@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["blocking"],"struct":["AsyncCompatCursor","BorrowExtender","ExtenderPtr","GuardToMut","GuardToRef","IndirectMut","IndirectRef","NestDeref","SendNonNull","ToMut","ToRef"],"trait":["AsRefMut","Once","ProtectedAccess"],"type":["BorrowNest"]};
+window.SIDEBAR_ITEMS = {"mod":["blocking","sync"],"struct":["AsyncCompatCursor","BorrowExtender","ExtenderPtr","GuardToMut","GuardToRef","IndirectMut","IndirectRef","NestDeref","SendNonNull","ToMut","ToRef"],"trait":["AsRefMut","Once","ProtectedAccess"],"type":["BorrowNest"]};

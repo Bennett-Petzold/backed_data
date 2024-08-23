@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["default_client"],"mod":["custom","encrypted","mmap","zstd"],"struct":["Network","Plainfile","Unbuffered","WriteUnbuffered"],"trait":["AsyncReadDisk","AsyncWriteDisk","ReadDisk","WriteDisk"],"type":["AsyncFile"]};
+window.SIDEBAR_ITEMS = {"fn":["default_client"],"mod":["custom","encrypted","mmap","zstd"],"struct":["Network","Plainfile","Unbuffered","WriteUnbuffered"],"trait":["AsyncReadDisk","AsyncWriteDisk","ReadDisk","WriteDisk"],"type":["AsyncError","AsyncFile"]};
