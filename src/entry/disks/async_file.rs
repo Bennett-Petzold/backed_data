@@ -11,9 +11,11 @@ cfg_if::cfg_if! {
         use tokio_util::compat::TokioAsyncReadCompatExt;
         use tokio_util::compat::TokioAsyncWriteCompatExt;
         pub type AsyncFile = tokio_util::compat::Compat<tokio::fs::File>;
+        pub type AsyncError = tokio::io::Error;
     }
     else if #[cfg(feature = "smol")] {
-        pub type AsyncFile = smol::fs::file;
+        pub type AsyncFile = smol::fs::File;
+        pub type AsyncError = smol::io::Error;
     }
 }
 
@@ -38,7 +40,7 @@ pub async fn write_file(path: PathBuf) -> std::io::Result<AsyncFile> {
                 .await?
                 .compat_write())
         } else if #[cfg(feature = "smol")] {
-            smol::fs::File::options()
+            smol::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)

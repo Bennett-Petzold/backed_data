@@ -24,6 +24,9 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(runtime)]
+use crate::entry::disks::AsyncError;
+
 use crate::{
     array::{
         async_impl::{
@@ -50,7 +53,7 @@ where
     E: BackedEntryContainerNestedAll + ResizingContainer,
     E::Disk: AsRef<Path>,
 {
-    pub async fn a_remove(&mut self, entry_idx: usize) -> Result<&mut Self, tokio::io::Error> {
+    pub async fn a_remove(&mut self, entry_idx: usize) -> Result<&mut Self, AsyncError> {
         if let Some(chunk) = self.entries().c_get(entry_idx) {
             remove_file(chunk.as_ref().get_ref().get_disk()).await?;
         }

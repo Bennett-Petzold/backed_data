@@ -117,4 +117,4 @@ pub use mmap::Mmap;
 #[cfg(runtime)]
 mod async_file;
 #[cfg(runtime)]
-pub use async_file::AsyncFile;
+pub use async_file::{AsyncError, AsyncFile};
