@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 use crate::utils::Once;
 
 #[cfg(feature = "async")]
+use crate::utils::sync::AsyncOnceLock;
+
+#[cfg(feature = "async")]
 pub mod async_impl;
 #[cfg(feature = "async")]
 pub use async_impl::*;
@@ -94,7 +97,7 @@ pub type BackedEntryLock<T, Disk, Coder> = BackedEntry<OnceLock<T>, Disk, Coder>
 /// * `T`: the type to store.
 /// * `Disk`: an implementor of [`AsyncReadDisk`](`disks::AsyncReadDisk`) and/or [`AsyncWriteDisk`](`disks::AsyncWriteDisk`).
 /// * `Coder`: an implementor of [`AsyncEncoder`](`formats::AsyncEncoder`) and/or [`AsyncDecoder`](`formats::AsyncDecoder`).
-pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<tokio::sync::OnceCell<T>, Disk, Coder>;
+pub type BackedEntryAsync<T, Disk, Coder> = BackedEntry<AsyncOnceLock<T>, Disk, Coder>;
 
 /// Thread-unsafe typedef of [`BackedEntry`] for non-pointer types.
 ///

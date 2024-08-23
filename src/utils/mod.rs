@@ -16,6 +16,9 @@ mod extender;
 #[cfg(any(feature = "unsafe_array", feature = "encrypted", feature = "mmap"))]
 pub use extender::*;
 
+#[cfg(feature = "async")]
+pub mod sync;
+
 mod protected;
 pub use protected::*;
 

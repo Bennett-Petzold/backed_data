@@ -44,13 +44,14 @@ success contacting the owner. The following options are under consideration:
 * Ensure all uses of `unsafe` are necessary, well-described, and sound.
 * Achieve reasonable functional coverage for the core API and all the disks/formats.
 * Add descriptions to all examples, and refactor for clarity if necessary.
-* Ensure `adapters` has no race conditions that can cause program hang.
 * Trim the `BackedArray` methods. 
 * Implement missing standard library traits (e.g. `[]` access).
 * Add array iterators that minimize memory usage by dropping backing stores when no longer borrowed.
 
 # General TODO
 * Add support for more disk formats and encoders
+* Provide more detail in `alternatives.rs`
+* Replace all async fn with Futures to avoid trait boxing
 
 [CrateStatus]: https://img.shields.io/crates/v/backed_data.svg
 [Crate]: https://crates.io/crates/backed_data
