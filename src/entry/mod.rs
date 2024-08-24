@@ -12,6 +12,7 @@ Also defines [`disks`] and [`formats`], which define the backing for [`BackedEnt
 
 use std::{cell::OnceCell, sync::OnceLock};
 
+use embed_doc_image::embed_doc_image;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::Once;
@@ -51,6 +52,10 @@ pub use adapters::SyncAsAsync;
 /// * See [`BackedEntryBox`] for a heap-storing version.
 /// * See [`BackedEntryArr`] for an array-specialized version.
 /// * See [`BackedEntryAsync`] with feature `async` enabled for async.
+///
+/// # Example Dataflow
+/// ![Example BackedEntry Dataflow][backed_load]
+#[embed_doc_image("backed_load", "media_output/backed_load.gif")]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackedEntry<T, Disk, Coder> {
     #[serde(skip)]

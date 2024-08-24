@@ -14,6 +14,7 @@ Dependencies are broken down by feature category, then feature.
 * [`error_stack`] - More descriptive error handling.
 * [`nix`] - Unix calls, when on Unix platforms.
 * [`thiserror`] - Reduce dev burden for writing errors.
+* [`embed_doc_image`] - Put images in documentation.
 
 # Library Functionality
 * `async`

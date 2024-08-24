@@ -22,7 +22,7 @@ See the [documentation][Docs] for usage and more details.
 # Development Commands
 
 When testing with Miri, use 'MIRIFLAGS="-Zmiri-disable-isolation"' to allow I/O.
-Build docs with `RUSTDOCFLAGS='--cfg docsrs' cargo +nightly doc --open --all-features --no-deps`.
+Build docs with `RUSTDOCFLAGS='--cfg docsrs' cargo +nightly doc --all-features`.
 
 `media` has a crate to generate the documentation gifs. It requires `graphviz`
 to create the frames and `gifsicle` to optimize for a drastic size decrease.

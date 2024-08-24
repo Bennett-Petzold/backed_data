@@ -14,6 +14,7 @@ pub mod container;
 pub mod sync_impl;
 
 pub use container::{Container, ResizingContainer};
+use embed_doc_image::embed_doc_image;
 
 use std::ops::Range;
 
@@ -68,6 +69,10 @@ impl<'a, T> From<(&'a Range<usize>, &'a T)> for BackedArrayEntry<'a, T> {
 /// # Generics
 /// * `K`: [`Container`] that holds [`usize`] values.
 /// * `E`: [`Container`] that holds [`BackedEntry`][`crate::entry::BackedEntry`] values.
+///
+/// # Example Dataflow
+/// ![Example BackedEntry Dataflow][array_load]
+#[embed_doc_image("array_load", "media_output/array_load.gif")]
 #[derive(Debug, Serialize, Deserialize, Getters)]
 pub struct BackedArray<K, E> {
     // keys and entries must always have the same length
