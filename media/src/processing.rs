@@ -81,10 +81,13 @@ impl AllSequence {
         // Reduce to all lines introduced in prev
         dashed.retain(|x| !prev.as_ref().contains(x));
 
+        let mut commented: Box<[usize]> = commented.into();
+        commented.sort_unstable();
+
         Self {
             invis: cur.into(),
             dashed: dashed.into_boxed_slice(),
-            commented: commented.into(),
+            commented,
         }
     }
 
@@ -106,7 +109,7 @@ impl AllSequence {
         });
 
         // Comment out entries
-        self.commented.iter().for_each(|line| {
+        self.commented.iter().rev().for_each(|line| {
             base.remove(*line);
         });
 
