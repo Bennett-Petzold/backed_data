@@ -42,7 +42,8 @@ fn main() {
                 "-b",
                 dest.as_os_str().to_str().unwrap(),
                 "-O3",
-                "--colors 16",
+                "--colors",
+                "16",
             ])
             .output()
             .expect("Failed to run `gifsicle`, is it installed?");
