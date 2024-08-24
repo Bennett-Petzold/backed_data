@@ -66,6 +66,7 @@ error-stack = "0.5"
 cfg-if = { version = "1", optional = true }
 nix = "0.29"
 thiserror = "1"
+embed-doc-image = "0.1" # Images in docs
 
 # Zstd dependencies
 zstd = { version = "0.13", optional = true }

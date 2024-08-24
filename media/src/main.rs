@@ -6,7 +6,7 @@ use std::{
 
 use processing::{render, InvisSequence};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use renders::backed_load;
+use renders::*;
 
 mod processing;
 mod renders;
@@ -24,7 +24,7 @@ fn main() {
     let output_dir = Path::new("../media_output");
     create_dir_all(output_dir).unwrap();
 
-    let all_inputs = [backed_load::INPUT];
+    let all_inputs = [backed_load::INPUT, array_load::INPUT];
 
     all_inputs.par_iter().for_each(|input| {
         let dest = output_dir.join(input.target.to_string() + ".gif");
@@ -42,7 +42,8 @@ fn main() {
                 "-b",
                 dest.as_os_str().to_str().unwrap(),
                 "-O3",
-                "--colors 16",
+                "--colors",
+                "16",
             ])
             .output()
             .expect("Failed to run `gifsicle`, is it installed?");
