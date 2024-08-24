@@ -1,0 +1,1 @@
+searchState.loadedDescShard("embed_doc_image", 0, "Embed images in documentation.\nProduces a doc string for inclusion in Markdown …\nProduces a doc string for inclusion in Markdown …")
