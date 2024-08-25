@@ -8,6 +8,11 @@
 `backed_data` provides a way to store large data, but it is not the only way.
 Each section addresses an alternative approach with some broad pros and cons.
 
+# Direct parsing of source
+If the access is perfectly sequential and once per element, there's rarely any reason to not just parse it directly
+and drop each line when it is no longer used.
+If it's an expensive parse, it still may make more sense to extract the relevant elements one time and parse that sequentially.
+
 # SQL database
 This ranges from PostgreSQL (complex remote server) to SQLite (local, embedded-focused library).
 
