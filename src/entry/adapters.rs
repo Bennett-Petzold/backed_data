@@ -14,9 +14,9 @@ use std::{
     future::{ready, Future, Ready},
     io::{Cursor, ErrorKind, Read, Write},
     marker::PhantomData,
-    pin::Pin,
+    pin::{pin, Pin},
     sync::{
-        mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
+        mpsc::{channel, sync_channel, Receiver, Sender, SyncSender, TryRecvError, TrySendError},
         Arc, Condvar, Mutex,
     },
     task::{Context, Poll, Waker},
@@ -465,7 +465,7 @@ impl AsyncWrite for SyncAsAsyncWrite {
         // This check avoids constant allocation to send single bytes, assuming
         // the writing client does not batch in large requests.
         if self.write_buffer.len() >= self.buffer_min_size {
-            let send_buffer = std::mem::replace(&mut self.write_buffer, Vec::with_capacity(0));
+            let send_buffer = std::mem::take(&mut self.write_buffer);
             self.cmd_tx
                 .send(AsyncWriteCommand::Write(send_buffer.into()))
                 .unwrap();
@@ -476,6 +476,22 @@ impl AsyncWrite for SyncAsAsyncWrite {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // The underlying thread had an I/O failure, but the new write
+        // indicates the caller wants to try again. Reschedule the failed call.
+        if let Some(retry_wake) = self.retry.take() {
+            self.retry_toggle.lock().unwrap().enabled = true;
+            retry_wake.notify_one();
+        }
+
+        // May need to add in a final write of buffered data
+        if !self.write_buffer.is_empty() {
+            let send_buffer = std::mem::take(&mut self.write_buffer);
+            self.cmd_tx
+                .send(AsyncWriteCommand::Write(send_buffer.into()))
+                .unwrap();
+            self.num_cmds_pending += 1;
+        }
+
         if self.flush_waker.lock().unwrap().is_none() {
             self.cmd_tx.send(AsyncWriteCommand::Flush).unwrap();
             self.num_cmds_pending += 1;
@@ -553,7 +569,7 @@ where
 /// implementations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
-    coder: Arc<C>,
+    coder: C,
     #[serde(skip)]
     read_handle: Option<RF>,
     #[serde(skip)]
@@ -565,7 +581,7 @@ pub struct SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
 impl<C, D, RF, EF, DR, ER> SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
     pub fn new(coder: C, read_handle: RF, encode_handle: EF) -> Self {
         Self {
-            coder: Arc::new(coder),
+            coder,
             read_handle: Some(read_handle),
             encode_handle: Some(encode_handle),
             _phantom: (PhantomData, PhantomData, PhantomData),
@@ -579,18 +595,170 @@ impl<C, D, RF, EF, DR, ER> SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
     }
 }
 
-/*
-/// [`BlockingFn`] that runs a synchronous decoder.
+/// Adapter that links a sync read adapater with some async provider.
+///
+/// The async provider is expected to be on an external thread via
+/// [`AsyncToSyncReadProvider`]. The async provider is also expected to handle
+/// errors on its end.
 #[derive(Debug)]
-pub struct DecodeBg<D, B> {
-    decoder: Arc<D>,
-    bytes: B,
+pub struct AsyncToSyncRead {
+    holdover: Vec<u8>,
+    input: Arc<(Condvar, Mutex<(Option<Vec<u8>>, Option<Waker>)>)>,
 }
 
-impl<D, B> BlockingFn for DecodeBg<D, B>
+impl Read for AsyncToSyncRead {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // Read in new bytes from async provider
+        if self.holdover.is_empty() {
+            let mut input_handle = self.input.1.lock().unwrap();
+
+            // Ping waker if other thread is waiting to provide a new value
+            // A new value won't be read in until the handle is released.
+            // The provider end's wait for a mutex drop past this point
+            // is minimal.
+            if let Some(waker) = input_handle.1.take() {
+                waker.wake();
+            }
+
+            // Take immediately available value, if present
+            if let Some(val) = input_handle.0.take() {
+                self.holdover = val;
+            } else {
+                // The other thread now MUST use condvar to wakeup when a value is available.
+                // Dropping with no value available will cause a hang, on drop a zero-length read
+                // should be mimicked with a zero-length vector.
+                loop {
+                    // This is where the handle is temporarily released for provider to grab.
+                    let mut input_handle_cond = self.input.0.wait(input_handle).unwrap();
+                    input_handle = input_handle_cond;
+                    if let Some(val) = input_handle.0.take() {
+                        self.holdover = val;
+                    }
+                }
+            };
+        }
+
+        // Copy all the bytes out from holdover there's space for.
+        let copy_len = min(buf.len(), self.holdover.len());
+        buf[copy_len..].copy_from_slice(&self.holdover[copy_len..]);
+        self.holdover.truncate(self.holdover.len() - copy_len);
+
+        Ok(copy_len)
+    }
+}
+
+#[derive(Debug)]
+enum AsyncToSyncReadProviderState {
+    /// Between or prior to reads
+    Inactive,
+    Reading,
+}
+
+/// Converts an [`AsyncRead`] type to provide for a sync thread.
+///
+/// Returns `Ok(())` when a zero length read occurs, or the other end closes.
+/// Errors are nonfatal.
+#[derive(Debug)]
+pub struct AsyncToSyncReadProvider<D> {
+    inner: D,
+    output: Arc<(Condvar, Mutex<(Option<Vec<u8>>, Option<Waker>)>)>,
+    state: AsyncToSyncReadProviderState,
+}
+
+impl<D: AsyncBufRead + Unpin> Future for AsyncToSyncReadProvider<D> {
+    type Output = std::io::Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        match this.state {
+            AsyncToSyncReadProviderState::Inactive => {
+                let mut output_handle = this.output.1.lock().unwrap();
+
+                // Register a waker if the other end still hasn't read out
+                if output_handle.0.is_some() {
+                    output_handle.1 = Some(cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    this.state = AsyncToSyncReadProviderState::Reading;
+
+                    // Release mutex handle prior to entering read
+                    drop(output_handle);
+
+                    // Run the read op immediately
+                    Pin::new(this).poll(cx)
+                }
+            }
+            AsyncToSyncReadProviderState::Reading => {
+                let mut inner = Pin::new(&mut this.inner);
+                match inner.as_mut().poll_fill_buf(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(x) => match x {
+                        Ok(res) => {
+                            let res_len = res.len();
+                            let mut output_handle = this.output.1.lock().unwrap();
+
+                            // Copy over the buffer, note the take, and notify.
+                            output_handle.0 = Some(res.into());
+                            inner.consume(res_len);
+                            this.output.0.notify_one();
+
+                            // End on zero length read
+                            if res_len == 0 {
+                                Poll::Ready(Ok(()))
+                            } else {
+                                drop(output_handle);
+
+                                this.state = AsyncToSyncReadProviderState::Inactive;
+                                Pin::new(this).poll(cx)
+                            }
+                        }
+                        Err(e) => Poll::Ready(Err(e)),
+                    },
+                }
+            }
+        }
+    }
+}
+
+/// Set empty read equivalent and notify the sync end, if waiting
+///
+/// Without this drop impl, the sync end might hang forever waiting for new data.
+impl<T> Drop for AsyncToSyncReadProvider<T> {
+    fn drop(&mut self) {
+        let mut output_handle = self.output.1.lock().unwrap();
+        output_handle.0 = Some(vec![]);
+        self.output.0.notify_all();
+    }
+}
+
+impl AsyncToSyncRead {
+    pub fn new<T>(async_bufreader: T) -> (Self, AsyncToSyncReadProvider<T>) {
+        let comm = Arc::new((Condvar::new(), Mutex::default()));
+        (
+            Self {
+                holdover: vec![],
+                input: comm.clone(),
+            },
+            AsyncToSyncReadProvider {
+                inner: async_bufreader,
+                output: comm,
+                state: AsyncToSyncReadProviderState::Inactive,
+            },
+        )
+    }
+}
+
+/// [`BlockingFn`] that runs a synchronous decoder.
+#[derive(Debug)]
+pub struct DecodeBg<'a, D, R> {
+    decoder: &'a D,
+    bytes: R,
+}
+
+impl<D, R> BlockingFn for DecodeBg<'_, D, R>
 where
-    D: Decoder<B>,
-    B: Read,
+    D: Decoder<R>,
+    R: Read,
 {
     type Output = Result<D::T, D::Error>;
     fn call(mut self) -> Self::Output {
@@ -598,145 +766,359 @@ where
     }
 }
 
-/// [`BlockingFn`] that runs a synchronous encoder into a write sink.
 #[derive(Debug)]
-pub struct EncodeBg<E: Encoder<S>, S> {
-    encoder: Arc<E>,
-    sink: S,
-    data: E::T,
-}
-
-impl<E, S> BlockingFn for EncodeBg<E, S>
-where
-    E: Encoder<S, T: Sized>,
-    S: Write,
-{
-    type Output = Result<(), E::Error>;
-    fn call(self) -> Self::Output {
-        self.encoder.encode(&self.data, self.sink)
-    }
+enum DecodeBgFutState<S> {
+    NoHandle,
+    AsyncRead(AsyncToSyncReadProvider<S>),
+    Decode,
 }
 
 #[derive(Debug)]
-enum DecodeBgFutState<RF, DR> {
-    ReadSource(RF),
-    Decode(DR),
+pub struct DecodeBgFut<C, S, DR> {
+    state: DecodeBgFutState<S>,
+    decode_handle: Option<DR>,
+    _phantom: PhantomData<C>,
 }
 
-#[derive(Debug)]
-pub struct DecodeBgFut<C, D, RF, EF, DR, ER> {
-    inner: SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>,
-    buffer: Vec<u8>,
-    state: DecodeBgFutState<RF, DR>,
-}
-
-impl<C, D, RF, EF, DR, ER> DecodeBgFut<C, D, RF, EF, DR, ER>
-where
-    D: AsyncReadDisk,
-{
-    pub fn new(inner: SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>, mut source: D::ReadDisk) -> Self {
-        let buffer = Vec::new();
-        Self {
-            inner,
-            buffer,
-            state: DecodeBgFutState::ReadSource(source.read_to_end(&mut buffer)),
+impl<C, DD, DR> DecodeBgFut<C, DD, DR> {
+    pub fn new<D, RF, EF, ER>(
+        inner: &SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>,
+        mut source: D::ReadDisk,
+    ) -> Self
+    where
+        D: AsyncReadDisk<ReadDisk = DD>,
+        RF: Fn(DecodeBg<C, AsyncToSyncRead>) -> DR,
+    {
+        if let Some(spawn_fn) = &inner.read_handle {
+            let (reader, provider) = AsyncToSyncRead::new(source);
+            let background = (spawn_fn)(DecodeBg {
+                decoder: &inner.coder,
+                bytes: reader,
+            });
+            Self {
+                state: DecodeBgFutState::AsyncRead(provider),
+                decode_handle: Some(background),
+                _phantom: PhantomData,
+            }
+        } else {
+            Self {
+                state: DecodeBgFutState::NoHandle,
+                decode_handle: None,
+                _phantom: PhantomData,
+            }
         }
     }
 }
 
-impl<C, D, RF, EF, DR, ER> Future for DecodeBgFut<C, D, RF, EF, DR, ER>
+impl<C, D, DR> Future for DecodeBgFut<C, D, DR>
 where
-    C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
-    D: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
-    RF: Fn(DecodeBg<C, Cursor<Vec<u8>>>) -> DR + Sync + Send,
-    EF: Sync + Send,
+    C: Decoder<AsyncToSyncRead> + Unpin,
+    D: AsyncBufRead + Unpin,
     DR: Future<Output = Result<C::T, C::Error>> + Unpin,
-    ER: Sync + Send,
 {
     type Output = Result<C::T, C::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        match this.state {
-            DecodeBgFutState::ReadSource(mut fut) => match Pin::new(fut).poll(cx) {
+        match &mut this.state {
+            // Misconfiguration trap
+            DecodeBgFutState::NoHandle => Poll::Ready(Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Need a handle configured to run!",
+            )
+            .into())),
+
+            // Polling until async reads are done
+            DecodeBgFutState::AsyncRead(provider) => match Pin::new(provider).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(x) => match x {
-                    Ok(()) => {
-                        if let Some(handle) = self.inner.read_handle {
-                            let mut buffer = Vec::new();
-                        } else {
-                            Poll::Ready(Err(std::io::Error::new(
-                                ErrorKind::Other,
-                                "Need a handle configured to run!",
-                            )))
-                        }
+                Poll::Ready(x) => {
+                    if let Err(e) = x {
+                        Poll::Ready(Err(e.into()))
+                    } else {
+                        this.state = DecodeBgFutState::Decode;
+                        Pin::new(this).poll(cx)
                     }
-                    Err(e) => Poll::Ready(Err(e.into())),
-                },
+                }
             },
-            _ => todo!(),
+
+            // Waiting for backing decode to finish
+            DecodeBgFutState::Decode => {
+                Pin::new(this.decode_handle.as_mut().unwrap_or_else(|| {
+                    panic!("Should be in NoHandle state if the decode_handle is None")
+                }))
+                .poll(cx)
+            }
         }
     }
 }
 
 impl<C, D, RF, EF, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
 where
-    C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
-    D: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
-    RF: Fn(DecodeBg<C, Cursor<Vec<u8>>>) -> DR + Sync + Send,
-    EF: Sync + Send,
+    C: Decoder<AsyncToSyncRead> + Unpin,
+    D: AsyncReadDisk<ReadDisk: AsyncBufRead>,
+    RF: Fn(DecodeBg<C, AsyncToSyncRead>) -> DR,
     DR: Future<Output = Result<C::T, C::Error>> + Unpin,
-    ER: Sync + Send,
 {
     type Error = C::Error;
     type T = C::T;
-    type DecodeFut = DecodeBgFut<C, D, RF, EF, DR, ER>;
+    type DecodeFut = DecodeBgFut<C, D::ReadDisk, DR>;
 
     fn decode(&self, source: D::ReadDisk) -> Self::DecodeFut {
-        /*
-        (handle)(DecodeBg {
-            decoder: self.coder.clone(),
-            bytes: Cursor::new(buffer),
-        })
-        */
         DecodeBgFut::new(self, source)
     }
 }
-*/
 
-/*
-impl<C, D, RF, EF, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
-where
-    C: Encoder<Vec<u8>, T: Sync + Send + Sized + Clone> + Sync + Send,
-    D: AsyncWriteDisk<WriteDisk: Sync + Send> + Sync + Send,
-    RF: Sync + Send,
-    EF: Fn(EncodeBg<C, Vec<u8>>) -> ER + Sync + Send,
-    DR: Sync + Send,
-    ER: Future<Output = Result<Vec<u8>, C::Error>> + Sync + Send,
-{
-    type Error = C::Error;
-    type T = C::T;
+/// Adapter that links a sync read adapater with some async provider.
+///
+/// The async provider is expected to be on an external thread via
+/// [`AsyncToSyncWriteProvider`]. The async provider is also expected to handle
+/// errors on its end.
+#[derive(Debug)]
+pub struct AsyncToSyncWrite {
+    cmd_tx: Sender<AsyncWriteCommand>,
+    cmd_wakeup: Arc<Mutex<Option<Waker>>>,
+    write_buffer: Vec<u8>,
+    flush_pending: bool,
+}
 
-    async fn encode(&self, data: &Self::T, mut target: D::WriteDisk) -> Result<(), Self::Error> {
-        let handle = self.encode_handle.as_ref().ok_or(std::io::Error::new(
-            ErrorKind::Other,
-            "Need a handle configured to run!",
-        ))?;
-        let encoded = (handle)(EncodeBg {
-            encoder: self.coder.clone(),
-            sink: Vec::new(),
-            data: data.clone(),
-        })
-        .await?;
+impl Write for AsyncToSyncWrite {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let send_buffer = buf.into();
 
-        target.write_all(&encoded).await?;
-        target.flush().await?;
-        target.close().await?;
+        // Use this mutex guard to prevent operation interleave
+        let mut wake_handle = self.cmd_wakeup.lock().unwrap();
+
+        self.cmd_tx
+            .send(AsyncWriteCommand::Write(send_buffer))
+            .unwrap();
+
+        // Wake up the async end, if it cleared out the queue
+        if let Some(waker) = wake_handle.take() {
+            waker.wake();
+        }
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        // Use this mutex guard to prevent operation interleave
+        let mut wake_handle = self.cmd_wakeup.lock().unwrap();
+
+        if !self.flush_pending {
+            self.cmd_tx.send(AsyncWriteCommand::Flush).unwrap();
+            self.flush_pending = true;
+        }
 
         Ok(())
     }
 }
-*/
+
+#[derive(Debug)]
+enum AsyncToSyncWriteProviderState {
+    /// Invalid configuration
+    NoHandle,
+    /// Base case, checks for another write to execute
+    Pending,
+    /// Execute the last sent write.
+    Write(Box<[u8]>),
+    /// Execute a flush command.
+    Flush,
+    /// Use `close()` to finish out the connection.
+    Shutdown,
+    /// Check encoder state after shutdown
+    EncoderRes,
+}
+
+/// Converts an [`AsyncWrite`] type to get data from a sync thread.
+///
+/// Returns `Ok(())` when encoding is finished. I/O errors are nonfatal,
+/// encoding errors may be fatal.
+#[derive(Debug)]
+pub struct AsyncToSyncWriteProvider<D, E> {
+    inner: D,
+    encode_handle: Option<E>,
+    state: AsyncToSyncWriteProviderState,
+    cmd_rx: Receiver<AsyncWriteCommand>,
+    cmd_wakeup: Arc<Mutex<Option<Waker>>>,
+}
+
+impl<D, E, Err> Future for AsyncToSyncWriteProvider<D, E>
+where
+    D: AsyncWrite + Unpin,
+    E: Future<Output = Result<(), Err>> + Unpin,
+    Err: From<std::io::Error>,
+{
+    type Output = Result<(), Err>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        match this.state {
+            AsyncToSyncWriteProviderState::NoHandle => Poll::Ready(Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Need a handle configured to run!",
+            )
+            .into())),
+
+            AsyncToSyncWriteProviderState::Pending => {
+                // Use this mutex guard to prevent operation interleave
+                let mut wakeup_handle = this.cmd_wakeup.lock().unwrap();
+
+                match this.cmd_rx.try_recv() {
+                    Ok(cmd) => {
+                        this.state = match cmd {
+                            AsyncWriteCommand::Write(buf) => {
+                                AsyncToSyncWriteProviderState::Write(buf)
+                            }
+                            AsyncWriteCommand::Flush => AsyncToSyncWriteProviderState::Flush,
+                        };
+
+                        drop(wakeup_handle);
+                        Pin::new(this).poll(cx)
+                    }
+                    Err(TryRecvError::Empty) => {
+                        *wakeup_handle = Some(cx.waker().clone());
+                        Poll::Pending
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        this.state = AsyncToSyncWriteProviderState::Shutdown;
+
+                        drop(wakeup_handle);
+                        Pin::new(this).poll(cx)
+                    }
+                }
+            }
+
+            AsyncToSyncWriteProviderState::Write(ref mut buf) => {
+                match Pin::new(&mut this.inner).poll_write(cx, buf) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(res) => {
+                        if let Err(e) = res {
+                            Poll::Ready(Err(e.into()))
+                        } else {
+                            this.state = AsyncToSyncWriteProviderState::Pending;
+                            Pin::new(this).poll(cx)
+                        }
+                    }
+                }
+            }
+
+            AsyncToSyncWriteProviderState::Flush => {
+                match Pin::new(&mut this.inner).poll_flush(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(res) => {
+                        if let Err(e) = res {
+                            Poll::Ready(Err(e.into()))
+                        } else {
+                            this.state = AsyncToSyncWriteProviderState::Pending;
+                            Pin::new(this).poll(cx)
+                        }
+                    }
+                }
+            }
+
+            AsyncToSyncWriteProviderState::Shutdown => {
+                match Pin::new(&mut this.inner).poll_close(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Ok(x)) => {
+                        this.state = AsyncToSyncWriteProviderState::EncoderRes;
+                        Pin::new(this).poll(cx)
+                    }
+                    Poll::Ready(Err(e)) => Poll::Ready(Err(e.into())),
+                }
+            }
+
+            AsyncToSyncWriteProviderState::EncoderRes => {
+                Pin::new(this.encode_handle.as_mut().unwrap_or_else(|| {
+                    panic!("Should be in NoHandle state if the encode_handle is None")
+                }))
+                .poll(cx)
+            }
+        }
+    }
+}
+
+impl<WD, ER> AsyncToSyncWriteProvider<WD, ER> {
+    pub fn new<C, D, RF, EF, DR>(
+        inner: &SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>,
+        data: &C::T,
+        target: D::WriteDisk,
+    ) -> Self
+    where
+        C: Encoder<AsyncToSyncWrite>,
+        D: AsyncWriteDisk<WriteDisk = WD>,
+        EF: Fn(EncodeBg<C, AsyncToSyncWrite>) -> ER,
+        ER: Future<Output = Result<(), C::Error>>,
+        WD: Unpin,
+    {
+        let (cmd_tx, cmd_rx) = channel();
+        let cmd_wakeup = Arc::new(Mutex::default());
+
+        let sync_write = AsyncToSyncWrite {
+            cmd_tx,
+            cmd_wakeup: cmd_wakeup.clone(),
+            write_buffer: Vec::new(),
+            flush_pending: false,
+        };
+
+        let background = EncodeBg {
+            encoder: &inner.coder,
+            sink: sync_write,
+            data,
+        };
+
+        let (encode_handle, state) = if let Some(encode_spawn) = &inner.encode_handle {
+            (
+                Some((encode_spawn)(background)),
+                AsyncToSyncWriteProviderState::Pending,
+            )
+        } else {
+            (None, AsyncToSyncWriteProviderState::NoHandle)
+        };
+
+        Self {
+            inner: target,
+            encode_handle,
+            state,
+            cmd_rx,
+            cmd_wakeup,
+        }
+    }
+}
+
+/// [`BlockingFn`] that runs a synchronous encoder into a write sink.
+#[derive(Debug)]
+pub struct EncodeBg<'a, E: Encoder<S>, S> {
+    encoder: &'a E,
+    sink: S,
+    data: &'a E::T,
+}
+
+impl<E, S> BlockingFn for EncodeBg<'_, E, S>
+where
+    E: Encoder<S, T: Sized>,
+    S: Write,
+{
+    type Output = Result<(), E::Error>;
+    fn call(self) -> Self::Output {
+        self.encoder.encode(self.data, self.sink)
+    }
+}
+
+impl<C, D, RF, EF, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
+where
+    C: Encoder<AsyncToSyncWrite>,
+    D: AsyncWriteDisk<WriteDisk: Unpin>,
+    EF: Fn(EncodeBg<C, AsyncToSyncWrite>) -> ER,
+    ER: Future<Output = Result<(), C::Error>> + Unpin,
+{
+    type Error = C::Error;
+    type T = C::T;
+    type EncodeFut = AsyncToSyncWriteProvider<D::WriteDisk, ER>;
+
+    fn encode(&self, data: &Self::T, target: D::WriteDisk) -> Self::EncodeFut {
+        AsyncToSyncWriteProvider::new(self, data, target)
+    }
+}
 
 /// Adapts a synchronous coder (with synchronous disks) to be asynchronous.
 ///
@@ -772,49 +1154,41 @@ impl<C: Serialize, D, DF, EF, DR, ER> Serialize for SyncCoderAsAsync<C, D, DF, E
     }
 }
 
-/*
 impl<C, D, DF, EF, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsAsync<C, D, DF, EF, DR, ER>
 where
-    C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
-    D: ReadDisk<ReadDisk: Sync + Send> + Sync + Send,
-    DF: Fn(DecodeBg<C, D::ReadDisk>) -> DR + Sync + Send,
-    EF: Sync + Send,
-    DR: Future<Output = Result<C::T, C::Error>> + Sync + Send,
-    ER: Sync + Send,
+    C: Decoder<D::ReadDisk>,
+    D: ReadDisk,
+    DF: Fn(DecodeBg<C, D::ReadDisk>) -> DR,
+    DR: Future<Output = Result<C::T, C::Error>>,
 {
     type Error = C::Error;
     type T = C::T;
+    type DecodeFut = DR;
 
-    async fn decode(&self, source: D::ReadDisk) -> Result<Self::T, Self::Error> {
+    fn decode(&self, source: D::ReadDisk) -> Self::DecodeFut {
         (self.decode_handle)(DecodeBg {
-            decoder: self.coder.clone(),
+            decoder: &self.coder,
             bytes: source,
         })
-        .await
     }
 }
-*/
 
-/*
 impl<C, D, DF, EF, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsAsync<C, D, DF, EF, DR, ER>
 where
-    C: Encoder<D::WriteDisk, T: Sync + Send + Sized + Clone> + Sync + Send,
-    D: WriteDisk<WriteDisk: Send> + Sync,
-    DF: Sync + Send,
-    EF: Fn(EncodeBg<C, D::WriteDisk>) -> ER + Sync + Send,
-    DR: Sync + Send,
-    ER: Future<Output = Result<(), C::Error>> + Sync + Send,
+    C: Encoder<D::WriteDisk, T: Sized + Clone>,
+    D: WriteDisk,
+    EF: Fn(EncodeBg<C, D::WriteDisk>) -> ER,
+    ER: Future<Output = Result<(), C::Error>>,
 {
     type Error = C::Error;
     type T = C::T;
+    type EncodeFut = ER;
 
-    async fn encode(&self, data: &Self::T, target: D::WriteDisk) -> Result<(), Self::Error> {
+    fn encode(&self, data: &Self::T, target: D::WriteDisk) -> Self::EncodeFut {
         (self.encode_handle)(EncodeBg {
-            encoder: self.coder.clone(),
+            encoder: &self.coder,
             sink: target,
-            data: data.clone(),
+            data,
         })
-        .await
     }
 }
-*/
