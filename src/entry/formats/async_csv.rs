@@ -142,6 +142,7 @@ impl<T: ?Sized, E: ?Sized> AsyncCsvCoder<T, E> {
     }
 }
 
+/*
 impl<T, E, Source> AsyncDecoder<Source> for AsyncCsvCoder<T, E>
 where
     T: ?Sized + From<Vec<E>> + Default + for<'de> Deserialize<'de> + Send + Sync,
@@ -297,3 +298,4 @@ mod tests {
             })
     }
 }
+*/

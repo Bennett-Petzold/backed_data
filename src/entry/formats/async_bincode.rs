@@ -4,11 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::future::Future;
 use std::marker::PhantomData;
+use std::pin::{pin, Pin};
+use std::task::{Context, Poll};
 
 use async_bincode::futures::{AsyncBincodeReader, AsyncBincodeWriter};
 use futures::io::{AsyncRead, AsyncWrite};
-use futures::{AsyncWriteExt, SinkExt, StreamExt};
+use futures::{AsyncWriteExt, SinkExt, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 
 use super::{AsyncDecoder, AsyncEncoder};
@@ -26,23 +29,50 @@ impl<T: ?Sized> Default for AsyncBincodeCoder<T> {
     }
 }
 
-impl<T, Source> AsyncDecoder<Source> for AsyncBincodeCoder<T>
+#[derive(Debug)]
+pub struct BincodeRead<R, T> {
+    reader: AsyncBincodeReader<R, T>,
+}
+
+impl<R, T> Future for BincodeRead<R, T>
 where
-    T: for<'de> Deserialize<'de> + Send + Sync,
-    Source: AsyncRead + Send + Sync + Unpin,
+    for<'a> T: Deserialize<'a>,
+    R: AsyncRead + Unpin,
 {
-    type Error = bincode::Error;
-    type T = T;
-    async fn decode(&self, source: Source) -> Result<Self::T, Self::Error> {
-        AsyncBincodeReader::from(source)
-            .next()
-            .await
-            .ok_or(bincode::ErrorKind::Custom(
-                "AsyncBincodeReader stream empty".to_string(),
-            ))?
+    type Output = Result<T, bincode::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match Pin::new(&mut self.reader).poll_next(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(x) => {
+                if let Some(val) = x {
+                    Poll::Ready(val)
+                } else {
+                    Poll::Ready(Err(Box::new(bincode::ErrorKind::Custom(
+                        "AsyncBincodeReader stream empty".to_string(),
+                    ))))
+                }
+            }
+        }
     }
 }
 
+impl<T, Source> AsyncDecoder<Source> for AsyncBincodeCoder<T>
+where
+    T: for<'de> Deserialize<'de>,
+    Source: AsyncRead + Unpin,
+{
+    type Error = bincode::Error;
+    type T = T;
+    type DecodeFut = BincodeRead<Source, T>;
+    fn decode(&self, source: Source) -> BincodeRead<Source, T> {
+        BincodeRead {
+            reader: AsyncBincodeReader::from(source),
+        }
+    }
+}
+
+/*
 impl<T, Target> AsyncEncoder<Target> for AsyncBincodeCoder<T>
 where
     T: Serialize + Send + Sync + Unpin,
@@ -59,3 +89,4 @@ where
         Ok(())
     }
 }
+*/

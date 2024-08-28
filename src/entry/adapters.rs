@@ -11,7 +11,7 @@ Defines adapters that allow synchronous [`disks`][`super::disks`] and/or
 
 use std::{
     cmp::min,
-    future::Future,
+    future::{ready, Future, Ready},
     io::{Cursor, ErrorKind, Read, Write},
     marker::PhantomData,
     pin::Pin,
@@ -274,9 +274,14 @@ where
     WF: Unpin + Sync,
 {
     type ReadDisk = SyncAsAsyncRead;
+    type ReadFut = Ready<std::io::Result<Self::ReadDisk>>;
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        SyncAsAsyncRead::new(&self.inner, &self.read_handle, self.read_buffer_size)
+    fn async_read_disk(&self) -> Self::ReadFut {
+        ready(SyncAsAsyncRead::new(
+            &self.inner,
+            &self.read_handle,
+            self.read_buffer_size,
+        ))
     }
 }
 
@@ -527,13 +532,14 @@ where
     WF: Fn(SyncAsAsyncWriteBg<W::WriteDisk>) + Send + Sync,
 {
     type WriteDisk = SyncAsAsyncWrite;
+    type WriteFut = Ready<std::io::Result<Self::WriteDisk>>;
 
-    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        SyncAsAsyncWrite::new(
+    fn async_write_disk(&mut self) -> Self::WriteFut {
+        ready(SyncAsAsyncWrite::new(
             &mut self.inner,
             &self.write_handle,
             self.write_buffer_min_size,
-        )
+        ))
     }
 }
 
@@ -573,6 +579,7 @@ impl<C, D, RF, EF, DR, ER> SyncCoderAsyncDisk<C, D, RF, EF, DR, ER> {
     }
 }
 
+/*
 /// [`BlockingFn`] that runs a synchronous decoder.
 #[derive(Debug)]
 pub struct DecodeBg<D, B> {
@@ -610,33 +617,94 @@ where
     }
 }
 
+#[derive(Debug)]
+enum DecodeBgFutState<RF, DR> {
+    ReadSource(RF),
+    Decode(DR),
+}
+
+#[derive(Debug)]
+pub struct DecodeBgFut<C, D, RF, EF, DR, ER> {
+    inner: SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>,
+    buffer: Vec<u8>,
+    state: DecodeBgFutState<RF, DR>,
+}
+
+impl<C, D, RF, EF, DR, ER> DecodeBgFut<C, D, RF, EF, DR, ER>
+where
+    D: AsyncReadDisk,
+{
+    pub fn new(inner: SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>, mut source: D::ReadDisk) -> Self {
+        let buffer = Vec::new();
+        Self {
+            inner,
+            buffer,
+            state: DecodeBgFutState::ReadSource(source.read_to_end(&mut buffer)),
+        }
+    }
+}
+
+impl<C, D, RF, EF, DR, ER> Future for DecodeBgFut<C, D, RF, EF, DR, ER>
+where
+    C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
+    D: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
+    RF: Fn(DecodeBg<C, Cursor<Vec<u8>>>) -> DR + Sync + Send,
+    EF: Sync + Send,
+    DR: Future<Output = Result<C::T, C::Error>> + Unpin,
+    ER: Sync + Send,
+{
+    type Output = Result<C::T, C::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        match this.state {
+            DecodeBgFutState::ReadSource(mut fut) => match Pin::new(fut).poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(x) => match x {
+                    Ok(()) => {
+                        if let Some(handle) = self.inner.read_handle {
+                            let mut buffer = Vec::new();
+                        } else {
+                            Poll::Ready(Err(std::io::Error::new(
+                                ErrorKind::Other,
+                                "Need a handle configured to run!",
+                            )))
+                        }
+                    }
+                    Err(e) => Poll::Ready(Err(e.into())),
+                },
+            },
+            _ => todo!(),
+        }
+    }
+}
+
 impl<C, D, RF, EF, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
 where
     C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
     D: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
     RF: Fn(DecodeBg<C, Cursor<Vec<u8>>>) -> DR + Sync + Send,
     EF: Sync + Send,
-    DR: Future<Output = Result<C::T, C::Error>> + Sync + Send,
+    DR: Future<Output = Result<C::T, C::Error>> + Unpin,
     ER: Sync + Send,
 {
     type Error = C::Error;
     type T = C::T;
+    type DecodeFut = DecodeBgFut<C, D, RF, EF, DR, ER>;
 
-    async fn decode(&self, mut source: D::ReadDisk) -> Result<Self::T, Self::Error> {
-        let handle = self.read_handle.as_ref().ok_or(std::io::Error::new(
-            ErrorKind::Other,
-            "Need a handle configured to run!",
-        ))?;
-        let mut buffer = Vec::new();
-        source.read_to_end(&mut buffer).await?;
+    fn decode(&self, source: D::ReadDisk) -> Self::DecodeFut {
+        /*
         (handle)(DecodeBg {
             decoder: self.coder.clone(),
             bytes: Cursor::new(buffer),
         })
-        .await
+        */
+        DecodeBgFut::new(self, source)
     }
 }
+*/
 
+/*
 impl<C, D, RF, EF, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsyncDisk<C, D, RF, EF, DR, ER>
 where
     C: Encoder<Vec<u8>, T: Sync + Send + Sized + Clone> + Sync + Send,
@@ -668,6 +736,7 @@ where
         Ok(())
     }
 }
+*/
 
 /// Adapts a synchronous coder (with synchronous disks) to be asynchronous.
 ///
@@ -703,6 +772,7 @@ impl<C: Serialize, D, DF, EF, DR, ER> Serialize for SyncCoderAsAsync<C, D, DF, E
     }
 }
 
+/*
 impl<C, D, DF, EF, DR, ER> AsyncDecoder<D::ReadDisk> for SyncCoderAsAsync<C, D, DF, EF, DR, ER>
 where
     C: Decoder<Cursor<Vec<u8>>, T: Sync + Send> + Sync + Send,
@@ -723,7 +793,9 @@ where
         .await
     }
 }
+*/
 
+/*
 impl<C, D, DF, EF, DR, ER> AsyncEncoder<D::WriteDisk> for SyncCoderAsAsync<C, D, DF, EF, DR, ER>
 where
     C: Encoder<D::WriteDisk, T: Sync + Send + Sized + Clone> + Sync + Send,
@@ -745,3 +817,4 @@ where
         .await
     }
 }
+*/

@@ -8,6 +8,8 @@
 Defines the encoding/decoding formats for backed disks.
 */
 
+use std::future::Future;
+
 use serde::{Deserialize, Serialize};
 
 /// A format decoder that can be used synchronously.
@@ -38,13 +40,11 @@ pub trait Encoder<Target: ?Sized> {
 #[cfg(feature = "async")]
 pub trait AsyncDecoder<Source: ?Sized> {
     type Error: From<std::io::Error>;
-    type T: for<'de> Deserialize<'de> + Send + Sync;
+    type T: for<'de> Deserialize<'de>;
+    type DecodeFut: Future<Output = Result<Self::T, Self::Error>>;
 
     /// Return data with a known format from storage.
-    fn decode(
-        &self,
-        source: Source,
-    ) -> impl std::future::Future<Output = Result<Self::T, Self::Error>> + Send;
+    fn decode(&self, source: Source) -> Self::DecodeFut;
 }
 
 /// A format encoder that can be used asynchronously.
@@ -59,14 +59,11 @@ pub trait AsyncDecoder<Source: ?Sized> {
 #[cfg(feature = "async")]
 pub trait AsyncEncoder<Target: ?Sized> {
     type Error: From<std::io::Error>;
-    type T: ?Sized + Serialize + Send + Sync;
+    type T: ?Sized + Serialize;
+    type EncodeFut: Future<Output = Result<(), Self::Error>>;
 
     /// Fully write out formatted data to a target disk.
-    fn encode(
-        &self,
-        data: &Self::T,
-        target: Target,
-    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
+    fn encode(&self, data: &Self::T, target: Target) -> Self::EncodeFut;
 }
 
 #[cfg(feature = "bincode")]

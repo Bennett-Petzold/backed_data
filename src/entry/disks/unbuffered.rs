@@ -6,6 +6,7 @@
 
 use std::{
     fs::File,
+    future::Future,
     path::{Path, PathBuf},
 };
 
@@ -74,18 +75,22 @@ impl WriteDisk for Unbuffered {
 #[cfg(runtime)]
 impl AsyncReadDisk for Unbuffered {
     type ReadDisk = super::async_file::AsyncFile;
+    type ReadFut =
+        Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>;
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        super::async_file::read_file(self.path.clone()).await
+    fn async_read_disk(&self) -> Self::ReadFut {
+        super::async_file::read_file(self.path.clone())
     }
 }
 
 #[cfg(runtime)]
 impl AsyncWriteDisk for Unbuffered {
     type WriteDisk = super::async_file::AsyncFile;
+    type WriteFut =
+        Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>;
 
-    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        super::async_file::write_file(self.path.clone()).await
+    fn async_write_disk(&mut self) -> Self::WriteFut {
+        super::async_file::write_file(self.path.clone())
     }
 }
 

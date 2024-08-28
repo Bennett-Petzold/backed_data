@@ -6,8 +6,11 @@
 
 use std::{
     fs::File,
+    future::Future,
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 use serde::{Deserialize, Serialize};
@@ -79,24 +82,82 @@ impl WriteDisk for Plainfile {
 }
 
 #[cfg(runtime)]
+#[derive(Debug)]
+pub struct BufferedReadFut {
+    file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Send + Sync>,
+}
+
+#[cfg(runtime)]
+impl BufferedReadFut {
+    pub fn new(
+        file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Send + Sync>,
+    ) -> Self {
+        Self { file }
+    }
+}
+
+#[cfg(runtime)]
+impl Future for BufferedReadFut {
+    type Output = std::io::Result<futures::io::BufReader<super::async_file::AsyncFile>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.file.poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(x) => match x {
+                Ok(f) => Poll::Ready(Ok(futures::io::BufReader::new(f))),
+                Err(e) => Poll::Ready(Err(e)),
+            },
+        }
+    }
+}
+
+#[cfg(runtime)]
 impl AsyncReadDisk for Plainfile {
     type ReadDisk = futures::io::BufReader<super::async_file::AsyncFile>;
+    type ReadFut = BufferedReadFut;
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(futures::io::BufReader::new(
-            super::async_file::read_file(self.path.clone()).await?,
-        ))
+    fn async_read_disk(&self) -> Self::ReadFut {
+        BufferedReadFut::new(super::async_file::read_file(self.path.clone()))
+    }
+}
+
+#[cfg(runtime)]
+#[derive(Debug)]
+pub struct BufferedWriteFut {
+    file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>>>,
+}
+
+#[cfg(runtime)]
+impl BufferedWriteFut {
+    pub fn new(
+        file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>>>,
+    ) -> Self {
+        Self { file }
+    }
+}
+
+#[cfg(runtime)]
+impl Future for BufferedWriteFut {
+    type Output = std::io::Result<futures::io::BufWriter<super::async_file::AsyncFile>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.file.poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(x) => match x {
+                Ok(f) => Poll::Ready(Ok(futures::io::BufWriter::new(f))),
+                Err(e) => Poll::Ready(Err(e)),
+            },
+        }
     }
 }
 
 #[cfg(runtime)]
 impl AsyncWriteDisk for Plainfile {
     type WriteDisk = futures::io::BufWriter<super::async_file::AsyncFile>;
+    type WriteFut = BufferedWriteFut;
 
-    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        Ok(futures::io::BufWriter::new(
-            super::async_file::write_file(self.path.clone()).await?,
-        ))
+    fn async_write_disk(&mut self) -> BufferedWriteFut {
+        BufferedWriteFut::new(super::async_file::write_file(self.path.clone()))
     }
 }
 
