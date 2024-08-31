@@ -17,13 +17,12 @@ the explicitly unsafe features is guarded by a conditional
 # Safe Features
 * `array`
 * `directory`
-* `async`
 * `bincode`
 * `serde_json`
 * `simd_json`
-* `csv`
 * `async_bincode`
 * `async_csv`
+* `csv`
 * `zstd`
 * `zstdmt`
 * `async_zstd`
@@ -33,6 +32,9 @@ the explicitly unsafe features is guarded by a conditional
 # Unsafe Features
 See documentation and comments in the feature function/structs for
 finer-grained justifications.
+
+### `async`
+`unsafe` is necessary to use the `Pin` API for self-referential [`Future`][`std::future::Future`]s.
 
 ### `unsafe_array`
 The `generic` methods are premised on the guarantees of
@@ -50,13 +52,6 @@ give out the exclusive mutable element access.
 The complex iterators that save storage or flush on drop also `unsafe`, so
 that the last instance of the handle can perform mutable cleanup. The
 shared mutable element is not modified besides creation and cleanup.
-
-### `tokio` & `smol`
-Due to [`std::mem::forget`], scoped async blocks are inherently unsafe. The
-runtime execution options provided for runtime executors rely on scoped
-async blocks, so need to expose an `unsafe` function for them.
-
-### `mmap`
 All mmap APIs are unsafe, due to the possibility of an external process
 modifying the file. `unsafe` is also used for mutable mmaps, so that it can
 be preserved after the write handle is dropped but enforce mutability rules

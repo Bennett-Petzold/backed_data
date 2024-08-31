@@ -123,12 +123,14 @@ where
 ///
 /// # Example
 /// ```
+/// # #[cfg(feature = "smol")] {
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{AsyncReadDisk, custom::CustomAsyncRead};
 ///
 /// let disk = CustomAsyncRead(|| ready(Ok(smol::io::empty())));
 /// let reader: &dyn Future<Output = std::io::Result<smol::io::Empty>> =
 ///     &disk.async_read_disk();
+/// # }
 /// ```
 #[cfg(feature = "async")]
 pub struct CustomAsyncRead<F>(pub F);
@@ -139,12 +141,14 @@ pub struct CustomAsyncRead<F>(pub F);
 ///
 /// # Example
 /// ```
+/// # #[cfg(feature = "smol")] {
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{AsyncWriteDisk, custom::CustomAsyncWrite};
 ///
 /// let mut disk = CustomAsyncWrite(|| ready(Ok(smol::io::sink())));
 /// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
+/// # }
 /// ```
 #[cfg(feature = "async")]
 pub struct CustomAsyncWrite<F>(pub F);
@@ -153,6 +157,7 @@ pub struct CustomAsyncWrite<F>(pub F);
 ///
 /// # Example
 /// ```
+/// # #[cfg(feature = "smol")] {
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{
 ///     AsyncReadDisk,
@@ -175,6 +180,7 @@ pub struct CustomAsyncWrite<F>(pub F);
 /// }
 /// let writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
+/// # }
 /// ```
 #[cfg(feature = "async")]
 pub struct CustomAsync<R, W>(pub CustomAsyncRead<R>, pub CustomAsyncWrite<W>);
@@ -247,6 +253,7 @@ where
 ///
 /// # Example
 /// ```
+/// # #[cfg(feature = "smol")] {
 /// use std::future::{Future, ready};
 /// use backed_data::entry::disks::{
 ///     ReadDisk,
@@ -283,6 +290,7 @@ where
 /// }
 /// let async_writer: &dyn Future<Output = std::io::Result<smol::io::Sink>> =
 ///     &disk.async_write_disk();
+/// # }
 /// ```
 #[cfg(feature = "async")]
 pub struct CustomFull<R, W, AR, AW>(pub CustomSync<R, W>, pub CustomAsync<AR, AW>);

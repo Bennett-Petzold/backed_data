@@ -21,7 +21,7 @@ default = ["bincode", "directory", "zstd"]
 array = []
 unsafe_array = ["array", "dep:stable_deref_trait"] # Array methods using unsafe code
 directory = ["array", "dep:uuid"]
-async = ["dep:futures", "dep:cfg-if"]
+async = ["dep:futures", "dep:cfg-if", "dep:pin-project"]
 
 # Async executors
 tokio = ["async", "dep:tokio", "dep:tokio-util", "dep:async-scoped"]
@@ -91,6 +91,7 @@ bytes = { version = "*", optional = true } # Synced with reqwest
 async-compression = { version = "0.4", optional = true, features = ["futures-io"] }
 futures =  { version = "0.3", optional = true }
 async-scoped = { version = "0.9", optional = true, features = ["use-tokio"] }
+pin-project = { version = "1", optional = true }
 
 # Async executors
 tokio = { version = "1", optional = true, default-features = false, features = ["fs"] }

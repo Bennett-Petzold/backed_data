@@ -41,10 +41,15 @@ pub trait Encoder<Target: ?Sized> {
 pub trait AsyncDecoder<Source: ?Sized> {
     type Error: From<std::io::Error>;
     type T: for<'de> Deserialize<'de>;
-    type DecodeFut: Future<Output = Result<Self::T, Self::Error>>;
+    type DecodeFut<'a>: Future<Output = Result<Self::T, Self::Error>>
+    where
+        Self: 'a,
+        Source: 'a;
 
     /// Return data with a known format from storage.
-    fn decode(&self, source: Source) -> Self::DecodeFut;
+    fn decode<'a>(&'a self, source: Source) -> Self::DecodeFut<'a>
+    where
+        Source: 'a;
 }
 
 /// A format encoder that can be used asynchronously.
@@ -60,10 +65,16 @@ pub trait AsyncDecoder<Source: ?Sized> {
 pub trait AsyncEncoder<Target: ?Sized> {
     type Error: From<std::io::Error>;
     type T: ?Sized + Serialize;
-    type EncodeFut: Future<Output = Result<(), Self::Error>>;
+    type EncodeFut<'a>: Future<Output = Result<(), Self::Error>>
+    where
+        Self: 'a,
+        Target: 'a;
 
     /// Fully write out formatted data to a target disk.
-    fn encode(&self, data: &Self::T, target: Target) -> Self::EncodeFut;
+    fn encode<'a, 'b>(&'a self, data: &'a Self::T, target: Target) -> Self::EncodeFut<'b>
+    where
+        'a: 'b,
+        Target: 'b;
 }
 
 #[cfg(feature = "bincode")]

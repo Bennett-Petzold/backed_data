@@ -8,6 +8,7 @@ use std::{
     fs::File,
     future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
 use serde::{Deserialize, Serialize};
@@ -76,7 +77,7 @@ impl WriteDisk for Unbuffered {
 impl AsyncReadDisk for Unbuffered {
     type ReadDisk = super::async_file::AsyncFile;
     type ReadFut =
-        Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>;
+        Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>>;
 
     fn async_read_disk(&self) -> Self::ReadFut {
         super::async_file::read_file(self.path.clone())
@@ -87,7 +88,7 @@ impl AsyncReadDisk for Unbuffered {
 impl AsyncWriteDisk for Unbuffered {
     type WriteDisk = super::async_file::AsyncFile;
     type WriteFut =
-        Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>;
+        Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>>;
 
     fn async_write_disk(&mut self) -> Self::WriteFut {
         super::async_file::write_file(self.path.clone())

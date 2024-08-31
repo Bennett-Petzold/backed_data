@@ -13,10 +13,12 @@ deliberately undefined/unsafe for testing purposes.
 
 use core::panic;
 use std::{
+    future::{ready, Ready},
     io::{Cursor, Seek},
     marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::Mutex,
+    task::Poll,
 };
 
 use serde::{Deserialize, Serialize};
@@ -106,24 +108,35 @@ impl<'a> WriteDisk for CursorVec<'a> {
 #[cfg(feature = "async")]
 impl<'a> AsyncReadDisk for CursorVec<'a> {
     type ReadDisk = &'a [u8];
+    type ReadFut = Ready<std::io::Result<Self::ReadDisk>>;
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.lock().unwrap().rewind()?;
-        let this: *const _ = &**self.inner.lock().unwrap().get_ref();
-        Ok(unsafe { &*this })
+    fn async_read_disk(&self) -> Self::ReadFut {
+        let rewind_status = self.inner.lock().unwrap().rewind();
+        match rewind_status {
+            Ok(()) => {
+                let this: *const _ = &**self.inner.lock().unwrap().get_ref();
+                ready(Ok(unsafe { &*this }))
+            }
+            Err(e) => ready(Err(e)),
+        }
     }
 }
 
 #[cfg(feature = "async")]
 impl<'a> AsyncWriteDisk for CursorVec<'a> {
     type WriteDisk = &'a mut Vec<u8>;
+    type WriteFut = Ready<std::io::Result<Self::WriteDisk>>;
 
-    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn async_write_disk(&mut self) -> Self::WriteFut {
         let mut this = self.inner.lock().unwrap();
         this.get_mut().clear();
-        this.rewind()?;
-        let this: *mut _ = this.get_mut();
-        unsafe { Ok(&mut *this) }
+        match this.rewind() {
+            Ok(()) => {
+                let this: *mut _ = this.get_mut();
+                ready(unsafe { Ok(&mut *this) })
+            }
+            Err(e) => ready(Err(e)),
+        }
     }
 }
 
@@ -140,11 +153,17 @@ impl<'a> ReadDisk for &'a mut CursorVec<'a> {
 #[cfg(feature = "async")]
 impl<'a> AsyncReadDisk for &mut CursorVec<'a> {
     type ReadDisk = &'a [u8];
+    type ReadFut = Ready<std::io::Result<Self::ReadDisk>>;
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.lock().unwrap().rewind()?;
-        let this: *const _ = &**self.inner.lock().unwrap().get_ref();
-        Ok(unsafe { &*this })
+    fn async_read_disk(&self) -> Self::ReadFut {
+        let rewind_status = self.inner.lock().unwrap().rewind();
+        match rewind_status {
+            Ok(()) => {
+                let this: *const _ = &**self.inner.lock().unwrap().get_ref();
+                ready(Ok(unsafe { &*this }))
+            }
+            Err(e) => ready(Err(e)),
+        }
     }
 }
 
@@ -222,24 +241,121 @@ impl<'a> WriteDisk for OwnedCursorVec<'a> {
 #[cfg(feature = "async")]
 impl<'a> AsyncReadDisk for OwnedCursorVec<'a> {
     type ReadDisk = &'a [u8];
+    type ReadFut = Ready<std::io::Result<Self::ReadDisk>>;
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        self.inner.lock().unwrap().rewind()?;
-        let this: *const _ = &**self.inner.lock().unwrap().get_ref();
-        Ok(unsafe { &*this })
+    fn async_read_disk(&self) -> Self::ReadFut {
+        let rewind_status = self.inner.lock().unwrap().rewind();
+        match rewind_status {
+            Ok(()) => {
+                let this: *const _ = &**self.inner.lock().unwrap().get_ref();
+                ready(Ok(unsafe { &*this }))
+            }
+            Err(e) => ready(Err(e)),
+        }
     }
 }
 
 #[cfg(feature = "async")]
 impl<'a> AsyncWriteDisk for OwnedCursorVec<'a> {
     type WriteDisk = &'a mut Vec<u8>;
+    type WriteFut = Ready<std::io::Result<Self::WriteDisk>>;
 
-    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn async_write_disk(&mut self) -> Self::WriteFut {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        match this.rewind() {
+            Ok(()) => {
+                let this: *mut _ = this.get_mut();
+                ready(unsafe { Ok(&mut *this) })
+            }
+            Err(e) => ready(Err(e)),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct StaticCursorVec {
+    #[serde(skip)]
+    pub inner: Mutex<Cursor<Vec<u8>>>,
+}
+
+impl Clone for StaticCursorVec {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.lock().unwrap().clone().into(),
+        }
+    }
+}
+
+impl StaticCursorVec {
+    pub fn new(inner: Cursor<Vec<u8>>) -> Self {
+        Self {
+            inner: Mutex::new(inner),
+        }
+    }
+}
+
+impl Default for StaticCursorVec {
+    fn default() -> Self {
+        Self::new(Cursor::default())
+    }
+}
+
+/// This is deliberately breaking mutability
+impl ReadDisk for StaticCursorVec {
+    type ReadDisk = Cursor<Vec<u8>>;
+
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+        let mut this = self.inner.lock().unwrap().clone();
+        this.rewind()?;
+        Ok(this)
+    }
+}
+
+impl WriteDisk for StaticCursorVec {
+    type WriteDisk = &'static mut Cursor<Vec<u8>>;
+
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         let mut this = self.inner.lock().unwrap();
         this.get_mut().clear();
         this.rewind()?;
-        let this: *mut _ = this.get_mut();
+        let this: *mut _ = this.deref_mut();
         unsafe { Ok(&mut *this) }
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncReadDisk for StaticCursorVec {
+    type ReadDisk = &'static [u8];
+    type ReadFut = Ready<std::io::Result<Self::ReadDisk>>;
+
+    fn async_read_disk(&self) -> Self::ReadFut {
+        let rewind_status = self.inner.lock().unwrap().rewind();
+        match rewind_status {
+            Ok(()) => {
+                let this: *const _ = &**self.inner.lock().unwrap().get_ref();
+                ready(Ok(unsafe { &*this }))
+            }
+            Err(e) => ready(Err(e)),
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncWriteDisk for StaticCursorVec {
+    type WriteDisk = &'static mut Vec<u8>;
+    type WriteFut = Ready<std::io::Result<Self::WriteDisk>>;
+
+    fn async_write_disk(&mut self) -> Self::WriteFut {
+        let mut this = self.inner.lock().unwrap();
+        this.get_mut().clear();
+        match this.rewind() {
+            Ok(()) => {
+                let this: *mut _ = this.get_mut();
+                ready(unsafe { Ok(&mut *this) })
+            }
+            Err(e) => ready(Err(e)),
+        }
     }
 }
 

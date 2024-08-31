@@ -36,6 +36,7 @@ pub trait WriteDisk {
 pub trait AsyncReadDisk {
     type ReadDisk: AsyncRead + Unpin;
     type ReadFut: Future<Output = std::io::Result<Self::ReadDisk>>;
+
     fn async_read_disk(&self) -> Self::ReadFut;
 }
 

@@ -4,11 +4,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::future::Future;
 use std::marker::PhantomData;
+use std::pin::Pin;
+use std::task::{ready, Context, Poll};
 
-use csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, QuoteStyle, Terminator, Trim};
+use csv_async::{
+    AsyncReaderBuilder, AsyncWriterBuilder, DeserializeRecordsStream, QuoteStyle, Terminator, Trim,
+};
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use futures::TryStreamExt;
+use futures::Stream;
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 
 use super::{AsyncDecoder, AsyncEncoder};
@@ -61,7 +67,7 @@ pub struct QuoteStyleWrapper(#[serde(with = "QuoteStyleSerial")] pub QuoteStyle)
 /// * `T`: The output container type.
 /// * `E`: The output element type.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct AsyncCsvCoder<T: ?Sized, E: ?Sized> {
+pub struct AsyncCsvCoder<T: ?Sized, D: ?Sized> {
     pub comment: Option<u8>,
     pub delimiter: Option<u8>,
     pub double_quote: Option<bool>,
@@ -74,10 +80,10 @@ pub struct AsyncCsvCoder<T: ?Sized, E: ?Sized> {
     pub terminator: Option<TerminatorWrapper>,
     pub trim: Option<TrimWrapper>,
     _phantom_container: PhantomData<T>,
-    _phantom_elements: PhantomData<E>,
+    _phantom_elements: PhantomData<D>,
 }
 
-impl<T: ?Sized, E: ?Sized> AsyncCsvCoder<T, E> {
+impl<T: ?Sized, D: ?Sized> AsyncCsvCoder<T, D> {
     fn reader_builder(&self) -> AsyncReaderBuilder {
         let mut builder = AsyncReaderBuilder::new();
         builder.comment(self.comment);
@@ -142,25 +148,73 @@ impl<T: ?Sized, E: ?Sized> AsyncCsvCoder<T, E> {
     }
 }
 
-/*
-impl<T, E, Source> AsyncDecoder<Source> for AsyncCsvCoder<T, E>
+#[pin_project]
+struct CsvDecodeFut<'a, R: AsyncRead + Unpin + Send, D, T> {
+    #[pin]
+    deserializer: DeserializeRecordsStream<'a, R, D>,
+    items: Vec<D>,
+    _phantom: PhantomData<T>,
+}
+
+impl<'a, R, D, T> Future for CsvDecodeFut<'a, R, D, T>
 where
-    T: ?Sized + From<Vec<E>> + Default + for<'de> Deserialize<'de> + Send + Sync,
-    E: ?Sized + for<'de> Deserialize<'de> + Send + Sync,
+    R: AsyncRead + Unpin + Send,
+    D: for<'de> Deserialize<'de> + 'static,
+    T: ?Sized + From<Vec<D>>,
+{
+    type Output = Result<T, csv_async::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.as_mut().project();
+        let next = ready!(this.deserializer.poll_next(cx));
+        if let Some(item_res) = next {
+            match item_res {
+                Ok(item) => {
+                    this.items.push(item);
+                    self.poll(cx)
+                }
+                Err(e) => Poll::Ready(Err(e)),
+            }
+        } else {
+            let owned_items = std::mem::take(this.items);
+            Poll::Ready(Ok(owned_items.into()))
+        }
+    }
+}
+
+impl<'a, R, D, T> CsvDecodeFut<'a, R, D, T>
+where
+    R: AsyncRead + Unpin + Send,
+{
+    pub fn new(deserializer: DeserializeRecordsStream<'a, R, D>) -> Self {
+        Self {
+            deserializer,
+            items: Vec::new(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+/*
+impl<T, D, Source> AsyncDecoder<Source> for AsyncCsvCoder<T, D>
+where
+    T: ?Sized + From<Vec<D>> + for<'de> Deserialize<'de>,
+    D: for<'de> Deserialize<'de> + 'static,
     Source: AsyncRead + Send + Sync + Unpin,
 {
     type Error = csv_async::Error;
     type T = T;
-    async fn decode(&self, source: Source) -> Result<Self::T, Self::Error> {
-        self.reader_builder()
-            .create_deserializer(source)
-            .deserialize()
-            .try_collect::<Vec<E>>()
-            .await
-            .map(|x| x.into())
+    type DecodeFut<'a> = CsvDecodeFut<'a, Source, D, T> where Self: 'a;
+
+    fn decode(&self, source: Source) -> Self::DecodeFut<'_> {
+        //let deserializer = self.reader_builder().create_deserializer(source);
+        //CsvDecodeFut::new(deserializer)
+        todo!()
     }
 }
+*/
 
+/*
 impl<T, E, Target> AsyncEncoder<Target> for AsyncCsvCoder<T, E>
 where
     T: ?Sized + AsRef<[E]> + Default + Serialize + Send + Sync + Unpin,

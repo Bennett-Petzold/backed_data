@@ -5,12 +5,13 @@
  */
 
 use std::{
+    fmt::Debug,
     fs::File,
     future::Future,
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 
 use serde::{Deserialize, Serialize};
@@ -82,15 +83,27 @@ impl WriteDisk for Plainfile {
 }
 
 #[cfg(runtime)]
-#[derive(Debug)]
 pub struct BufferedReadFut {
-    file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Send + Sync>,
+    file:
+        Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Send + Sync>>,
+}
+
+#[cfg(runtime)]
+impl Debug for BufferedReadFut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let file: *const _ = self.file.as_ref().get_ref();
+        f.debug_struct("BufferedReadFut")
+            .field("file", &file)
+            .finish()
+    }
 }
 
 #[cfg(runtime)]
 impl BufferedReadFut {
     pub fn new(
-        file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Send + Sync>,
+        file: Pin<
+            Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Send + Sync>,
+        >,
     ) -> Self {
         Self { file }
     }
@@ -101,12 +114,10 @@ impl Future for BufferedReadFut {
     type Output = std::io::Result<futures::io::BufReader<super::async_file::AsyncFile>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.file.poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(x) => match x {
-                Ok(f) => Poll::Ready(Ok(futures::io::BufReader::new(f))),
-                Err(e) => Poll::Ready(Err(e)),
-            },
+        let x = ready!(self.file.as_mut().poll(cx));
+        match x {
+            Ok(f) => Poll::Ready(Ok(futures::io::BufReader::new(f))),
+            Err(e) => Poll::Ready(Err(e)),
         }
     }
 }
@@ -122,15 +133,24 @@ impl AsyncReadDisk for Plainfile {
 }
 
 #[cfg(runtime)]
-#[derive(Debug)]
 pub struct BufferedWriteFut {
-    file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>>>,
+    file: Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>>>>,
+}
+
+#[cfg(runtime)]
+impl Debug for BufferedWriteFut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let file: *const _ = self.file.as_ref().get_ref();
+        f.debug_struct("BufferedWriteFut")
+            .field("file", &file)
+            .finish()
+    }
 }
 
 #[cfg(runtime)]
 impl BufferedWriteFut {
     pub fn new(
-        file: Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>>>,
+        file: Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>>>>,
     ) -> Self {
         Self { file }
     }
@@ -141,12 +161,10 @@ impl Future for BufferedWriteFut {
     type Output = std::io::Result<futures::io::BufWriter<super::async_file::AsyncFile>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.file.poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(x) => match x {
-                Ok(f) => Poll::Ready(Ok(futures::io::BufWriter::new(f))),
-                Err(e) => Poll::Ready(Err(e)),
-            },
+        let x = ready!(self.file.as_mut().poll(cx));
+        match x {
+            Ok(f) => Poll::Ready(Ok(futures::io::BufWriter::new(f))),
+            Err(e) => Poll::Ready(Err(e)),
         }
     }
 }

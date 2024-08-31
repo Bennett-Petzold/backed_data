@@ -7,7 +7,7 @@
 use std::{cell::OnceCell, sync::OnceLock};
 
 /// Unity trait for [`OnceCell`] and [`OnceLock`].
-pub trait Once {
+pub trait Once: Default {
     type Inner;
     fn new() -> Self;
     fn get(&self) -> Option<&Self::Inner>;
