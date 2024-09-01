@@ -79,14 +79,14 @@ where
     }
 }
 
-impl<T, Disk, Coder> BackedEntryWrite<'_> for BackedEntrySync<T, Disk, Coder>
+impl<T, Disk, Coder> BackedEntryWrite for BackedEntrySync<T, Disk, Coder>
 where
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
     Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
 {
-    type UpdateResult = Result<(), Coder::Error>;
-    fn update(&mut self) -> Self::UpdateResult {
+    type UpdateResult<'a> = Result<(), Coder::Error> where Self: 'a;
+    fn update(&mut self) -> Self::UpdateResult<'_> {
         let this = &mut self.0;
 
         if let Some(val) = this.value.get() {
@@ -96,7 +96,7 @@ where
         Ok(())
     }
 
-    fn write<U>(&mut self, new_value: U) -> Self::UpdateResult
+    fn write<U>(&mut self, new_value: U) -> Self::UpdateResult<'_>
     where
         U: Into<<Self::OnceWrapper as Once>::Inner>,
     {
@@ -113,7 +113,10 @@ where
         Ok(())
     }
 
-    fn write_ref(&mut self, new_value: &<Self::OnceWrapper as Once>::Inner) -> Self::UpdateResult {
+    fn write_ref(
+        &mut self,
+        new_value: &<Self::OnceWrapper as Once>::Inner,
+    ) -> Self::UpdateResult<'_> {
         let this = &mut self.0;
 
         this.unload();
@@ -196,7 +199,7 @@ where
     }
 }
 
-impl<T, Disk, Coder> BackedEntryMutHandle<'_> for BackedEntrySync<T, Disk, Coder>
+impl<T, Disk, Coder> BackedEntryMutHandle for BackedEntrySync<T, Disk, Coder>
 where
     T: Once<Inner: Serialize + for<'de> Deserialize<'de>>,
     Disk: WriteDisk + ReadDisk,

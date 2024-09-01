@@ -99,25 +99,27 @@ pub trait BackedEntryRead: BackedEntry {
 }
 
 /// A [`BackedEntry`] that supports writing to disk.
-pub trait BackedEntryWrite<'a>: BackedEntry {
-    type UpdateResult;
+pub trait BackedEntryWrite: BackedEntry {
+    type UpdateResult<'a>
+    where
+        Self: 'a;
     /// Updates underlying storage with the current entry.
-    fn update(&'a mut self) -> Self::UpdateResult;
+    fn update(&mut self) -> Self::UpdateResult<'_>;
 
     /// Updates underlying storage with the current entry.
     ///
     /// See [`Self::write_unload`] to skip the memory write.
-    fn write<U>(&'a mut self, new_value: U) -> Self::UpdateResult
+    fn write<U>(&mut self, new_value: U) -> Self::UpdateResult<'_>
     where
         U: Into<<Self::OnceWrapper as Once>::Inner>;
 
     /// Write the value to disk only, unloading current memory.
     ///
     /// See [`Self::write`] to keep the value in memory.
-    fn write_ref(
+    fn write_ref<'a>(
         &'a mut self,
         new_value: &'a <Self::OnceWrapper as Once>::Inner,
-    ) -> Self::UpdateResult;
+    ) -> Self::UpdateResult<'a>;
 }
 
 /// Handle that protects the mutation of some [`BackedEntry`].
@@ -147,7 +149,7 @@ pub trait MutHandle<T>: Deref<Target = T> + DerefMut + Drop {
 /// A [`BackedEntry`] that can be mutated.
 ///
 /// This trait exposes full capabilities of [`BackedEntry`], as it requires the read and write traits.
-pub trait BackedEntryMutHandle<'b>: BackedEntryRead + BackedEntryWrite<'b> {
+pub trait BackedEntryMutHandle: BackedEntryRead + BackedEntryWrite {
     type MutHandleResult<'a>
     where
         Self: 'a;

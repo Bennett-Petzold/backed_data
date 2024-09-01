@@ -14,9 +14,7 @@ time optimization. Then set
 to build a program that is LTO compatible with `zstd`'s generated C LTO.
 */
 
-use futures::AsyncWrite;
 use num_traits::Unsigned;
-use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
@@ -41,11 +39,9 @@ use {
 #[cfg(feature = "async_zstd")]
 use {
     crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk},
-    futures::io::AsyncBufRead,
+    futures::{io::AsyncBufRead, AsyncWrite},
+    pin_project::pin_project,
 };
-
-#[cfg(feature = "async_zstdmt")]
-use async_compression::zstd::CParameter;
 
 #[cfg(any(feature = "zstdmt", feature = "async_zstdmt"))]
 use std::sync::{LazyLock, Mutex};

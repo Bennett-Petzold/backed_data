@@ -343,28 +343,28 @@ impl<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
     }
 }
 
-impl<'a, T, Disk, Coder> BackedEntryWrite<'a> for BackedEntryAsync<T, Disk, Coder>
+impl<T, Disk, Coder> BackedEntryWrite for BackedEntryAsync<T, Disk, Coder>
 where
-    T: Serialize + 'a,
-    Disk: AsyncWriteDisk<WriteDisk: 'a>,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T> + 'a,
+    T: Serialize,
+    Disk: AsyncWriteDisk,
+    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
 {
-    type UpdateResult = BackedUpdateFut<'a, T, Disk, Coder>;
-    fn update(&'a mut self) -> Self::UpdateResult {
+    type UpdateResult<'a> = BackedUpdateFut<'a, T, Disk, Coder> where Self: 'a;
+    fn update(&mut self) -> Self::UpdateResult<'_> {
         BackedUpdateFut::update(&mut self.0)
     }
 
-    fn write<U>(&'a mut self, new_value: U) -> Self::UpdateResult
+    fn write<U>(&mut self, new_value: U) -> Self::UpdateResult<'_>
     where
         U: Into<<Self::OnceWrapper as Once>::Inner>,
     {
         BackedUpdateFut::write(&mut self.0, new_value.into())
     }
 
-    fn write_ref(
+    fn write_ref<'a>(
         &'a mut self,
         new_value: &'a <Self::OnceWrapper as Once>::Inner,
-    ) -> Self::UpdateResult {
+    ) -> Self::UpdateResult<'a> {
         BackedUpdateFut::write_unload(&mut self.0, new_value)
     }
 }
@@ -567,11 +567,11 @@ where
     }
 }
 
-impl<'b, T, Disk, Coder> BackedEntryMutHandle<'b> for BackedEntryAsync<T, Disk, Coder>
+impl<T, Disk, Coder> BackedEntryMutHandle for BackedEntryAsync<T, Disk, Coder>
 where
-    T: Serialize + for<'de> Deserialize<'de> + 'b,
-    Disk: AsyncWriteDisk<WriteDisk: 'b> + AsyncReadDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T> + AsyncDecoder<Disk::ReadDisk, T = T> + 'b,
+    T: Serialize + for<'de> Deserialize<'de>,
+    Disk: AsyncWriteDisk + AsyncReadDisk,
+    Coder: AsyncEncoder<Disk::WriteDisk, T = T> + AsyncDecoder<Disk::ReadDisk, T = T>,
 {
     type MutHandleResult<'a> = GenMutHandle<'a, T, Disk, Coder>
         where
