@@ -28,8 +28,8 @@ use crate::utils::{
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
     formats::{AsyncDecoder, AsyncEncoder, Decoder, Encoder},
-    BackedEntry, BackedEntryInner, BackedEntryInnerTrait, BackedEntryMutHandle, BackedEntryRead,
-    BackedEntryWrite, MutHandle,
+    BackedEntry, BackedEntryInner, BackedEntryMutHandle, BackedEntryRead, BackedEntryWrite,
+    MutHandle,
 };
 
 /// Asynchronous implementation for [`BackedEntry`].

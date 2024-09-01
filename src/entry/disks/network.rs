@@ -7,19 +7,21 @@
 use std::{
     cell::UnsafeCell,
     cmp::min,
+    fmt::Debug,
     future::Future,
+    marker::PhantomPinned,
     pin::Pin,
     sync::{Mutex, OnceLock},
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
     time::Duration,
 };
 
 use bytes::Bytes;
 use futures::io::AsyncRead;
+use pin_project::pin_project;
 use reqwest::{header::HeaderMap, Client, Method, Request, Response, Url, Version};
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "async")]
 use super::AsyncReadDisk;
 
 static NETWORK_CLIENT: OnceLock<Client> = OnceLock::new();
@@ -119,10 +121,11 @@ fn reqwest_err_to_io(e: reqwest::Error) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, e)
 }
 
+#[pin_project(!Unpin)]
 /// Wraps a [`reqwest::Response`] to provide [`AsyncRead`].
 pub struct ReqwestRead {
-    response: Pin<Box<UnsafeCell<Response>>>,
-    chunk: Pin<Box<dyn Future<Output = reqwest::Result<Option<Bytes>>>>>,
+    response: Response,
+    chunk: Option<Pin<Box<dyn Future<Output = reqwest::Result<Option<Bytes>>> + Send + Sync>>>,
     leftover_slice: Option<Vec<u8>>,
 }
 
@@ -136,92 +139,145 @@ impl AsyncRead for ReqwestRead {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<std::io::Result<usize>> {
+        let this = self.as_mut().project();
+
         // Check for leftovers and fill those in first.
-        {
-            let self_mut = self.as_mut().get_mut();
-            let leftover_slice = Pin::new(&mut self_mut.leftover_slice);
-            if let Some(leftover_slice) = leftover_slice.get_mut() {
-                let buf_len = buf.len();
-                let num_bytes = min(leftover_slice.len(), buf_len);
+        if let Some(leftover_slice) = &this.leftover_slice {
+            let buf_len = buf.len();
+            let num_bytes = min(leftover_slice.len(), buf_len);
 
-                if leftover_slice.len() > buf_len {
-                    // Write partial and advance
-                    buf.copy_from_slice(&leftover_slice[..buf_len]);
-                    self_mut.leftover_slice = Some(leftover_slice[buf_len..].to_vec());
-                } else {
-                    // Write full and clear
-                    buf[..leftover_slice.len()].copy_from_slice(leftover_slice);
-                    self_mut.leftover_slice = None;
-                };
+            if leftover_slice.len() > buf_len {
+                // Write partial and advance
+                buf.copy_from_slice(&leftover_slice[..buf_len]);
+                *this.leftover_slice = Some(leftover_slice[buf_len..].to_vec());
+            } else {
+                // Write full and clear
+                buf[..leftover_slice.len()].copy_from_slice(leftover_slice);
+                *this.leftover_slice = None;
+            };
 
-                return Poll::Ready(Ok(num_bytes));
-            }
+            return Poll::Ready(Ok(num_bytes));
         }
 
-        // Needs this form to satisfy borrow checker.
-        let chunk_res = {
-            let mut chunk = Pin::new(&mut self.as_mut().get_mut().chunk);
-            chunk.as_mut().poll(cx)
-        };
+        loop {
+            if let Some(chunk) = this.chunk.as_mut() {
+                let chunk_res = ready!(chunk.as_mut().poll(cx));
 
-        match chunk_res {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(x)) => Poll::Ready(Err(reqwest_err_to_io(x))),
-            Poll::Ready(Ok(None)) => Poll::Ready(Ok(0)),
-            Poll::Ready(Ok(Some(x))) => {
-                // Just a little laundry to grab out the next future.
-                let this: *mut _ = self.as_mut().get_mut();
-                let new_chunk = Box::pin(unsafe { &mut *this }.response.get_mut().chunk());
+                let processed_poll = match chunk_res {
+                    Err(x) => Poll::Ready(Err(reqwest_err_to_io(x))),
+                    Ok(None) => Poll::Ready(Ok(0)),
+                    Ok(Some(x)) => {
+                        // Clear out this chunk as fully polled
+                        *this.chunk = None;
 
-                // Update to next chunk.
-                let self_mut = self.as_mut().get_mut();
-                let chunk = Pin::new(&mut self_mut.chunk);
-                *chunk.get_mut() = new_chunk;
+                        // Get current chunk metadata
+                        let buf_len = buf.len();
+                        let num_bytes = min(x.len(), buf_len);
 
-                // Get current chunk metadata
-                let buf_len = buf.len();
-                let num_bytes = min(x.len(), buf_len);
-
-                // Write in current chunk data.
-                if x.len() > buf_len {
-                    // Write partial and advance
-                    buf.copy_from_slice(&x[..buf_len]);
-                    self_mut.leftover_slice = Some(x[buf_len..].to_vec());
-                } else {
-                    // Write full, no need to create leftovers
-                    buf[..x.len()].copy_from_slice(&x);
+                        // Write in current chunk data.
+                        if x.len() > buf_len {
+                            // Write partial and advance
+                            buf.copy_from_slice(&x[..buf_len]);
+                            *this.leftover_slice = Some(x[buf_len..].to_vec());
+                        } else {
+                            // Write full, no need to create leftovers
+                            buf[..x.len()].copy_from_slice(&x);
+                        };
+                        Poll::Ready(Ok(num_bytes))
+                    }
                 };
-                Poll::Ready(Ok(num_bytes))
+
+                return processed_poll;
+            } else {
+                // This is the only location response is borrowed mutably, it
+                // always clears a prior mutable borrow before returning here,
+                // and `!Unpin` ensures the pointer remains valid.
+                let response_ptr: *mut _ = this.response;
+                let response = unsafe { &mut *response_ptr };
+
+                *this.chunk = Some(Box::pin(response.chunk()));
             }
         }
     }
 }
 
-#[cfg(feature = "async")]
-impl AsyncReadDisk for Network {
-    //type ReadDisk = StreamReader<impl Stream<Item = Result<u8, u8>, u8>>;
-    type ReadDisk = ReqwestRead;
+#[pin_project(!Unpin)]
+pub struct ReqwestReadBuilder {
+    client: Client,
+    request: SerialRequest,
+    fut: Option<Pin<Box<dyn Future<Output = Result<Response, reqwest::Error>>>>>,
+}
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+impl Debug for ReqwestReadBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let fut_ptr: *const _;
+        let fut: &dyn Debug = match &self.fut {
+            Some(x) => {
+                fut_ptr = &*x.as_ref();
+                &fut_ptr
+            }
+            None => &None::<()>,
+        };
+
+        f.debug_struct("ReqwestReadBuilder")
+            .field("fut", &fut)
+            .finish()
+    }
+}
+
+impl Future for ReqwestReadBuilder {
+    type Output = std::io::Result<ReqwestRead>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.as_mut().project();
+
+        if let Some(mut fut) = this.fut.as_mut() {
+            let res = ready!(fut.as_mut().poll(cx));
+            match res {
+                Ok(response) => Poll::Ready(Ok(ReqwestRead {
+                    response,
+                    chunk: None,
+                    leftover_slice: None,
+                })),
+                Err(e) => {
+                    let e = reqwest_err_to_io(e);
+                    Poll::Ready(Err(e))
+                }
+            }
+        } else {
+            let client_ptr: *mut _ = this.client;
+            let client = unsafe { &mut *client_ptr };
+
+            let request_ptr: *const _ = this.request;
+            let request = unsafe { &*request_ptr };
+
+            *this.fut = Some(Box::pin(client.execute(request.get())));
+            self.poll(cx)
+        }
+    }
+}
+
+impl ReqwestReadBuilder {
+    pub fn new(request: SerialRequest, client: Client) -> Self {
+        Self {
+            client,
+            request,
+            fut: None,
+        }
+    }
+}
+
+impl AsyncReadDisk for Network {
+    type ReadDisk = ReqwestRead;
+    type ReadFut = ReqwestReadBuilder;
+
+    fn async_read_disk(&self) -> Self::ReadFut {
         let client = {
             let mut client_handle = self.client.lock().unwrap();
             client_handle.get_or_insert(default_client()).clone()
         };
 
-        client
-            .execute(self.request.get())
-            .await
-            .map(|response| {
-                // Need a little unsafe hackery to pull in the first chunk
-                let response = Box::pin(UnsafeCell::new(response));
-                let chunk = Box::pin(unsafe { &mut *response.get() }.chunk());
-                ReqwestRead {
-                    response,
-                    chunk,
-                    leftover_slice: None,
-                }
-            })
-            .map_err(reqwest_err_to_io)
+        ReqwestReadBuilder::new(self.request.clone(), client)
     }
 }
 
@@ -233,7 +289,7 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "async_csv")]
     async fn remote_read() {
-        use std::str::FromStr;
+        use std::{pin::pin, str::FromStr};
 
         use crate::{
             entry::formats::{AsyncCsvCoder, AsyncDecoder},
@@ -249,10 +305,8 @@ mod tests {
         );
         let coder = AsyncCsvCoder::default();
 
-        let from_remote: Vec<IouZipcodes> = coder
-            .decode(&mut disk.async_read_disk().await.unwrap())
-            .await
-            .unwrap();
+        let disk = pin!(disk.async_read_disk()).await.unwrap();
+        let from_remote: Vec<IouZipcodes> = coder.decode(pin!(disk)).await.unwrap();
 
         assert_eq!(from_remote[0], *FIRST_ENTRY);
         assert_eq!(from_remote[from_remote.len() - 1], *LAST_ENTRY);

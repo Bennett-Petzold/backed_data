@@ -34,7 +34,7 @@ pub trait WriteDisk {
 #[cfg(feature = "async")]
 /// Produces storage that can be read from asynchronously.
 pub trait AsyncReadDisk {
-    type ReadDisk: AsyncRead + Unpin;
+    type ReadDisk: AsyncRead;
     type ReadFut: Future<Output = std::io::Result<Self::ReadDisk>>;
 
     fn async_read_disk(&self) -> Self::ReadFut;
@@ -43,7 +43,7 @@ pub trait AsyncReadDisk {
 #[cfg(feature = "async")]
 /// Produces storage that can be written to asynchronously.
 pub trait AsyncWriteDisk {
-    type WriteDisk: AsyncWrite + Unpin;
+    type WriteDisk: AsyncWrite;
     type WriteFut: Future<Output = std::io::Result<Self::WriteDisk>>;
     fn async_write_disk(&mut self) -> Self::WriteFut;
 }

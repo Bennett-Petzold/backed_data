@@ -65,33 +65,3 @@ impl<T: Once, Disk, Coder> AsMut<BackedEntryInner<T, Disk, Coder>>
         self
     }
 }
-
-/// Wrapper to minimize bounds specification for [`BackedEntryInner`].
-///
-/// [`BackedEntryInner`] is always this.
-/// Only [`BackedEntryInner`] is this.
-pub trait BackedEntryInnerTrait {
-    type T: Once;
-    type Disk;
-    type Coder;
-
-    fn get(self) -> BackedEntryInner<Self::T, Self::Disk, Self::Coder>;
-    fn get_ref(&self) -> &BackedEntryInner<Self::T, Self::Disk, Self::Coder>;
-    fn get_mut(&mut self) -> &mut BackedEntryInner<Self::T, Self::Disk, Self::Coder>;
-}
-
-impl<T: Once, Disk, Coder> BackedEntryInnerTrait for BackedEntryInner<T, Disk, Coder> {
-    type T = T;
-    type Disk = Disk;
-    type Coder = Coder;
-
-    fn get(self) -> BackedEntryInner<Self::T, Self::Disk, Self::Coder> {
-        self
-    }
-    fn get_ref(&self) -> &BackedEntryInner<Self::T, Self::Disk, Self::Coder> {
-        self
-    }
-    fn get_mut(&mut self) -> &mut BackedEntryInner<Self::T, Self::Disk, Self::Coder> {
-        self
-    }
-}

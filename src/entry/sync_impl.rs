@@ -14,8 +14,8 @@ use crate::utils::Once;
 use super::{
     disks::{ReadDisk, WriteDisk},
     formats::{Decoder, Encoder},
-    BackedEntry, BackedEntryInner, BackedEntryInnerTrait, BackedEntryMutHandle, BackedEntryRead,
-    BackedEntryWrite, MutHandle,
+    BackedEntry, BackedEntryInner, BackedEntryMutHandle, BackedEntryRead, BackedEntryWrite,
+    MutHandle,
 };
 
 /// Synchronous implementation for [`BackedEntry`].

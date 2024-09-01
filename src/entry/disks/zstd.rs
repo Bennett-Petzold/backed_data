@@ -14,15 +14,22 @@ time optimization. Then set
 to build a program that is LTO compatible with `zstd`'s generated C LTO.
 */
 
+use futures::AsyncWrite;
 use num_traits::Unsigned;
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt::{Debug, Display},
+    future::Future,
     marker::PhantomData,
     ops::Deref,
     path::{Path, PathBuf},
+    pin::Pin,
+    task::{ready, Context, Poll},
 };
+
+use super::WriteUnbuffered;
 
 #[cfg(feature = "zstd")]
 use {
@@ -136,10 +143,9 @@ impl ZstdLevel {
 /// when out of bounds.
 ///
 /// Since `zstd` uses an internal write buffer for encoding,
-/// [`WriteUnbuffered`][`super::WriteUnbuffered`] is more efficient than
-/// [`Plainfile`][`super::Plainfile`].
+/// [`WriteUnbuffered`] is more efficient than [`Plainfile`][`super::Plainfile`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ZstdDisk<'a, const ZSTD_LEVEL: u8, B> {
+pub struct ZstdDisk<'a, const ZSTD_LEVEL: u8 = 0, B = WriteUnbuffered> {
     inner: B,
     _phantom: PhantomData<&'a ()>,
 }
@@ -236,57 +242,75 @@ impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEV
 }
 
 #[cfg(feature = "async_zstd")]
-impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead + Unpin> + Sync + Send>
-    AsyncReadDisk for ZstdDisk<'_, ZSTD_LEVEL, B>
-{
-    type ReadDisk = async_compression::futures::bufread::ZstdDecoder<B::ReadDisk>;
+#[derive(Debug)]
+#[pin_project]
+pub struct ZstdReadFut<T> {
+    #[pin]
+    inner: T,
+}
 
-    async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-        Ok(async_compression::futures::bufread::ZstdDecoder::new(
-            self.inner.async_read_disk().await?,
-        ))
+#[cfg(feature = "async_zstd")]
+impl<T, I> Future for ZstdReadFut<T>
+where
+    T: Future<Output = std::io::Result<I>>,
+    I: AsyncBufRead,
+{
+    type Output = std::io::Result<async_compression::futures::bufread::ZstdDecoder<I>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match ready!(self.project().inner.poll(cx)) {
+            Ok(x) => Poll::Ready(Ok(async_compression::futures::bufread::ZstdDecoder::new(x))),
+            Err(e) => Poll::Ready(Err(e)),
+        }
     }
 }
 
 #[cfg(feature = "async_zstd")]
-impl<B: AsyncWriteDisk + Send + Sync, const ZSTD_LEVEL: u8> AsyncWriteDisk
+impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead> + Sync + Send> AsyncReadDisk
     for ZstdDisk<'_, ZSTD_LEVEL, B>
 {
-    type WriteDisk = async_compression::futures::write::ZstdEncoder<B::WriteDisk>;
+    type ReadDisk = async_compression::futures::bufread::ZstdDecoder<B::ReadDisk>;
+    type ReadFut = ZstdReadFut<B::ReadFut>;
 
-    async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-        let disk = self.inner.async_write_disk().await?;
-
-        #[cfg(feature = "async_zstdmt")]
-        {
-            let level = *ZSTD_MULTITHREAD.lock().unwrap();
-            let params: &[_] = if level > 0 {
-                &[CParameter::nb_workers(*ZSTD_MULTITHREAD.lock().unwrap())]
-            } else {
-                &[]
-            };
-
-            Ok(
-                async_compression::futures::write::ZstdEncoder::with_quality_and_params(
-                    disk,
-                    async_compression::Level::Precise(
-                        *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
-                    ),
-                    params,
-                ),
-            )
+    fn async_read_disk(&self) -> Self::ReadFut {
+        ZstdReadFut {
+            inner: self.inner.async_read_disk(),
         }
+    }
+}
 
-        #[cfg(not(feature = "async_zstdmt"))]
-        {
-            Ok(
-                async_compression::futures::write::ZstdEncoder::with_quality(
-                    disk,
-                    async_compression::Level::Precise(
-                        *ZstdLevel::new(ZSTD_LEVEL).map_err(std::io::Error::other)?,
-                    ),
-                ),
-            )
+#[cfg(feature = "async_zstd")]
+#[derive(Debug)]
+#[pin_project]
+pub struct ZstdWriteFut<T> {
+    #[pin]
+    inner: T,
+}
+
+#[cfg(feature = "async_zstd")]
+impl<T, I> Future for ZstdWriteFut<T>
+where
+    T: Future<Output = std::io::Result<I>>,
+    I: AsyncWrite,
+{
+    type Output = std::io::Result<async_compression::futures::write::ZstdEncoder<I>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match ready!(self.project().inner.poll(cx)) {
+            Ok(x) => Poll::Ready(Ok(async_compression::futures::write::ZstdEncoder::new(x))),
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
+#[cfg(feature = "async_zstd")]
+impl<B: AsyncWriteDisk, const ZSTD_LEVEL: u8> AsyncWriteDisk for ZstdDisk<'_, ZSTD_LEVEL, B> {
+    type WriteDisk = async_compression::futures::write::ZstdEncoder<B::WriteDisk>;
+    type WriteFut = ZstdWriteFut<B::WriteFut>;
+
+    fn async_write_disk(&mut self) -> Self::WriteFut {
+        ZstdWriteFut {
+            inner: self.inner.async_write_disk(),
         }
     }
 }
