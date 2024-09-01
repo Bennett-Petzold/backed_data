@@ -150,10 +150,9 @@ where
         AsyncBincodeSend<'a, Target, T>
         where Self: 'a, Target: 'a;
 
-    fn encode<'a, 'b>(&'a self, data: &'a Self::T, target: Target) -> Self::EncodeFut<'b>
+    fn encode<'a>(&'a self, data: &'a Self::T, target: Target) -> Self::EncodeFut<'a>
     where
-        'a: 'b,
-        Target: 'b,
+        Target: 'a,
     {
         let writer = AsyncBincodeWriter::from(target).for_async();
         AsyncBincodeSend::new(writer, data)

@@ -5,12 +5,14 @@
  */
 
 use std::future::Future;
-use std::marker::PhantomData;
+use std::marker::{PhantomData, PhantomPinned};
+use std::mem::transmute;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
 use csv_async::{
-    AsyncReaderBuilder, AsyncWriterBuilder, DeserializeRecordsStream, QuoteStyle, Terminator, Trim,
+    AsyncReaderBuilder, AsyncSerializer, AsyncWriterBuilder, DeserializeRecordsIntoStream,
+    DeserializeRecordsStream, QuoteStyle, Terminator, Trim,
 };
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::Stream;
@@ -149,35 +151,40 @@ impl<T: ?Sized, D: ?Sized> AsyncCsvCoder<T, D> {
 }
 
 #[pin_project]
-struct CsvDecodeFut<'a, R: AsyncRead + Unpin + Send, D, T> {
+pub struct CsvDecodeFut<'a, R: AsyncRead + Unpin + Send, D, T> {
     #[pin]
-    deserializer: DeserializeRecordsStream<'a, R, D>,
+    deserializer: DeserializeRecordsIntoStream<'a, R, D>,
     items: Vec<D>,
     _phantom: PhantomData<T>,
 }
 
 impl<'a, R, D, T> Future for CsvDecodeFut<'a, R, D, T>
 where
-    R: AsyncRead + Unpin + Send,
-    D: for<'de> Deserialize<'de> + 'static,
+    R: AsyncRead + Unpin + Send + 'a,
+    D: for<'de> Deserialize<'de> + 'a,
     T: ?Sized + From<Vec<D>>,
 {
     type Output = Result<T, csv_async::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.as_mut().project();
-        let next = ready!(this.deserializer.poll_next(cx));
-        if let Some(item_res) = next {
-            match item_res {
-                Ok(item) => {
-                    this.items.push(item);
-                    self.poll(cx)
+        let mut this = self.as_mut().project();
+        loop {
+            let next = ready!(this.deserializer.as_mut().poll_next(cx));
+            if let Some(item_res) = next {
+                match item_res {
+                    Ok(item) => {
+                        this.items.push(item);
+                    }
+                    Err(e) => {
+                        return Poll::Ready(Err(e));
+                    }
                 }
-                Err(e) => Poll::Ready(Err(e)),
+            } else {
+                let owned_items = std::mem::take(this.items);
+                {
+                    return Poll::Ready(Ok(owned_items.into()));
+                }
             }
-        } else {
-            let owned_items = std::mem::take(this.items);
-            Poll::Ready(Ok(owned_items.into()))
         }
     }
 }
@@ -186,7 +193,7 @@ impl<'a, R, D, T> CsvDecodeFut<'a, R, D, T>
 where
     R: AsyncRead + Unpin + Send,
 {
-    pub fn new(deserializer: DeserializeRecordsStream<'a, R, D>) -> Self {
+    pub fn new(deserializer: DeserializeRecordsIntoStream<'a, R, D>) -> Self {
         Self {
             deserializer,
             items: Vec::new(),
@@ -195,26 +202,117 @@ where
     }
 }
 
-/*
 impl<T, D, Source> AsyncDecoder<Source> for AsyncCsvCoder<T, D>
 where
     T: ?Sized + From<Vec<D>> + for<'de> Deserialize<'de>,
-    D: for<'de> Deserialize<'de> + 'static,
+    D: for<'de> Deserialize<'de>,
     Source: AsyncRead + Send + Sync + Unpin,
 {
     type Error = csv_async::Error;
     type T = T;
-    type DecodeFut<'a> = CsvDecodeFut<'a, Source, D, T> where Self: 'a;
+    type DecodeFut<'a> = CsvDecodeFut<'a, Source, D, T> where Self: 'a, Source: 'a;
 
-    fn decode(&self, source: Source) -> Self::DecodeFut<'_> {
-        //let deserializer = self.reader_builder().create_deserializer(source);
-        //CsvDecodeFut::new(deserializer)
-        todo!()
+    fn decode<'a>(&'a self, source: Source) -> Self::DecodeFut<'a>
+    where
+        Source: 'a,
+    {
+        let deserializer = self
+            .reader_builder()
+            .create_deserializer(source)
+            .into_deserialize();
+        CsvDecodeFut::new(deserializer)
     }
 }
-*/
 
-/*
+//#[derive(Debug)]
+pub struct AsyncEncodeFut<'a, W: AsyncWrite + Unpin, E: Serialize> {
+    serializer: AsyncSerializer<W>,
+    serialize_fut: Option<Pin<Box<dyn Future<Output = csv_async::Result<()>> + 'a>>>,
+    data_view: &'a [E],
+    pos: Option<usize>,
+    _phantom: PhantomData<E>,
+    /// `serialize_fut` uses a mutable pointer to `serializer`
+    _pin: PhantomPinned,
+}
+
+impl<'a, W, E> Future for AsyncEncodeFut<'a, W, E>
+where
+    W: AsyncWrite + Unpin + 'a,
+    E: Serialize + 'a,
+{
+    type Output = csv_async::Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // No moves will happen, but the struct can't be `Unpin` because of
+        // reference shenanigans.
+        let this = unsafe { self.as_mut().get_unchecked_mut() };
+
+        loop {
+            // `!Unpin` keeps serializer in place, we need to construct futures
+            // with a mutable reference to it.
+            let serializer_ptr: *mut _ = &mut this.serializer;
+            let serializer = unsafe { &mut *serializer_ptr };
+
+            if let Some(ref mut serialize_fut) = &mut this.serialize_fut {
+                if let Err(e) = ready!(serialize_fut.as_mut().poll(cx)) {
+                    return Poll::Ready(Err(e));
+                } else {
+                    match this.pos {
+                        // Move to the next item
+                        Some(x) if x < this.data_view.len() => {
+                            let next_pos = x + 1;
+                            this.pos = Some(next_pos);
+
+                            let item = this.data_view.get(x).unwrap();
+                            this.serialize_fut =
+                                Some(Box::pin(async move { serializer.serialize(item).await }));
+                        }
+                        // Past last item, flush
+                        Some(x) => {
+                            this.serialize_fut = Some(Box::pin(async {
+                                serializer.flush().await.map_err(|e| e.into())
+                            }));
+                            this.pos = None;
+                        }
+                        // Finished all writes and flush, just close
+                        None => {
+                            return Poll::Ready(Ok(()));
+                        }
+                    }
+                }
+            // Initialization logic, which relies on !Unpin.
+            } else if let Some(item) = this.data_view.first() {
+                this.serialize_fut =
+                    Some(Box::pin(async move { serializer.serialize(item).await }));
+            } else {
+                this.serialize_fut = Some(Box::pin(async {
+                    serializer.flush().await.map_err(|e| e.into())
+                }));
+            }
+        }
+    }
+}
+
+impl<'a, W, E> AsyncEncodeFut<'a, W, E>
+where
+    W: AsyncWrite + Unpin + 'a,
+    E: Serialize + 'a,
+{
+    pub fn new<T>(serializer: AsyncSerializer<W>, data: &'a T) -> Self
+    where
+        T: ?Sized + AsRef<[E]>,
+    {
+        Self {
+            serializer,
+            serialize_fut: None,
+            data_view: data.as_ref(),
+            pos: Some(0),
+            _phantom: PhantomData,
+            _pin: PhantomPinned,
+        }
+    }
+}
+
 impl<T, E, Target> AsyncEncoder<Target> for AsyncCsvCoder<T, E>
 where
     T: ?Sized + AsRef<[E]> + Default + Serialize + Send + Sync + Unpin,
@@ -224,17 +322,14 @@ where
 {
     type Error = csv_async::Error;
     type T = T;
-    async fn encode(&self, data: &Self::T, mut target: Target) -> Result<(), Self::Error> {
-        let mut writer = self.writer_builder().create_serializer(&mut target);
+    type EncodeFut<'a> = AsyncEncodeFut<'a, Target, E> where Self: 'a, Target: 'a;
 
-        for line in data.as_ref() {
-            writer.serialize(line).await?
-        }
-        drop(writer);
-
-        target.flush().await?;
-        target.close().await?;
-        Ok(())
+    fn encode<'a>(&'a self, data: &'a Self::T, mut target: Target) -> Self::EncodeFut<'a>
+    where
+        Target: 'a,
+    {
+        let mut writer = self.writer_builder().create_serializer(target);
+        AsyncEncodeFut::new(writer, data)
     }
 }
 
@@ -352,4 +447,3 @@ mod tests {
             })
     }
 }
-*/

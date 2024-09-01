@@ -71,10 +71,9 @@ pub trait AsyncEncoder<Target: ?Sized> {
         Target: 'a;
 
     /// Fully write out formatted data to a target disk.
-    fn encode<'a, 'b>(&'a self, data: &'a Self::T, target: Target) -> Self::EncodeFut<'b>
+    fn encode<'a>(&'a self, data: &'a Self::T, target: Target) -> Self::EncodeFut<'a>
     where
-        'a: 'b,
-        Target: 'b;
+        Target: 'a;
 }
 
 #[cfg(feature = "bincode")]
