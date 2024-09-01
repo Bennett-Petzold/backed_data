@@ -100,31 +100,35 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.get_mut();
-        match this.state {
-            AsyncBincodeSendState::Prep => {
-                let res = ready!(Pin::new(&mut this.writer).poll_ready(cx));
-                if let Err(e) = res {
-                    Poll::Ready(Err(e))
-                } else {
-                    match Pin::new(&mut this.writer).start_send(this.data) {
-                        Ok(()) => {
-                            this.state = AsyncBincodeSendState::Flush;
-                            Pin::new(this).poll(cx)
+        loop {
+            match this.state {
+                AsyncBincodeSendState::Prep => {
+                    let res = ready!(Pin::new(&mut this.writer).poll_ready(cx));
+                    if let Err(e) = res {
+                        return Poll::Ready(Err(e));
+                    } else {
+                        match Pin::new(&mut this.writer).start_send(this.data) {
+                            Ok(()) => {
+                                this.state = AsyncBincodeSendState::Flush;
+                            }
+                            Err(e) => {
+                                return Poll::Ready(Err(e));
+                            }
                         }
-                        Err(e) => Poll::Ready(Err(e)),
                     }
                 }
-            }
-            AsyncBincodeSendState::Flush => {
-                let res = ready!(Pin::new(&mut this.writer).poll_flush(cx));
-                if let Err(e) = res {
-                    Poll::Ready(Err(e))
-                } else {
-                    this.state = AsyncBincodeSendState::Close;
-                    Pin::new(this).poll(cx)
+                AsyncBincodeSendState::Flush => {
+                    let res = ready!(Pin::new(&mut this.writer).poll_flush(cx));
+                    if let Err(e) = res {
+                        return Poll::Ready(Err(e));
+                    } else {
+                        this.state = AsyncBincodeSendState::Close;
+                    }
+                }
+                AsyncBincodeSendState::Close => {
+                    return Pin::new(&mut this.writer).poll_close(cx);
                 }
             }
-            AsyncBincodeSendState::Close => Pin::new(&mut this.writer).poll_close(cx),
         }
     }
 }

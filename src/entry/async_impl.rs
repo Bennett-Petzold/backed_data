@@ -125,20 +125,26 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.as_mut().project();
-        match this.state.as_mut().project() {
-            BackedLoadStatePin::Disk(read_fut) => {
-                let res = ready!(read_fut.poll(cx));
-                match res {
-                    Ok(read_disk) => {
-                        this.state.set(BackedLoadState::Decode(
-                            this.backed_entry.coder.decode(read_disk),
-                        ));
-                        self.poll(cx)
+
+        loop {
+            match this.state.as_mut().project() {
+                BackedLoadStatePin::Disk(read_fut) => {
+                    let res = ready!(read_fut.poll(cx));
+                    match res {
+                        Ok(read_disk) => {
+                            this.state.set(BackedLoadState::Decode(
+                                this.backed_entry.coder.decode(read_disk),
+                            ));
+                        }
+                        Err(e) => {
+                            return Poll::Ready(Err(e.into()));
+                        }
                     }
-                    Err(e) => Poll::Ready(Err(e.into())),
+                }
+                BackedLoadStatePin::Decode(decode_fut) => {
+                    return decode_fut.poll(cx);
                 }
             }
-            BackedLoadStatePin::Decode(decode_fut) => decode_fut.poll(cx),
         }
     }
 }
@@ -244,29 +250,37 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.as_mut().project();
-        match this.state.as_mut().project() {
-            BackedUpdateStatePin::Disk(disk) => {
-                let disk = disk.project();
-                let res = ready!(disk.write_fut.poll(cx));
-                match res {
-                    Ok(write_disk) => {
-                        // The reference is valid for the lifetime of this struct,
-                        // holds exclusive access, and it is only used mutably here.
-                        // This extends the lifetime to reflect the pointer's lifetime,
-                        // not this poll invocation.
-                        let mut coder =
-                            unsafe { transmute::<&mut Coder, &'a mut Coder>(this.coder) };
 
-                        let new_state =
-                            BackedUpdateState::Encode(coder.encode(disk.value, write_disk));
-                        this.state.set(new_state);
-                        self.poll(cx)
+        loop {
+            match this.state.as_mut().project() {
+                BackedUpdateStatePin::Disk(disk) => {
+                    let disk = disk.project();
+                    let res = ready!(disk.write_fut.poll(cx));
+                    match res {
+                        Ok(write_disk) => {
+                            // The reference is valid for the lifetime of this struct,
+                            // holds exclusive access, and it is only used mutably here.
+                            // This extends the lifetime to reflect the pointer's lifetime,
+                            // not this poll invocation.
+                            let mut coder =
+                                unsafe { transmute::<&mut Coder, &'a mut Coder>(this.coder) };
+
+                            let new_state =
+                                BackedUpdateState::Encode(coder.encode(disk.value, write_disk));
+                            this.state.set(new_state);
+                        }
+                        Err(e) => {
+                            return Poll::Ready(Err(e.into()));
+                        }
                     }
-                    Err(e) => Poll::Ready(Err(e.into())),
+                }
+                BackedUpdateStatePin::Encode(encode_fut) => {
+                    return encode_fut.poll(cx);
+                }
+                BackedUpdateStatePin::Uninit => {
+                    return Poll::Ready(Ok(()));
                 }
             }
-            BackedUpdateStatePin::Encode(encode_fut) => encode_fut.poll(cx),
-            BackedUpdateStatePin::Uninit => Poll::Ready(Ok(())),
         }
     }
 }
@@ -415,16 +429,17 @@ where
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.as_mut().project();
 
-        if let ProjOptionPin::Some(fut) = this.update_fut.as_mut().project() {
-            if let Err(e) = ready!(fut.poll(cx)) {
-                Poll::Ready(Err(e))
+        loop {
+            if let ProjOptionPin::Some(fut) = this.update_fut.as_mut().project() {
+                if let Err(e) = ready!(fut.poll(cx)) {
+                    return Poll::Ready(Err(e));
+                } else {
+                    this.update_fut.set(ProjOption::None);
+                }
             } else {
-                this.update_fut.set(ProjOption::None);
-                self.poll(cx)
+                **this.modified = false;
+                return Poll::Ready(Ok(()));
             }
-        } else {
-            **this.modified = false;
-            Poll::Ready(Ok(()))
         }
     }
 }

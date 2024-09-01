@@ -110,73 +110,74 @@ where
     type Output = Result<&'a T, E>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.as_mut().project();
-        match this.state {
-            // Run future initialization and immediately poll the next state
-            TryInitFutureState::Creating => {
-                *this.state = Self::create(this.once_lock, cx);
+        let mut this = self.as_mut().project();
 
-                if !matches!(this.state, TryInitFutureState::Waiting(_)) {
-                    drop(this);
-                    self.poll(cx)
-                } else {
-                    Poll::Pending
-                }
-            }
+        loop {
+            match this.state {
+                // Run future initialization and immediately poll the next state
+                TryInitFutureState::Creating => {
+                    *this.state = Self::create(this.once_lock, cx);
 
-            // Lock into always returning the result state
-            TryInitFutureState::Initialized(val) => Poll::Ready(Ok(val)),
-
-            // Only one thread polls the initializing function
-            TryInitFutureState::Initializing => {
-                let res = ready!(this.fut.poll(cx));
-                let mut init_queue = this.once_lock.init_queue.lock().unwrap();
-
-                // Enable all other futures pending on initialization
-                {
-                    // Release hold regardless of failure or success
-                    init_queue.initializing = false;
-
-                    // Empty out the waker queue and ping each one
-                    let wakers = std::mem::take(&mut init_queue.wakers);
-                    wakers.into_iter().for_each(|waker| waker.wake());
-                }
-
-                match res {
-                    Ok(val) => {
-                        *this.state =
-                            TryInitFutureState::Initialized(this.once_lock.get_or_init(|| val));
-                        self.poll(cx)
+                    if matches!(this.state, TryInitFutureState::Waiting(_)) {
+                        return Poll::Pending;
                     }
-                    // This will cause spurious wakes if re-polled after Ready(Err).
-                    // That's a bad usage pattern though, so the performance loss
-                    // is a nonconcern.
-                    Err(e) => Poll::Ready(Err(e)),
                 }
-            }
 
-            TryInitFutureState::Waiting(WaitForInit { queue_pos }) => {
-                let mut init_queue = this.once_lock.init_queue.lock().unwrap();
+                // Lock into always returning the result state
+                TryInitFutureState::Initialized(val) => {
+                    return Poll::Ready(Ok(val));
+                }
 
-                if init_queue.initializing {
-                    // The initializing thread isn't finished,
-                    // so just update the callback
-                    init_queue.wakers[*queue_pos].clone_from(cx.waker());
-                    Poll::Pending
-                } else {
-                    // Runs again if initialization failed
-                    *this.state = if let Some(val) = this.once_lock.get() {
-                        TryInitFutureState::Initialized(val)
+                // Only one thread polls the initializing function
+                TryInitFutureState::Initializing => {
+                    let res = ready!(this.fut.as_mut().poll(cx));
+                    let mut init_queue = this.once_lock.init_queue.lock().unwrap();
+
+                    // Enable all other futures pending on initialization
+                    {
+                        // Release hold regardless of failure or success
+                        init_queue.initializing = false;
+
+                        // Empty out the waker queue and ping each one
+                        let wakers = std::mem::take(&mut init_queue.wakers);
+                        wakers.into_iter().for_each(|waker| waker.wake());
+                    }
+
+                    match res {
+                        Ok(val) => {
+                            *this.state =
+                                TryInitFutureState::Initialized(this.once_lock.get_or_init(|| val));
+                        }
+                        // This will cause spurious wakes if re-polled after Ready(Err).
+                        // That's a bad usage pattern though, so the performance loss
+                        // is a nonconcern.
+                        Err(e) => {
+                            return Poll::Ready(Err(e));
+                        }
+                    }
+                }
+
+                TryInitFutureState::Waiting(WaitForInit { queue_pos }) => {
+                    let mut init_queue = this.once_lock.init_queue.lock().unwrap();
+
+                    if init_queue.initializing {
+                        // The initializing thread isn't finished,
+                        // so just update the callback
+                        init_queue.wakers[*queue_pos].clone_from(cx.waker());
+                        return Poll::Pending;
                     } else {
-                        // Claim initialization
-                        init_queue.initializing = true;
-                        TryInitFutureState::Initializing
-                    };
+                        // Runs again if initialization failed
+                        *this.state = if let Some(val) = this.once_lock.get() {
+                            TryInitFutureState::Initialized(val)
+                        } else {
+                            // Claim initialization
+                            init_queue.initializing = true;
+                            TryInitFutureState::Initializing
+                        };
 
-                    // The mutex needs to be released for the next poll
-                    drop(init_queue);
-
-                    self.poll(cx)
+                        // The mutex needs to be released for the next poll
+                        drop(init_queue);
+                    }
                 }
             }
         }
