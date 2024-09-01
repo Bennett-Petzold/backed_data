@@ -22,6 +22,8 @@ use pin_project::pin_project;
 use reqwest::{header::HeaderMap, Client, Method, Request, Response, Url, Version};
 use serde::{Deserialize, Serialize};
 
+use crate::utils::output_boxer::OutputBoxer;
+
 use super::AsyncReadDisk;
 
 static NETWORK_CLIENT: OnceLock<Client> = OnceLock::new();
@@ -119,6 +121,22 @@ impl Network {
 
 fn reqwest_err_to_io(e: reqwest::Error) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, e)
+}
+
+/// [`Network`] that boxes its [`Future`]s to be [`Unpin`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BoxedNetwork(Network);
+
+impl From<Network> for BoxedNetwork {
+    fn from(value: Network) -> Self {
+        Self(value)
+    }
+}
+
+impl From<BoxedNetwork> for Network {
+    fn from(value: BoxedNetwork) -> Self {
+        value.0
+    }
 }
 
 #[pin_project(!Unpin)]
@@ -229,9 +247,9 @@ impl Future for ReqwestReadBuilder {
     type Output = std::io::Result<ReqwestRead>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.as_mut().project();
+        let this = self.as_mut().project();
 
-        if let Some(mut fut) = this.fut.as_mut() {
+        if let Some(fut) = this.fut.as_mut() {
             let res = ready!(fut.as_mut().poll(cx));
             match res {
                 Ok(response) => Poll::Ready(Ok(ReqwestRead {
@@ -278,6 +296,15 @@ impl AsyncReadDisk for Network {
         };
 
         ReqwestReadBuilder::new(self.request.clone(), client)
+    }
+}
+
+impl AsyncReadDisk for BoxedNetwork {
+    type ReadDisk = Pin<Box<ReqwestRead>>;
+    type ReadFut = Pin<Box<OutputBoxer<ReqwestReadBuilder>>>;
+
+    fn async_read_disk(&self) -> Self::ReadFut {
+        Box::pin(OutputBoxer(self.0.async_read_disk()))
     }
 }
 

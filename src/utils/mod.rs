@@ -19,6 +19,9 @@ pub use extender::*;
 #[cfg(feature = "async")]
 pub mod sync;
 
+#[cfg(feature = "network")]
+pub mod output_boxer;
+
 mod protected;
 pub use protected::*;
 

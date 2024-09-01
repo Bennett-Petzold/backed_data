@@ -104,7 +104,7 @@ pub use encrypted::{Encrypted, SecretVecWrapper};
 #[cfg(feature = "network")]
 mod network;
 #[cfg(feature = "network")]
-pub use network::{default_client, Network};
+pub use network::{default_client, BoxedNetwork, Network};
 
 #[cfg(mmap_impl)]
 pub mod mmap;
