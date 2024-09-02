@@ -243,16 +243,19 @@ where
     type Output = csv_async::Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // `!Unpin` keeps serializer in place, we need to construct futures
+        // with a mutable reference to it. The closure allows some reuse
+        // without violating stacked borrows.
+        let serializer = |this: &mut Self| {
+            let serializer_ptr: *mut _ = &mut this.serializer;
+            unsafe { &mut *serializer_ptr }
+        };
+
         // No moves will happen, but the struct can't be `Unpin` because of
         // reference shenanigans.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
 
         loop {
-            // `!Unpin` keeps serializer in place, we need to construct futures
-            // with a mutable reference to it.
-            let serializer_ptr: *mut _ = &mut this.serializer;
-            let serializer = unsafe { &mut *serializer_ptr };
-
             if let Some(ref mut serialize_fut) = &mut this.serialize_fut {
                 if let Err(e) = ready!(serialize_fut.as_mut().poll(cx)) {
                     return Poll::Ready(Err(e));
@@ -264,11 +267,14 @@ where
                             this.pos = Some(next_pos);
 
                             let item = this.data_view.get(x).unwrap();
+
+                            let serializer = serializer(this);
                             this.serialize_fut =
                                 Some(Box::pin(async move { serializer.serialize(item).await }));
                         }
                         // Past last item, flush
-                        Some(x) => {
+                        Some(_) => {
+                            let serializer = serializer(this);
                             this.serialize_fut = Some(Box::pin(async {
                                 serializer.flush().await.map_err(|e| e.into())
                             }));
@@ -282,9 +288,11 @@ where
                 }
             // Initialization logic, which relies on !Unpin.
             } else if let Some(item) = this.data_view.first() {
+                let serializer = serializer(this);
                 this.serialize_fut =
                     Some(Box::pin(async move { serializer.serialize(item).await }));
             } else {
+                let serializer = serializer(this);
                 this.serialize_fut = Some(Box::pin(async {
                     serializer.flush().await.map_err(|e| e.into())
                 }));
