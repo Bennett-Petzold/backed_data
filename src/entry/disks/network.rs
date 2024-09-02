@@ -219,7 +219,6 @@ impl AsyncRead for ReqwestRead {
     }
 }
 
-#[pin_project(!Unpin)]
 pub struct ReqwestReadBuilder {
     client: Client,
     request: SerialRequest,
@@ -246,8 +245,8 @@ impl Debug for ReqwestReadBuilder {
 impl Future for ReqwestReadBuilder {
     type Output = std::io::Result<ReqwestRead>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.as_mut().project();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
 
         if let Some(fut) = this.fut.as_mut() {
             let res = ready!(fut.as_mut().poll(cx));
@@ -263,14 +262,8 @@ impl Future for ReqwestReadBuilder {
                 }
             }
         } else {
-            let client_ptr: *mut _ = this.client;
-            let client = unsafe { &mut *client_ptr };
-
-            let request_ptr: *const _ = this.request;
-            let request = unsafe { &*request_ptr };
-
-            *this.fut = Some(Box::pin(client.execute(request.get())));
-            self.poll(cx)
+            this.fut = Some(Box::pin(this.client.execute(this.request.get())));
+            Pin::new(this).poll(cx)
         }
     }
 }
@@ -332,8 +325,8 @@ mod tests {
         );
         let coder = AsyncCsvCoder::default();
 
-        let disk = pin!(disk.async_read_disk()).await.unwrap();
-        let from_remote: Vec<IouZipcodes> = coder.decode(pin!(disk)).await.unwrap();
+        let read_disk = disk.async_read_disk().await.unwrap();
+        let from_remote: Vec<IouZipcodes> = coder.decode(pin!(read_disk)).await.unwrap();
 
         assert_eq!(from_remote[0], *FIRST_ENTRY);
         assert_eq!(from_remote[from_remote.len() - 1], *LAST_ENTRY);
