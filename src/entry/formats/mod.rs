@@ -40,7 +40,7 @@ pub trait Encoder<Target: ?Sized> {
 #[cfg(feature = "async")]
 pub trait AsyncDecoder<Source: ?Sized> {
     type Error: From<std::io::Error>;
-    type T: for<'de> Deserialize<'de>;
+    type T;
     type DecodeFut<'a>: Future<Output = Result<Self::T, Self::Error>>
     where
         Self: 'a,
@@ -64,7 +64,7 @@ pub trait AsyncDecoder<Source: ?Sized> {
 #[cfg(feature = "async")]
 pub trait AsyncEncoder<Target: ?Sized> {
     type Error: From<std::io::Error>;
-    type T: ?Sized + Serialize;
+    type T: ?Sized;
     type EncodeFut<'a>: Future<Output = Result<(), Self::Error>>
     where
         Self: 'a,
