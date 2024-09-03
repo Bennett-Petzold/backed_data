@@ -1,4 +1,5 @@
 use std::{
+    cell::OnceCell,
     future::Future,
     pin::{pin, Pin},
     sync::{Mutex, OnceLock},
@@ -7,7 +8,7 @@ use std::{
 
 use pin_project::pin_project;
 
-use super::Once;
+use super::{GenericFrom, Once};
 
 #[derive(Debug, Default)]
 struct InitializationQueue {
@@ -241,5 +242,72 @@ impl<T> Once for AsyncOnceLock<T> {
     {
         let _ = self.set((f)());
         self.get().unwrap()
+    }
+}
+
+impl<T> From<T> for AsyncOnceLock<T> {
+    fn from(value: T) -> Self {
+        Self::new_with(Some(value))
+    }
+}
+
+impl<T> From<Option<T>> for AsyncOnceLock<T> {
+    fn from(value: Option<T>) -> Self {
+        Self::new_with(value)
+    }
+}
+
+impl<T> From<OnceLock<T>> for AsyncOnceLock<T> {
+    fn from(value: OnceLock<T>) -> Self {
+        Self {
+            inner: value,
+            init_queue: Mutex::default(),
+        }
+    }
+}
+
+impl<T> From<OnceCell<T>> for AsyncOnceLock<T> {
+    fn from(value: OnceCell<T>) -> Self {
+        value.into_inner().into()
+    }
+}
+
+impl<T> From<AsyncOnceLock<T>> for Option<T> {
+    fn from(value: AsyncOnceLock<T>) -> Self {
+        value.into_inner()
+    }
+}
+
+impl<T> From<AsyncOnceLock<T>> for OnceLock<T> {
+    fn from(value: AsyncOnceLock<T>) -> Self {
+        value.inner
+    }
+}
+
+impl<T> From<AsyncOnceLock<T>> for OnceCell<T> {
+    fn from(value: AsyncOnceLock<T>) -> Self {
+        if let Some(value) = value.inner.into_inner() {
+            value.into()
+        } else {
+            OnceCell::new()
+        }
+    }
+}
+
+impl<T, U> GenericFrom<AsyncOnceLock<T>> for AsyncOnceLock<U>
+where
+    U: From<T>,
+{
+    fn gen_from(val: AsyncOnceLock<T>) -> Self {
+        let inner = if let Some(val_inner) = val.inner.into_inner() {
+            OnceLock::from(U::from(val_inner))
+        } else {
+            OnceLock::new()
+        };
+
+        Self {
+            inner,
+            init_queue: val.init_queue,
+        }
     }
 }

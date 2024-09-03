@@ -9,7 +9,7 @@ use std::ops::{Deref, DerefMut};
 use either::Either;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::Once;
+use crate::utils::{GenericFrom, GenericInto, Once};
 
 use super::{
     disks::{ReadDisk, WriteDisk},
@@ -26,8 +26,8 @@ use super::{
 /// * `Disk`: an implementor of [`ReadDisk`](`super::disks::ReadDisk`) and/or [`WriteDisk`](`super::disks::WriteDisk`).
 /// * `Coder`: an implementor of [`Encoder`](`super::formats::Encoder`) and/or [`Decoder`](`super::formats::Decoder`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct BackedEntrySync<T: Once, Disk, Coder>(BackedEntryInner<T, Disk, Coder>);
+#[repr(transparent)]
+pub struct BackedEntrySync<T: Once, Disk, Coder>(pub(super) BackedEntryInner<T, Disk, Coder>);
 
 // Copy over all the shared impls
 impl<T: Once, Disk, Coder> BackedEntry for BackedEntrySync<T, Disk, Coder> {
@@ -214,6 +214,47 @@ where
         Ok(BackedEntryMut {
             entry: self,
             modified: false,
+        })
+    }
+}
+
+impl<T1, U1, V1, T2, U2, V2> GenericFrom<BackedEntrySync<T1, U1, V1>>
+    for BackedEntrySync<T2, U2, V2>
+where
+    T1: Once,
+    T2: Once,
+    <T1 as Once>::Inner: Into<<T2 as Once>::Inner>,
+    U1: Into<U2>,
+    V1: Into<V2>,
+{
+    fn gen_from(val: BackedEntrySync<T1, U1, V1>) -> Self {
+        let value = if let Some(value) = val.0.value.into_inner() {
+            T2::from(value.into())
+        } else {
+            T2::new()
+        };
+        Self(BackedEntryInner {
+            value,
+            disk: val.0.disk.into(),
+            coder: val.0.coder.into(),
+        })
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T1, U1, V1, T2, U2, V2> GenericFrom<BackedEntrySync<T1, U1, V1>>
+    for super::async_impl::BackedEntryAsync<T2, U2, V2>
+where
+    T1: Once,
+    T1: Into<crate::utils::sync::AsyncOnceLock<T2>>,
+    U1: Into<U2>,
+    V1: Into<V2>,
+{
+    fn gen_from(val: BackedEntrySync<T1, U1, V1>) -> Self {
+        Self(BackedEntryInner {
+            value: val.0.value.into(),
+            disk: val.0.disk.into(),
+            coder: val.0.coder.into(),
         })
     }
 }

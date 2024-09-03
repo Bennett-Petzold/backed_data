@@ -22,6 +22,9 @@ pub mod sync;
 #[cfg(feature = "network")]
 pub mod output_boxer;
 
+mod generic_into;
+pub use generic_into::*;
+
 mod protected;
 pub use protected::*;
 

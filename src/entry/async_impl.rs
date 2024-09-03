@@ -22,14 +22,14 @@ use serde::{Deserialize, Serialize};
 use crate::utils::{
     blocking::BlockingFn,
     sync::{AsyncOnceLock, TryInitFuture},
-    Once,
+    GenericFrom, GenericInto, Once,
 };
 
 use super::{
     disks::{AsyncReadDisk, AsyncWriteDisk, ReadDisk, WriteDisk},
     formats::{AsyncDecoder, AsyncEncoder, Decoder, Encoder},
-    BackedEntry, BackedEntryInner, BackedEntryMutHandle, BackedEntryRead, BackedEntryWrite,
-    MutHandle,
+    BackedEntry, BackedEntryInner, BackedEntryMutHandle, BackedEntryRead, BackedEntrySync,
+    BackedEntryWrite, MutHandle,
 };
 
 /// Asynchronous implementation for [`BackedEntry`].
@@ -43,8 +43,10 @@ use super::{
 /// * `Disk`: an implementor of [`AsyncReadDisk`](`super::disks::AsyncReadDisk`) and/or [`AsyncWriteDisk`](`super::disks::AsyncWriteDisk`).
 /// * `Coder`: an implementor of [`AsyncEncoder`](`super::formats::AsyncEncoder`) and/or [`AsyncDecoder`](`super::formats::AsyncDecoder`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct BackedEntryAsync<T, Disk, Coder>(BackedEntryInner<AsyncOnceLock<T>, Disk, Coder>);
+#[repr(transparent)]
+pub struct BackedEntryAsync<T, Disk, Coder>(
+    pub(super) BackedEntryInner<AsyncOnceLock<T>, Disk, Coder>,
+);
 
 // Copy over all the shared impls
 impl<T, Disk, Coder> BackedEntry for BackedEntryAsync<T, Disk, Coder> {
@@ -75,15 +77,15 @@ impl<T, Disk, Coder> BackedEntry for BackedEntryAsync<T, Disk, Coder> {
 }
 
 #[pin_project(project = BackedLoadStatePin)]
-enum BackedLoadState<'a, Disk: AsyncReadDisk + 'a, Coder: AsyncDecoder<Disk::ReadDisk> + 'a> {
-    Disk(#[pin] Disk::ReadFut),
+enum BackedLoadState<'a, Disk: AsyncReadDisk + 'a, Coder: AsyncDecoder<Disk::ReadDisk<'a>> + 'a> {
+    Disk(#[pin] Disk::ReadFut<'a>),
     Decode(#[pin] Coder::DecodeFut<'a>),
 }
 
 impl<
         'a,
-        Disk: AsyncReadDisk<ReadFut: Debug>,
-        Coder: AsyncDecoder<Disk::ReadDisk, DecodeFut<'a>: Debug>,
+        Disk: AsyncReadDisk<ReadFut<'a>: Debug>,
+        Coder: AsyncDecoder<Disk::ReadDisk<'a>, DecodeFut<'a>: Debug>,
     > Debug for BackedLoadState<'a, Disk, Coder>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -95,7 +97,7 @@ impl<
 }
 
 #[pin_project]
-pub struct BackedLoadFut<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk>> {
+pub struct BackedLoadFut<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk<'a>>> {
     backed_entry: &'a BackedEntryInner<AsyncOnceLock<T>, Disk, Coder>,
     #[pin]
     state: BackedLoadState<'a, Disk, Coder>,
@@ -104,8 +106,8 @@ pub struct BackedLoadFut<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::R
 impl<
         'a,
         T: Debug,
-        Disk: AsyncReadDisk<ReadFut: Debug> + Debug,
-        Coder: AsyncDecoder<Disk::ReadDisk, DecodeFut<'a>: Debug> + Debug,
+        Disk: AsyncReadDisk<ReadFut<'a>: Debug> + Debug,
+        Coder: AsyncDecoder<Disk::ReadDisk<'a>, DecodeFut<'a>: Debug> + Debug,
     > Debug for BackedLoadFut<'a, T, Disk, Coder>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -119,7 +121,7 @@ impl<
 impl<'a, T, Disk, Coder> Future for BackedLoadFut<'a, T, Disk, Coder>
 where
     Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
+    Coder: AsyncDecoder<Disk::ReadDisk<'a>, T = T>,
 {
     type Output = Result<T, Coder::Error>;
 
@@ -149,7 +151,7 @@ where
     }
 }
 
-impl<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk>>
+impl<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk<'a>> + 'a>
     BackedLoadFut<'a, T, Disk, Coder>
 {
     pub fn new(backed_entry: &'a BackedEntryInner<AsyncOnceLock<T>, Disk, Coder>) -> Self {
@@ -169,9 +171,9 @@ impl<'b, T, Disk, Coder> BackedEntryRead for BackedEntryAsync<T, Disk, Coder>
 where
     T: for<'de> Deserialize<'de> + 'b,
     Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
+    for<'b: 'c> Coder: AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
 {
-    type LoadResult<'a> = BackedTryInit<'a, T, Coder::Error, Disk, Coder> where Self: 'a;
+    type LoadResult<'a> = BackedTryInit<'a, T, <Coder as AsyncDecoder<Disk::ReadDisk<'a>>>::Error, Disk, Coder> where Self: 'a;
     fn load(&self) -> Self::LoadResult<'_> {
         self.0.value.get_or_try_init(BackedLoadFut::new(&self.0))
     }
@@ -496,7 +498,12 @@ impl<T, Disk, Coder> Drop for BackedEntryMutAsync<'_, T, Disk, Coder> {
 }
 
 #[pin_project]
-pub struct GenMutHandle<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk, T = T>> {
+pub struct GenMutHandle<
+    'a,
+    T,
+    Disk: AsyncReadDisk,
+    Coder: AsyncDecoder<Disk::ReadDisk<'a>, T = T> + 'a,
+> {
     backed: *mut BackedEntryAsync<T, Disk, Coder>,
     #[pin]
     init: BackedTryInit<'a, T, Coder::Error, Disk, Coder>,
@@ -506,7 +513,7 @@ pub struct GenMutHandle<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::Re
 impl<'a, T, Disk, Coder> Debug for GenMutHandle<'a, T, Disk, Coder>
 where
     Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
+    Coder: AsyncDecoder<Disk::ReadDisk<'a>, T = T> + 'a,
     BackedEntryAsync<T, Disk, Coder>: Debug,
     BackedTryInit<'a, T, Coder::Error, Disk, Coder>: Debug,
 {
@@ -521,11 +528,11 @@ where
 impl<'a, T, Disk, Coder> Future for GenMutHandle<'a, T, Disk, Coder>
 where
     Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
+    Coder: AsyncDecoder<Disk::ReadDisk<'a>, T = T> + 'a,
 {
     type Output = Result<
         BackedEntryMutAsync<'a, T, Disk, Coder>,
-        <Coder as AsyncDecoder<Disk::ReadDisk>>::Error,
+        <Coder as AsyncDecoder<Disk::ReadDisk<'a>>>::Error,
     >;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -551,7 +558,7 @@ impl<'a, T, Disk, Coder> GenMutHandle<'a, T, Disk, Coder>
 where
     T: for<'de> Deserialize<'de>,
     Disk: AsyncReadDisk,
-    Coder: AsyncDecoder<Disk::ReadDisk, T = T>,
+    for<'c> Coder: AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
 {
     pub fn new(backed: &'a mut BackedEntryAsync<T, Disk, Coder>) -> Self {
         // The eventual result type needs `&mut backed`, but we need to load in
@@ -571,13 +578,52 @@ impl<T, Disk, Coder> BackedEntryMutHandle for BackedEntryAsync<T, Disk, Coder>
 where
     T: Serialize + for<'de> Deserialize<'de>,
     Disk: AsyncWriteDisk + AsyncReadDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T> + AsyncDecoder<Disk::ReadDisk, T = T>,
+    for<'c> Coder:
+        AsyncEncoder<Disk::WriteDisk, T = T> + AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
 {
     type MutHandleResult<'a> = GenMutHandle<'a, T, Disk, Coder>
         where
             Self: 'a;
     fn mut_handle(&mut self) -> Self::MutHandleResult<'_> {
         GenMutHandle::new(self)
+    }
+}
+
+impl<T1, U1, V1, T2, U2, V2> GenericFrom<BackedEntryAsync<T1, U1, V1>>
+    for BackedEntryAsync<T2, U2, V2>
+where
+    T2: From<T1>,
+    U1: Into<U2>,
+    V1: Into<V2>,
+{
+    fn gen_from(val: BackedEntryAsync<T1, U1, V1>) -> Self {
+        Self(BackedEntryInner {
+            value: val.0.value.gen_into(),
+            disk: val.0.disk.into(),
+            coder: val.0.coder.into(),
+        })
+    }
+}
+
+impl<T1, U1, V1, T2, U2, V2> GenericFrom<BackedEntryAsync<T1, U1, V1>>
+    for BackedEntrySync<T2, U2, V2>
+where
+    T2: Once,
+    T1: Into<<T2 as Once>::Inner>,
+    U1: Into<U2>,
+    V1: Into<V2>,
+{
+    fn gen_from(val: BackedEntryAsync<T1, U1, V1>) -> Self {
+        let value = if let Some(value) = val.0.value.into_inner() {
+            T2::from(value.into())
+        } else {
+            T2::new()
+        };
+        Self(BackedEntryInner {
+            value,
+            disk: val.0.disk.into(),
+            coder: val.0.coder.into(),
+        })
     }
 }
 
@@ -647,20 +693,20 @@ mod tests {
     #[cfg(feature = "async_bincode")]
     #[tokio::test]
     async fn mutate_option() {
+        use crate::test_utils::OwnedCursorVec;
+
         let mut input: HashMap<String, u128> = HashMap::new();
         input.insert("THIS IS A STRING".to_string(), 55);
         input.insert("THIS IS ALSO A STRING".to_string(), 23413);
 
-        let mut binding = Cursor::new(Vec::with_capacity(10));
-        let mut back_vec = CursorVec {
-            inner: (&mut binding).into(),
-        };
+        let mut back_vec = OwnedCursorVec::new(Cursor::new(Vec::new()));
 
         // Intentional unsafe access to later peek underlying storage
-        let mut backed_entry = BackedEntryAsync::new(&mut back_vec, AsyncBincodeCoder::default());
+        let mut backed_entry = BackedEntryAsync::new(back_vec, AsyncBincodeCoder::default());
         backed_entry.write_ref(&input.clone()).await.unwrap();
 
         assert_eq!(&input, backed_entry.load().await.unwrap());
+
         let mut handle = backed_entry.mut_handle().await.unwrap();
         handle
             .deref_mut()

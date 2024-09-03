@@ -76,10 +76,10 @@ impl WriteDisk for WriteUnbuffered {
 
 #[cfg(runtime)]
 impl AsyncReadDisk for WriteUnbuffered {
-    type ReadDisk = futures::io::BufReader<super::async_file::AsyncFile>;
-    type ReadFut = super::BufferedReadFut;
+    type ReadDisk<'r> = futures::io::BufReader<super::async_file::AsyncFile> where Self: 'r;
+    type ReadFut<'f> = super::BufferedReadFut where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         super::BufferedReadFut::new(super::async_file::read_file(self.path.clone()))
     }
 }

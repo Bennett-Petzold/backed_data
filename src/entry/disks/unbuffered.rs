@@ -75,11 +75,11 @@ impl WriteDisk for Unbuffered {
 
 #[cfg(runtime)]
 impl AsyncReadDisk for Unbuffered {
-    type ReadDisk = super::async_file::AsyncFile;
-    type ReadFut =
-        Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>>;
+    type ReadDisk<'r> = super::async_file::AsyncFile where Self: 'r;
+    type ReadFut<'f> =
+        Pin<Box<dyn Future<Output = std::io::Result<super::async_file::AsyncFile>> + Sync + Send>> where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         super::async_file::read_file(self.path.clone())
     }
 }

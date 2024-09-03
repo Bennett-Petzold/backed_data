@@ -192,10 +192,10 @@ where
     E: Future<Output = std::io::Result<R>> + Send + Sync,
     R: AsyncRead + Unpin,
 {
-    type ReadDisk = R;
-    type ReadFut = E;
+    type ReadDisk<'r> = R where Self: 'r;
+    type ReadFut<'f> = E where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         (self.0)()
     }
 }
@@ -223,10 +223,10 @@ where
     E: Future<Output = std::io::Result<O>> + Send + Sync,
     O: AsyncRead + Unpin,
 {
-    type ReadDisk = O;
-    type ReadFut = E;
+    type ReadDisk<'r> = O where Self: 'r;
+    type ReadFut<'f> = E where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         self.0.async_read_disk()
     }
 }
@@ -331,10 +331,10 @@ where
     E: Future<Output = std::io::Result<O>> + Send + Sync,
     O: AsyncRead + Unpin,
 {
-    type ReadDisk = O;
-    type ReadFut = E;
+    type ReadDisk<'r> = O where Self: 'r;
+    type ReadFut<'f> = E where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         self.1.async_read_disk()
     }
 }
