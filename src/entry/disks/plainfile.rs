@@ -171,10 +171,10 @@ impl Future for BufferedWriteFut {
 
 #[cfg(runtime)]
 impl AsyncWriteDisk for Plainfile {
-    type WriteDisk = futures::io::BufWriter<super::async_file::AsyncFile>;
-    type WriteFut = BufferedWriteFut;
+    type WriteDisk<'w> = futures::io::BufWriter<super::async_file::AsyncFile> where Self: 'w;
+    type WriteFut<'f> = BufferedWriteFut where Self: 'f;
 
-    fn async_write_disk(&mut self) -> BufferedWriteFut {
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
         BufferedWriteFut::new(super::async_file::write_file(self.path.clone()))
     }
 }

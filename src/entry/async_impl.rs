@@ -167,11 +167,11 @@ impl<'a, T, Disk: AsyncReadDisk, Coder: AsyncDecoder<Disk::ReadDisk<'a>> + 'a>
 type BackedTryInit<'a, T, Err, Disk, Coder> =
     TryInitFuture<'a, T, Err, BackedLoadFut<'a, T, Disk, Coder>>;
 
-impl<'b, T, Disk, Coder> BackedEntryRead for BackedEntryAsync<T, Disk, Coder>
+impl<T, Disk, Coder> BackedEntryRead for BackedEntryAsync<T, Disk, Coder>
 where
-    T: for<'de> Deserialize<'de> + 'b,
+    T: for<'de> Deserialize<'de>,
     Disk: AsyncReadDisk,
-    for<'b: 'c> Coder: AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
+    for<'c> Coder: AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
 {
     type LoadResult<'a> = BackedTryInit<'a, T, <Coder as AsyncDecoder<Disk::ReadDisk<'a>>>::Error, Disk, Coder> where Self: 'a;
     fn load(&self) -> Self::LoadResult<'_> {
@@ -191,10 +191,10 @@ struct BackedUpdateDisk<'a, F, T> {
 enum BackedUpdateState<
     'a,
     T,
-    Disk: AsyncWriteDisk<WriteDisk: 'a>,
-    Coder: AsyncEncoder<Disk::WriteDisk> + 'a,
+    Disk: AsyncWriteDisk + 'a,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>> + 'a,
 > {
-    Disk(#[pin] BackedUpdateDisk<'a, Disk::WriteFut, T>),
+    Disk(#[pin] BackedUpdateDisk<'a, Disk::WriteFut<'a>, T>),
     Encode(#[pin] Coder::EncodeFut<'a>),
     /// When the value to update with is None
     Uninit,
@@ -203,8 +203,8 @@ enum BackedUpdateState<
 impl<
         'a,
         T: Debug,
-        Disk: AsyncWriteDisk<WriteFut: Debug>,
-        Coder: AsyncEncoder<Disk::WriteDisk, EncodeFut<'a>: Debug> + 'a,
+        Disk: AsyncWriteDisk<WriteFut<'a>: Debug> + 'a,
+        Coder: AsyncEncoder<Disk::WriteDisk<'a>, EncodeFut<'a>: Debug> + 'a,
     > Debug for BackedUpdateState<'a, T, Disk, Coder>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -223,7 +223,12 @@ impl<
 }
 
 #[pin_project]
-pub struct BackedUpdateFut<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>> {
+pub struct BackedUpdateFut<
+    'a,
+    T,
+    Disk: AsyncWriteDisk,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>> + 'a,
+> {
     coder: &'a mut Coder,
     #[pin]
     state: BackedUpdateState<'a, T, Disk, Coder>,
@@ -232,7 +237,7 @@ pub struct BackedUpdateFut<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk
 impl<'a, T, Disk, Coder> Debug for BackedUpdateFut<'a, T, Disk, Coder>
 where
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk> + Debug,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>> + Debug,
     BackedUpdateState<'a, T, Disk, Coder>: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -246,7 +251,7 @@ where
 impl<'a, T, Disk, Coder> Future for BackedUpdateFut<'a, T, Disk, Coder>
 where
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>, T = T>,
 {
     type Output = Result<(), Coder::Error>;
 
@@ -287,7 +292,7 @@ where
     }
 }
 
-impl<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>>
+impl<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk<'a>>>
     BackedUpdateFut<'a, T, Disk, Coder>
 {
     pub fn update(backed_entry: &'a mut BackedEntryInner<AsyncOnceLock<T>, Disk, Coder>) -> Self {
@@ -349,7 +354,7 @@ impl<T, Disk, Coder> BackedEntryWrite for BackedEntryAsync<T, Disk, Coder>
 where
     T: Serialize,
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
+    for<'c> Coder: AsyncEncoder<Disk::WriteDisk<'c>, T = T>,
 {
     type UpdateResult<'a> = BackedUpdateFut<'a, T, Disk, Coder> where Self: 'a;
     fn update(&mut self) -> Self::UpdateResult<'_> {
@@ -401,7 +406,7 @@ enum ProjOption<T> {
 }
 
 #[pin_project]
-pub struct BackedFlushFut<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk>> {
+pub struct BackedFlushFut<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk::WriteDisk<'a>>> {
     modified: &'a mut bool,
     #[pin]
     update_fut: ProjOption<BackedUpdateFut<'a, T, Disk, Coder>>,
@@ -410,7 +415,7 @@ pub struct BackedFlushFut<'a, T, Disk: AsyncWriteDisk, Coder: AsyncEncoder<Disk:
 impl<'a, T, Disk, Coder> Debug for BackedFlushFut<'a, T, Disk, Coder>
 where
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk>,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>>,
     BackedUpdateFut<'a, T, Disk, Coder>: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -421,10 +426,10 @@ where
     }
 }
 
-impl<T, Disk, Coder> Future for BackedFlushFut<'_, T, Disk, Coder>
+impl<'a, T, Disk, Coder> Future for BackedFlushFut<'a, T, Disk, Coder>
 where
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>, T = T>,
 {
     type Output = Result<(), Coder::Error>;
 
@@ -449,7 +454,7 @@ where
 impl<'a, T, Disk, Coder> BackedFlushFut<'a, T, Disk, Coder>
 where
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
+    Coder: AsyncEncoder<Disk::WriteDisk<'a>, T = T>,
 {
     pub fn new(
         backing: &'a mut BackedEntryInner<AsyncOnceLock<T>, Disk, Coder>,
@@ -472,7 +477,7 @@ impl<T, Disk, Coder> MutHandle<T> for BackedEntryMutAsync<'_, T, Disk, Coder>
 where
     T: Serialize,
     Disk: AsyncWriteDisk,
-    Coder: AsyncEncoder<Disk::WriteDisk, T = T>,
+    for<'c> Coder: AsyncEncoder<Disk::WriteDisk<'c>, T = T>,
 {
     fn is_modified(&self) -> bool {
         self.modified
@@ -579,7 +584,7 @@ where
     T: Serialize + for<'de> Deserialize<'de>,
     Disk: AsyncWriteDisk + AsyncReadDisk,
     for<'c> Coder:
-        AsyncEncoder<Disk::WriteDisk, T = T> + AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
+        AsyncEncoder<Disk::WriteDisk<'c>, T = T> + AsyncDecoder<Disk::ReadDisk<'c>, T = T> + 'c,
 {
     type MutHandleResult<'a> = GenMutHandle<'a, T, Disk, Coder>
         where

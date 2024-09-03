@@ -47,9 +47,13 @@ pub trait AsyncReadDisk {
 #[cfg(feature = "async")]
 /// Produces storage that can be written to asynchronously.
 pub trait AsyncWriteDisk {
-    type WriteDisk: AsyncWrite;
-    type WriteFut: Future<Output = std::io::Result<Self::WriteDisk>>;
-    fn async_write_disk(&mut self) -> Self::WriteFut;
+    type WriteDisk<'w>: AsyncWrite
+    where
+        Self: 'w;
+    type WriteFut<'f>: Future<Output = std::io::Result<Self::WriteDisk<'f>>>
+    where
+        Self: 'f;
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_>;
 }
 
 impl<T: ReadDisk> ReadDisk for &T {
@@ -77,9 +81,9 @@ impl<T: AsyncReadDisk + Send> AsyncReadDisk for &T {
 
 #[cfg(feature = "async")]
 impl<T: AsyncWriteDisk + Send> AsyncWriteDisk for &mut T {
-    type WriteDisk = T::WriteDisk;
-    type WriteFut = T::WriteFut;
-    fn async_write_disk(&mut self) -> Self::WriteFut {
+    type WriteDisk<'w> = T::WriteDisk<'w> where Self: 'w;
+    type WriteFut<'f> = T::WriteFut<'f> where Self: 'f;
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
         T::async_write_disk(self)
     }
 }
@@ -93,7 +97,7 @@ pub use write_unbuffered::*;
 mod unbuffered;
 pub use unbuffered::*;
 
-pub mod custom;
+//pub mod custom;
 
 #[cfg(any(feature = "zstd", feature = "async_zstd"))]
 pub mod zstd;
