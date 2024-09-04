@@ -129,13 +129,8 @@ pub trait BackedEntryWrite: BackedEntry {
 /// values to be written before syncing with disk.
 ///
 /// Call [`Self::flush`] to sync changes with underlying storage before
-/// dropping. Otherwise, drop may (or will) panic.
-///
-/// # Implementation
-/// Mutable derefs should set a modified flag for `flush` and [`Drop`].
-/// `flush` should write the entry to disk, when modified. [`Drop`] should
-/// either call `flush` or panic.
-pub trait MutHandle<T>: Deref<Target = T> + DerefMut + Drop {
+/// dropping. Otherwise the contents are not guaranteed to be written to disk.
+pub trait MutHandle<T>: Deref<Target = T> + DerefMut {
     /// Returns true if the memory version is desynced from the disk version
     fn is_modified(&self) -> bool;
 

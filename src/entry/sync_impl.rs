@@ -190,11 +190,10 @@ where
     Disk: WriteDisk,
     Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
 {
-    /// [`Drop::drop`] that attempts a write if modified, and panics if that
-    /// write returns and error.
+    /// [`Drop::drop`] that attempts a write if modified, silently failing.
     fn drop(&mut self) {
-        if self.modified && self.flush().is_err() {
-            panic!("BackedEntryMut dropped while modified, and failed to flush.");
+        if self.modified {
+            let _ = self.flush();
         }
     }
 }

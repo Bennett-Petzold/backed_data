@@ -491,17 +491,6 @@ where
     }
 }
 
-impl<T, Disk, Coder> Drop for BackedEntryMutAsync<'_, T, Disk, Coder> {
-    /// [`Drop::drop`] that panics if modified is set.
-    ///
-    /// Flushing is an async action, and cannot be run via sync drop.
-    fn drop(&mut self) {
-        if self.modified {
-            panic!("BackedEntryMutAsync dropped while modified");
-        }
-    }
-}
-
 #[pin_project]
 pub struct GenMutHandle<
     'a,
