@@ -5,12 +5,14 @@
  */
 
 use std::{
+    iter::FusedIterator,
     mem::transmute,
     ops::{Deref, DerefMut},
     sync::OnceLock,
 };
 
-use secrets::{secret_vec::ItemMut, traits::Bytes};
+use num_traits::{Saturating, SaturatingAdd};
+use secrets::{secret_vec::ItemMut, traits::Bytes, SecretVec};
 use stable_deref_trait::StableDeref;
 
 use crate::{
@@ -47,7 +49,7 @@ impl<T: Bytes> RefIter<T> for SecretVecWrapper<T> {
     type IterRef<'b> = SecretVecItemRef<'b, T> where Self: 'b;
     fn ref_iter(&self) -> impl Iterator<Item = Self::IterRef<'_>> {
         let len = self.borrow().len();
-        (0..len).map(|x| SecretVecItemRef(self.get(x).unwrap()))
+        (0..len).map(|x| SecretVecItemRef(SecretVec::get(self, x).unwrap()))
     }
 }
 
@@ -146,7 +148,7 @@ impl<T: Bytes> MutIter<T> for SecretVecWrapper<T> {
     fn mut_iter(&mut self) -> impl Iterator<Item = Self::IterMut<'_>> {
         let len = self.borrow().len();
         (0..len).map(|x| {
-            let mut_borrow = self.get_mut(x).unwrap();
+            let mut_borrow = SecretVec::get_mut(self, x).unwrap();
             // All of these mutable borrows are unique, escape FnMut borrowing
             // bounds.
             let mut_borrow = unsafe { transmute::<ItemMut<'_, T>, ItemMut<'_, T>>(mut_borrow) };
@@ -162,13 +164,13 @@ impl<T: Bytes> Container for SecretVecWrapper<T> {
     type RefSlice<'b> = SecretVecRef<'b, T> where Self: 'b;
     type MutSlice<'b> = SecretVecMut<'b, T> where Self: 'b;
 
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
-        self.get(index).map(SecretVecItemRef)
+    fn get(&self, index: usize) -> Option<Self::Ref<'_>> {
+        secrets::SecretVec::<T>::get(self, index).map(SecretVecItemRef)
     }
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
-        self.get_mut(index).map(SecretVecItemMut)
+    fn get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
+        secrets::SecretVec::<T>::get_mut(self, index).map(SecretVecItemMut)
     }
-    fn c_len(&self) -> usize {
+    fn len(&self) -> usize {
         self.borrow().len()
     }
     fn c_ref(&self) -> Self::RefSlice<'_> {
@@ -189,6 +191,61 @@ impl<D: Bytes> FromIterator<D> for SecretVecWrapper<D> {
     }
 }
 
+#[derive(Debug)]
+/// Takes each element directly out of the underlying protected region.
+///
+/// The returned data is not in protected heap, so make sure the iterator
+/// results are placed into a protected region to avoid leaks.
+pub struct SecretVecIter<B: Bytes> {
+    vec: SecretVec<B>,
+    pos: usize,
+}
+
+impl<B: Bytes> Iterator for SecretVecIter<B> {
+    type Item = B;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.nth(0)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        // May overflow, if so cap. It will return zero items when capped,
+        // because no `usize` is greater than `usize::MAX`.
+        self.pos = if let Some(pos) = self.pos.checked_add(n) {
+            pos
+        } else {
+            usize::MAX
+        };
+
+        if self.pos < self.vec.len() {
+            let idx = self.pos;
+            // Cannot overflow
+            self.pos += 1;
+
+            let mut vec = self.vec.borrow_mut();
+            Some(std::mem::replace(
+                &mut vec.as_mut()[idx],
+                B::uninitialized(),
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+impl<B: Bytes> FusedIterator for SecretVecIter<B> {}
+
+impl<B: Bytes> IntoIterator for SecretVecWrapper<B> {
+    type Item = B;
+    type IntoIter = SecretVecIter<B>;
+    fn into_iter(self) -> Self::IntoIter {
+        SecretVecIter {
+            vec: self.0,
+            pos: 0,
+        }
+    }
+}
+
 impl<B: Bytes> Extend<B> for SecretVecWrapper<B> {
     fn extend<T: IntoIterator<Item = B>>(&mut self, iter: T) {
         let new: Self = FromIterator::from_iter(iter);
@@ -201,7 +258,7 @@ impl<B: Bytes> Extend<B> for SecretVecWrapper<B> {
 
 impl<T: Bytes> ResizingContainer for SecretVecWrapper<T> {
     /// Very inefficient push approach!
-    fn c_push(&mut self, value: Self::Data) {
+    fn push(&mut self, value: Self::Data) {
         self.0 = secrets::SecretVec::new(self.len() + 1, |s| {
             let last_idx = s.len() - 1;
             s[0..last_idx].copy_from_slice(&self.borrow());
@@ -210,7 +267,7 @@ impl<T: Bytes> ResizingContainer for SecretVecWrapper<T> {
     }
 
     /// Very inefficient remove approach!
-    fn c_remove(&mut self, index: usize) {
+    fn remove(&mut self, index: usize) {
         self.0 = secrets::SecretVec::new(self.len() - 1, |s| {
             let contents = self.borrow();
             s[0..].copy_from_slice(&contents[0..index]);
@@ -219,7 +276,7 @@ impl<T: Bytes> ResizingContainer for SecretVecWrapper<T> {
     }
 
     // Append approach efficiency is fine, actually.
-    fn c_append(&mut self, other: &mut Self) {
+    fn append(&mut self, other: &mut Self) {
         self.0 = secrets::SecretVec::new(self.len() + other.len(), |s| {
             s[0..].copy_from_slice(&self.borrow());
             s[self.len()..].copy_from_slice(&other.borrow());
@@ -227,11 +284,13 @@ impl<T: Bytes> ResizingContainer for SecretVecWrapper<T> {
     }
 }
 
+/*
 /// Wraps `T` in [`SecretVecWrapper`] and wraps `Disk` in [`Encrypted`].
 pub type SecretBackedArray<'a, T, Disk, Coder> = BackedArray<
     SecretVecWrapper<usize>,
     Vec<BackedEntry<OnceLock<SecretVecWrapper<T>>, Encrypted<'a, Disk>, Coder>>,
 >;
+*/
 
 #[cfg(test)]
 #[cfg(not(miri))]
@@ -255,7 +314,7 @@ mod tests {
     // comments can be verified by re-enabling and running.
     #[test]
     #[ignore = "can't catch and resume from SIGSEGV"]
-    fn panic_on_peek() {
+    fn panion_peek() {
         let backing = OwnedCursorVec::new(Cursor::default());
 
         let mut array = SecretBackedArray::new();
@@ -268,7 +327,7 @@ mod tests {
             )
             .unwrap();
 
-        let val = array.generic_get(0).unwrap();
+        let val = array.generiget(0).unwrap();
 
         #[cfg(not(miri))]
         let val_ptr: *const _ = &val;
@@ -297,7 +356,7 @@ mod tests {
             .append_memory(INPUT_1, backing, BincodeCoder::default())
             .unwrap();
 
-        let val = array.generic_get(0).unwrap();
+        let val = array.generiget(0).unwrap();
 
         #[cfg(not(miri))]
         let val_ptr: *const _ = &val;
@@ -309,7 +368,7 @@ mod tests {
         #[cfg(not(miri))]
         assert_eq!(unsafe { **val_ptr }, 32);
 
-        assert_eq!(*array.generic_get(0).unwrap(), 32);
+        assert_eq!(*array.generiget(0).unwrap(), 32);
     }
 
     // Miri can't handle the FFI calls
@@ -333,13 +392,13 @@ mod tests {
             .unwrap();
 
         array
-            .generic_iter()
+            .generiiter()
             .enumerate()
             .for_each(|(x, val)| assert_eq!(*val.unwrap(), COMBINED[x]));
 
         let mut vals: Vec<_> = [0, 2, 4, 6, 7]
             .into_iter()
-            .map(|x| array.generic_get(x).unwrap())
+            .map(|x| array.generiget(x).unwrap())
             .collect();
 
         // Should still be valid after a disconnected handle drops.

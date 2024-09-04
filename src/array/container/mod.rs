@@ -67,8 +67,14 @@ pub trait MutIter<T> {
 /// `&[T]` is insufficiently generic for types that return a ref handle to `T`,
 /// instead of `&T` directly, so this allows for more complex container types.
 ///
-/// Methods are prepended with `c_*` to avoid namespace conflicts.
-pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
+/// Methods are prepended with `*` to avoid namespace conflicts.
+pub trait Container:
+    RefIter<Self::Data>
+    + MutIter<Self::Data>
+    + IntoIterator<Item = Self::Data>
+    + FromIterator<Self::Data>
+    + Default
+{
     /// The data container entries give references to.
     type Data;
     type Ref<'b>: AsRef<Self::Data> + Deref<Target = Self::Data> + StableDerefFeatureOpt
@@ -84,9 +90,9 @@ pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
     where
         Self: 'b;
 
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>>;
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>>;
-    fn c_len(&self) -> usize;
+    fn get(&self, index: usize) -> Option<Self::Ref<'_>>;
+    fn get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>>;
+    fn len(&self) -> usize;
     fn c_ref(&self) -> Self::RefSlice<'_>;
     fn c_mut(&mut self) -> Self::MutSlice<'_>;
 }
@@ -95,11 +101,12 @@ pub trait Container: RefIter<Self::Data> + MutIter<Self::Data> {
 pub trait ResizingContainer:
     Container + Default + FromIterator<Self::Data> + Extend<Self::Data>
 {
-    fn c_push(&mut self, value: Self::Data);
-    fn c_remove(&mut self, index: usize);
-    fn c_append(&mut self, other: &mut Self);
+    fn push(&mut self, value: Self::Data);
+    fn remove(&mut self, index: usize);
+    fn append(&mut self, other: &mut Self);
 }
 
+/*
 /// A [`BackedEntry`] holding a valid [`Container`] type.
 ///
 /// For internal implementation, reduces size of generics boilerplate.
@@ -245,6 +252,7 @@ macro_rules! open_mut {
     };
 }
 pub(crate) use open_mut;
+*/
 
 mod standard_types;
 #[allow(unused_imports)]

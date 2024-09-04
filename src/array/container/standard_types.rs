@@ -29,30 +29,6 @@ impl<T> MutIter<T> for &mut [T] {
     }
 }
 
-impl<T> Container for &mut [T] {
-    type Data = T;
-    type Ref<'b> = ToRef<'b, Self::Data> where Self: 'b;
-    type Mut<'b> = ToMut<'b, Self::Data> where Self: 'b;
-    type RefSlice<'b> = IndirectRef<'b, [Self::Data]> where Self: 'b;
-    type MutSlice<'b> = IndirectMut<'b, [Self::Data]> where Self: 'b;
-
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
-        self.get(index).map(|v| ToRef(v))
-    }
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
-        self.get_mut(index).map(|v| ToMut(v))
-    }
-    fn c_len(&self) -> usize {
-        self.len()
-    }
-    fn c_ref(&self) -> Self::RefSlice<'_> {
-        IndirectRef(&self[..])
-    }
-    fn c_mut(&mut self) -> Self::MutSlice<'_> {
-        IndirectMut(&mut self[..])
-    }
-}
-
 /// ------------------------------------------------------------------------ ///
 
 impl<T> RefIter<T> for Box<[T]> {
@@ -76,14 +52,14 @@ impl<T> Container for Box<[T]> {
     type RefSlice<'b> = IndirectRef<'b, [Self::Data]> where Self: 'b;
     type MutSlice<'b> = IndirectMut<'b, [Self::Data]> where Self: 'b;
 
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
-        self.get(index).map(|v| ToRef(v))
+    fn get(&self, index: usize) -> Option<Self::Ref<'_>> {
+        <[T]>::get(self, index).map(|v| ToRef(v))
     }
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
-        self.get_mut(index).map(|v| ToMut(v))
+    fn get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
+        <[T]>::get_mut(self, index).map(|v| ToMut(v))
     }
-    fn c_len(&self) -> usize {
-        self.len()
+    fn len(&self) -> usize {
+        <[T]>::len(self)
     }
     fn c_ref(&self) -> Self::RefSlice<'_> {
         IndirectRef(&self[..])
@@ -116,14 +92,14 @@ impl<T> Container for Vec<T> {
     type RefSlice<'b> = IndirectRef<'b, [Self::Data]> where Self: 'b;
     type MutSlice<'b> = IndirectMut<'b, [Self::Data]> where Self: 'b;
 
-    fn c_get(&self, index: usize) -> Option<Self::Ref<'_>> {
-        self.get(index).map(|v| ToRef(v))
+    fn get(&self, index: usize) -> Option<Self::Ref<'_>> {
+        <[T]>::get(self, index).map(|v| ToRef(v))
     }
-    fn c_get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
-        self.get_mut(index).map(|v| ToMut(v))
+    fn get_mut(&mut self, index: usize) -> Option<Self::Mut<'_>> {
+        <[T]>::get_mut(self, index).map(|v| ToMut(v))
     }
-    fn c_len(&self) -> usize {
-        self.len()
+    fn len(&self) -> usize {
+        <[T]>::len(self)
     }
     fn c_ref(&self) -> Self::RefSlice<'_> {
         IndirectRef(&self[..])
@@ -134,13 +110,13 @@ impl<T> Container for Vec<T> {
 }
 
 impl<T> ResizingContainer for Vec<T> {
-    fn c_push(&mut self, value: Self::Data) {
+    fn push(&mut self, value: Self::Data) {
         self.push(value)
     }
-    fn c_remove(&mut self, index: usize) {
+    fn remove(&mut self, index: usize) {
         self.remove(index);
     }
-    fn c_append(&mut self, other: &mut Self) {
+    fn append(&mut self, other: &mut Self) {
         self.append(other)
     }
 }
