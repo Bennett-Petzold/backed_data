@@ -141,21 +141,19 @@ impl ZstdLevel {
 /// Since `zstd` uses an internal write buffer for encoding,
 /// [`WriteUnbuffered`] is more efficient than [`Plainfile`][`super::Plainfile`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ZstdDisk<'a, const ZSTD_LEVEL: u8 = 0, B = WriteUnbuffered> {
+pub struct ZstdDisk<const ZSTD_LEVEL: u8 = 0, B = WriteUnbuffered> {
     inner: B,
-    _phantom: PhantomData<&'a ()>,
 }
 
-impl<const ZSTD_LEVEL: u8, B: From<PathBuf>> From<PathBuf> for ZstdDisk<'_, ZSTD_LEVEL, B> {
+impl<const ZSTD_LEVEL: u8, B: From<PathBuf>> From<PathBuf> for ZstdDisk<ZSTD_LEVEL, B> {
     fn from(value: PathBuf) -> Self {
         Self {
             inner: value.into(),
-            _phantom: PhantomData,
         }
     }
 }
 
-impl<const ZSTD_LEVEL: u8, B> From<ZstdDisk<'_, ZSTD_LEVEL, B>> for PathBuf
+impl<const ZSTD_LEVEL: u8, B> From<ZstdDisk<ZSTD_LEVEL, B>> for PathBuf
 where
     PathBuf: From<B>,
 {
@@ -164,18 +162,15 @@ where
     }
 }
 
-impl<const ZSTD_LEVEL: u8, B: AsRef<Path>> AsRef<Path> for ZstdDisk<'_, ZSTD_LEVEL, B> {
+impl<const ZSTD_LEVEL: u8, B: AsRef<Path>> AsRef<Path> for ZstdDisk<ZSTD_LEVEL, B> {
     fn as_ref(&self) -> &Path {
         self.inner.as_ref()
     }
 }
 
-impl<const ZSTD_LEVEL: u8, B> ZstdDisk<'_, ZSTD_LEVEL, B> {
+impl<const ZSTD_LEVEL: u8, B> ZstdDisk<ZSTD_LEVEL, B> {
     pub const fn new(inner: B) -> Self {
-        Self {
-            inner,
-            _phantom: PhantomData,
-        }
+        Self { inner }
     }
 
     pub fn into_inner(self) -> B {
@@ -184,12 +179,13 @@ impl<const ZSTD_LEVEL: u8, B> ZstdDisk<'_, ZSTD_LEVEL, B> {
 }
 
 #[cfg(feature = "zstd")]
-impl<'a, const ZSTD_LEVEL: u8, B: ReadDisk<ReadDisk: BufRead>> ReadDisk
-    for ZstdDisk<'a, ZSTD_LEVEL, B>
+impl<const ZSTD_LEVEL: u8, B> ReadDisk for ZstdDisk<ZSTD_LEVEL, B>
+where
+    for<'a> B: ReadDisk<ReadDisk<'a>: BufRead> + 'a,
 {
-    type ReadDisk = zstd::Decoder<'a, B::ReadDisk>;
+    type ReadDisk<'r> = zstd::Decoder<'r, B::ReadDisk<'r>> where Self: 'r;
 
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         Decoder::with_buffer(self.inner.read_disk()?)
     }
 }
@@ -215,10 +211,10 @@ impl<T: Write> Write for ZstdEncoderWrapper<'_, T> {
 }
 
 #[cfg(feature = "zstd")]
-impl<'a, const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<'a, ZSTD_LEVEL, B> {
-    type WriteDisk = ZstdEncoderWrapper<'a, B::WriteDisk>;
+impl<const ZSTD_LEVEL: u8, B: WriteDisk> WriteDisk for ZstdDisk<ZSTD_LEVEL, B> {
+    type WriteDisk<'w> = ZstdEncoderWrapper<'w, B::WriteDisk<'w>> where Self: 'w;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         #[allow(unused_mut)]
         let mut encoder = Encoder::new(
             self.inner.write_disk()?,
@@ -263,7 +259,7 @@ where
 
 #[cfg(feature = "async_zstd")]
 impl<const ZSTD_LEVEL: u8, B: for<'a> AsyncReadDisk<ReadDisk<'a>: AsyncBufRead> + Sync + Send>
-    AsyncReadDisk for ZstdDisk<'_, ZSTD_LEVEL, B>
+    AsyncReadDisk for ZstdDisk<ZSTD_LEVEL, B>
 {
     type ReadDisk<'r> = async_compression::futures::bufread::ZstdDecoder<B::ReadDisk<'r>> where Self: 'r;
     type ReadFut<'f> = ZstdReadFut<B::ReadFut<'f>> where Self: 'f;
@@ -300,7 +296,7 @@ where
 }
 
 #[cfg(feature = "async_zstd")]
-impl<B: AsyncWriteDisk, const ZSTD_LEVEL: u8> AsyncWriteDisk for ZstdDisk<'_, ZSTD_LEVEL, B> {
+impl<B: AsyncWriteDisk, const ZSTD_LEVEL: u8> AsyncWriteDisk for ZstdDisk<ZSTD_LEVEL, B> {
     type WriteDisk<'w> = async_compression::futures::write::ZstdEncoder<B::WriteDisk<'w>> where Self: 'w;
     type WriteFut<'f> = ZstdWriteFut<B::WriteFut<'f>> where Self: 'f;
 

@@ -21,14 +21,18 @@ use {
 
 /// Produces storage that can be read from synchronously.
 pub trait ReadDisk {
-    type ReadDisk: Read;
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk>;
+    type ReadDisk<'r>: Read
+    where
+        Self: 'r;
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>>;
 }
 
 /// Produces storage that can be written to synchronously.
 pub trait WriteDisk {
-    type WriteDisk: Write;
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk>;
+    type WriteDisk<'w>: Write
+    where
+        Self: 'w;
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>>;
 }
 
 #[cfg(feature = "async")]
@@ -57,15 +61,15 @@ pub trait AsyncWriteDisk {
 }
 
 impl<T: ReadDisk> ReadDisk for &T {
-    type ReadDisk = T::ReadDisk;
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    type ReadDisk<'r> = T::ReadDisk<'r> where Self: 'r;
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         T::read_disk(self)
     }
 }
 
 impl<T: WriteDisk> WriteDisk for &mut T {
-    type WriteDisk = T::WriteDisk;
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    type WriteDisk<'w> = T::WriteDisk<'w> where Self: 'w;
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         T::write_disk(self)
     }
 }
@@ -97,7 +101,7 @@ pub use write_unbuffered::*;
 mod unbuffered;
 pub use unbuffered::*;
 
-//pub mod custom;
+pub mod custom;
 
 #[cfg(any(feature = "zstd", feature = "async_zstd"))]
 pub mod zstd;

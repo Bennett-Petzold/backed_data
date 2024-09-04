@@ -269,7 +269,7 @@ where
                             // holds exclusive access, and it is only used mutably here.
                             // This extends the lifetime to reflect the pointer's lifetime,
                             // not this poll invocation.
-                            let mut coder =
+                            let coder =
                                 unsafe { transmute::<&mut Coder, &'a mut Coder>(this.coder) };
 
                             let new_state =
@@ -646,10 +646,7 @@ mod tests {
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry = unsafe {
-            BackedEntryAsync::<Box<[_]>, _, _>::new(
-                &mut *back_vec.get(),
-                AsyncBincodeCoder::default(),
-            )
+            BackedEntryAsync::<Box<[_]>, _, _>::new(back_vec, AsyncBincodeCoder::default())
         };
         pin!(backed_entry.write_ref(&FIB.into())).await.unwrap();
 
@@ -727,10 +724,8 @@ mod tests {
 
         cursor_vec!(back_vec, back_vec_inner);
 
-        let mut backed_entry = BackedEntryAsync::<Box<[_]>, _, _>::new(
-            unsafe { &mut *back_vec.get() },
-            AsyncBincodeCoder::default(),
-        );
+        let mut backed_entry =
+            BackedEntryAsync::<Box<[_]>, _, _>::new(back_vec, AsyncBincodeCoder::default());
 
         backed_entry.write_ref(&VALUE.into()).await.unwrap();
         assert!(!backed_entry.is_loaded());

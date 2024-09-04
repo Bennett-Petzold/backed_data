@@ -61,17 +61,17 @@ impl Plainfile {
 }
 
 impl ReadDisk for Plainfile {
-    type ReadDisk = BufReader<File>;
+    type ReadDisk<'r> = BufReader<File> where Self: 'r;
 
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         Ok(BufReader::new(File::open(self.path.clone())?))
     }
 }
 
 impl WriteDisk for Plainfile {
-    type WriteDisk = BufWriter<File>;
+    type WriteDisk<'w> = BufWriter<File> where Self: 'w;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         Ok(BufWriter::new(
             File::options()
                 .write(true)

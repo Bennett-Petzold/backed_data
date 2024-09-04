@@ -54,17 +54,17 @@ impl Unbuffered {
 }
 
 impl ReadDisk for Unbuffered {
-    type ReadDisk = File;
+    type ReadDisk<'r> = File where Self: 'r;
 
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         File::open(self.path.clone())
     }
 }
 
 impl WriteDisk for Unbuffered {
-    type WriteDisk = File;
+    type WriteDisk<'w> = File where Self: 'w;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         File::options()
             .write(true)
             .create(true)

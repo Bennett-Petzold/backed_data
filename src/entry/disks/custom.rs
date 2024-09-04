@@ -72,9 +72,9 @@ where
     F: Fn() -> std::io::Result<R>,
     R: Read,
 {
-    type ReadDisk = R;
+    type ReadDisk<'r> = R where Self: 'r;
 
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         (self.0)()
     }
 }
@@ -84,9 +84,9 @@ where
     F: Fn() -> std::io::Result<W>,
     W: Write,
 {
-    type WriteDisk = W;
+    type WriteDisk<'w> = W where Self: 'w;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         (self.0)()
     }
 }
@@ -96,9 +96,9 @@ where
     R: Fn() -> std::io::Result<O>,
     O: Read,
 {
-    type ReadDisk = O;
+    type ReadDisk<'r> = O where Self: 'r;
 
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         self.0.read_disk()
     }
 }
@@ -108,9 +108,9 @@ where
     W: Fn() -> std::io::Result<O>,
     O: Write,
 {
-    type WriteDisk = O;
+    type WriteDisk<'w> = O where Self: 'w;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         self.1.write_disk()
     }
 }
@@ -207,10 +207,10 @@ where
     E: Future<Output = std::io::Result<W>> + Send + Sync,
     W: AsyncWrite + Unpin,
 {
-    type WriteDisk = W;
-    type WriteFut = E;
+    type WriteDisk<'w> = W where Self: 'w;
+    type WriteFut<'f> = E where Self: 'f;
 
-    fn async_write_disk(&mut self) -> Self::WriteFut {
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
         (self.0)()
     }
 }
@@ -239,10 +239,10 @@ where
     E: Future<Output = std::io::Result<O>> + Send + Sync,
     O: AsyncWrite + Unpin,
 {
-    type WriteDisk = O;
-    type WriteFut = E;
+    type WriteDisk<'w> = O where Self: 'w;
+    type WriteFut<'f> = E where Self: 'f;
 
-    fn async_write_disk(&mut self) -> Self::WriteFut {
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
         self.1.async_write_disk()
     }
 }
@@ -301,9 +301,9 @@ where
     R: Fn() -> std::io::Result<O>,
     O: Read,
 {
-    type ReadDisk = O;
+    type ReadDisk<'r> = O where Self: 'r;
 
-    fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
+    fn read_disk(&self) -> std::io::Result<Self::ReadDisk<'_>> {
         self.0.read_disk()
     }
 }
@@ -314,9 +314,9 @@ where
     W: Fn() -> std::io::Result<O>,
     O: Write,
 {
-    type WriteDisk = O;
+    type WriteDisk<'w> = O where Self: 'w;
 
-    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
+    fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk<'_>> {
         self.0.write_disk()
     }
 }
@@ -349,10 +349,10 @@ where
     E: Future<Output = std::io::Result<O>> + Send + Sync,
     O: AsyncWrite + Unpin,
 {
-    type WriteDisk = O;
-    type WriteFut = E;
+    type WriteDisk<'w> = O where Self: 'w;
+    type WriteFut<'f> = E where Self: 'f;
 
-    fn async_write_disk(&mut self) -> Self::WriteFut {
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
         self.1.async_write_disk()
     }
 }

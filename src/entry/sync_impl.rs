@@ -4,7 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 use either::Either;
 use serde::{Deserialize, Serialize};
@@ -61,9 +64,9 @@ impl<T, Disk, Coder> BackedEntryRead for BackedEntrySync<T, Disk, Coder>
 where
     T: Once<Inner: for<'de> Deserialize<'de>>,
     Disk: ReadDisk,
-    Coder: Decoder<Disk::ReadDisk, T = T::Inner>,
+    for<'r> Coder: Decoder<Disk::ReadDisk<'r>, T = T::Inner> + 'r,
 {
-    type LoadResult<'a> = Result<&'a T::Inner, Coder::Error> where Self: 'a;
+    type LoadResult<'a> = Result<&'a T::Inner, <Coder as Decoder<Disk::ReadDisk<'a>>>::Error> where Self: 'a;
     fn load(&self) -> Self::LoadResult<'_> {
         let this = &self.0;
 
@@ -83,9 +86,9 @@ impl<T, Disk, Coder> BackedEntryWrite for BackedEntrySync<T, Disk, Coder>
 where
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
+    for<'w> Coder: Encoder<Disk::WriteDisk<'w>, T = T::Inner>,
 {
-    type UpdateResult<'a> = Result<(), Coder::Error> where Self: 'a;
+    type UpdateResult<'a> = Result<(), <Coder as Encoder<Disk::WriteDisk<'a>>>::Error> where Self: 'a;
     fn update(&mut self) -> Self::UpdateResult<'_> {
         let this = &mut self.0;
 
@@ -131,17 +134,19 @@ pub struct BackedEntryMut<
     'a,
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
+    // The Error = E binding hack is CRITICAL for borrow solving in `flush()`.
+    E,
+    Coder: for<'w> Encoder<Disk::WriteDisk<'w>, T = T::Inner, Error = E>,
 > {
     entry: &'a mut BackedEntrySync<T, Disk, Coder>,
     modified: bool,
 }
 
-impl<T, Disk, Coder> Deref for BackedEntryMut<'_, T, Disk, Coder>
+impl<T, Disk, E, Coder> Deref for BackedEntryMut<'_, T, Disk, E, Coder>
 where
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
+    Coder: for<'w> Encoder<Disk::WriteDisk<'w>, T = T::Inner, Error = E>,
 {
     type Target = T::Inner;
 
@@ -150,11 +155,11 @@ where
     }
 }
 
-impl<T, Disk, Coder> DerefMut for BackedEntryMut<'_, T, Disk, Coder>
+impl<T, Disk, E, Coder> DerefMut for BackedEntryMut<'_, T, Disk, E, Coder>
 where
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
+    Coder: for<'w> Encoder<Disk::WriteDisk<'w>, T = T::Inner, Error = E>,
 {
     /// [`DerefMut::deref_mut`] that sets a modified flag.
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -163,17 +168,18 @@ where
     }
 }
 
-impl<T, Disk, Coder> MutHandle<<T as Once>::Inner> for BackedEntryMut<'_, T, Disk, Coder>
+impl<T, Disk, E, Coder> MutHandle<<T as Once>::Inner> for BackedEntryMut<'_, T, Disk, E, Coder>
 where
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
+    // The Error = E binding hack is CRITICAL for borrow solving.
+    Coder: for<'w> Encoder<Disk::WriteDisk<'w>, T = T::Inner, Error = E>,
 {
     fn is_modified(&self) -> bool {
         self.modified
     }
 
-    type FlushResult<'a> = Result<&'a mut Self, Coder::Error> where Self: 'a;
+    type FlushResult<'a> = Result<&'a mut Self, E> where Self: 'a;
     fn flush(&mut self) -> Self::FlushResult<'_> {
         // No need to update if unmodified
         if self.modified {
@@ -184,11 +190,11 @@ where
     }
 }
 
-impl<T, Disk, Coder> Drop for BackedEntryMut<'_, T, Disk, Coder>
+impl<T, Disk, E, Coder> Drop for BackedEntryMut<'_, T, Disk, E, Coder>
 where
     T: Once<Inner: Serialize>,
     Disk: WriteDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner>,
+    Coder: for<'w> Encoder<Disk::WriteDisk<'w>, T = T::Inner, Error = E>,
 {
     /// [`Drop::drop`] that attempts a write if modified, silently failing.
     fn drop(&mut self) {
@@ -198,13 +204,16 @@ where
     }
 }
 
-impl<T, Disk, Coder> BackedEntryMutHandle for BackedEntrySync<T, Disk, Coder>
+impl<T, Disk, Coder, EE, DE> BackedEntryMutHandle for BackedEntrySync<T, Disk, Coder>
 where
     T: Once<Inner: Serialize + for<'de> Deserialize<'de>>,
     Disk: WriteDisk + ReadDisk,
-    Coder: Encoder<Disk::WriteDisk, T = T::Inner> + Decoder<Disk::ReadDisk, T = T::Inner>,
+    // The Error = E binding hack is CRITICAL for borrow solving.
+    for<'a> Coder: Encoder<Disk::WriteDisk<'a>, T = T::Inner, Error = EE>
+        + Decoder<Disk::ReadDisk<'a>, T = T::Inner, Error = DE>
+        + 'a,
 {
-    type MutHandleResult<'a> = Result<BackedEntryMut<'a, T, Disk, Coder>, <Coder as Decoder<Disk::ReadDisk>>::Error>
+    type MutHandleResult<'a> = Result<BackedEntryMut<'a, T, Disk, EE, Coder>, DE> 
         where
             Self: 'a;
 
@@ -281,7 +290,7 @@ mod tests {
 
         // Intentional unsafe access to later peek underlying storage
         let mut backed_entry =
-            unsafe { BackedEntryArr::new(&mut *back_vec.get(), BincodeCoder::default()) };
+            BackedEntryArr::new(back_vec, BincodeCoder::default());
         backed_entry.write_ref(&FIB.into()).unwrap();
 
         assert_eq!(backed_entry.load().unwrap().as_ref(), FIB);
@@ -319,13 +328,10 @@ mod tests {
         input.insert("THIS IS A STRING".to_string(), 55);
         input.insert("THIS IS ALSO A STRING".to_string(), 23413);
 
-        let mut binding = Cursor::new(Vec::with_capacity(10));
-        let mut back_vec = CursorVec {
-            inner: (&mut binding).into(),
-        };
+        cursor_vec!(back_vec);
 
         // Intentional unsafe access to later peek underlying storage
-        let mut backed_entry = BackedEntryCell::new(&mut back_vec, BincodeCoder::default());
+        let mut backed_entry = BackedEntryCell::new(back_vec, BincodeCoder::default());
         backed_entry.write_ref(&input).unwrap();
 
         assert_eq!(&input, backed_entry.load().unwrap());
@@ -351,7 +357,7 @@ mod tests {
         cursor_vec!(back_vec, back_vec_inner);
 
         let mut backed_entry =
-            BackedEntryArr::new(unsafe { &mut *back_vec.get() }, BincodeCoder::default());
+            BackedEntryArr::new(back_vec, BincodeCoder::default());
 
         backed_entry.write_ref(&VALUE.into()).unwrap();
         assert!(!backed_entry.is_loaded());
@@ -379,12 +385,9 @@ mod tests {
         const VALUES: &[u8] = &[0, 1, 3, 5, 7];
         const NEW_VALUES: &[u8] = &[17, 15, 13, 11, 10];
 
-        let mut binding = Cursor::new(Vec::with_capacity(10));
-        let mut back_vec = CursorVec {
-            inner: (&mut binding).into(),
-        };
+        cursor_vec!(back_vec);
 
-        let mut backed_entry = BackedEntryArrLock::new(&mut back_vec, BincodeCoder::default());
+        let mut backed_entry = BackedEntryArrLock::new(back_vec, BincodeCoder::default());
 
         backed_entry.write_ref(&VALUES.into()).unwrap();
         assert!(!backed_entry.is_loaded());

@@ -10,12 +10,10 @@ Defines the encoding/decoding formats for backed disks.
 
 use std::future::Future;
 
-use serde::{Deserialize, Serialize};
-
 /// A format decoder that can be used synchronously.
 pub trait Decoder<Source: ?Sized> {
     type Error: From<std::io::Error>;
-    type T: for<'de> Deserialize<'de> + ?Sized;
+    type T;
 
     /// Return data with a known format from storage.
     fn decode(&self, source: &mut Source) -> Result<Self::T, Self::Error>;
@@ -30,7 +28,7 @@ pub trait Decoder<Source: ?Sized> {
 /// encoding invalid and causing read failure.
 pub trait Encoder<Target: ?Sized> {
     type Error: From<std::io::Error>;
-    type T: Serialize + ?Sized;
+    type T: ?Sized;
 
     /// Fully write out formatted data to a target disk.
     fn encode(&self, data: &Self::T, target: Target) -> Result<(), Self::Error>;
