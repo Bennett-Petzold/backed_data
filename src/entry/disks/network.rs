@@ -35,7 +35,7 @@ pub fn default_client() -> Client {
 
 /// Wraps [`reqwest::Request`] so it can be be (de)serialized.
 #[derive(Debug, Serialize, Deserialize)]
-struct SerialRequest {
+pub struct SerialRequest {
     //#[serde(serialize_with = "to_method_enum")]
     //#[serde(deserialize_with = "from_method_enum")]
     #[serde(with = "http_serde::method")]
@@ -279,10 +279,10 @@ impl ReqwestReadBuilder {
 }
 
 impl AsyncReadDisk for Network {
-    type ReadDisk = ReqwestRead;
-    type ReadFut = ReqwestReadBuilder;
+    type ReadDisk<'r> = ReqwestRead where Self: 'r;
+    type ReadFut<'f> = ReqwestReadBuilder where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         let client = {
             let mut client_handle = self.client.lock().unwrap();
             client_handle.get_or_insert(default_client()).clone()
@@ -293,10 +293,10 @@ impl AsyncReadDisk for Network {
 }
 
 impl AsyncReadDisk for BoxedNetwork {
-    type ReadDisk = Pin<Box<ReqwestRead>>;
-    type ReadFut = Pin<Box<OutputBoxer<ReqwestReadBuilder>>>;
+    type ReadDisk<'r> = Pin<Box<ReqwestRead>> where Self: 'r;
+    type ReadFut<'f> = Pin<Box<OutputBoxer<ReqwestReadBuilder>>> where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         Box::pin(OutputBoxer(self.0.async_read_disk()))
     }
 }

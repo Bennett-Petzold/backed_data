@@ -262,13 +262,13 @@ where
 }
 
 #[cfg(feature = "async_zstd")]
-impl<const ZSTD_LEVEL: u8, B: AsyncReadDisk<ReadDisk: AsyncBufRead> + Sync + Send> AsyncReadDisk
-    for ZstdDisk<'_, ZSTD_LEVEL, B>
+impl<const ZSTD_LEVEL: u8, B: for<'a> AsyncReadDisk<ReadDisk<'a>: AsyncBufRead> + Sync + Send>
+    AsyncReadDisk for ZstdDisk<'_, ZSTD_LEVEL, B>
 {
-    type ReadDisk = async_compression::futures::bufread::ZstdDecoder<B::ReadDisk>;
-    type ReadFut = ZstdReadFut<B::ReadFut>;
+    type ReadDisk<'r> = async_compression::futures::bufread::ZstdDecoder<B::ReadDisk<'r>> where Self: 'r;
+    type ReadFut<'f> = ZstdReadFut<B::ReadFut<'f>> where Self: 'f;
 
-    fn async_read_disk(&self) -> Self::ReadFut {
+    fn async_read_disk(&self) -> Self::ReadFut<'_> {
         ZstdReadFut {
             inner: self.inner.async_read_disk(),
         }
@@ -301,10 +301,10 @@ where
 
 #[cfg(feature = "async_zstd")]
 impl<B: AsyncWriteDisk, const ZSTD_LEVEL: u8> AsyncWriteDisk for ZstdDisk<'_, ZSTD_LEVEL, B> {
-    type WriteDisk = async_compression::futures::write::ZstdEncoder<B::WriteDisk>;
-    type WriteFut = ZstdWriteFut<B::WriteFut>;
+    type WriteDisk<'w> = async_compression::futures::write::ZstdEncoder<B::WriteDisk<'w>> where Self: 'w;
+    type WriteFut<'f> = ZstdWriteFut<B::WriteFut<'f>> where Self: 'f;
 
-    fn async_write_disk(&mut self) -> Self::WriteFut {
+    fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
         ZstdWriteFut {
             inner: self.inner.async_write_disk(),
         }
@@ -354,12 +354,11 @@ mod tests {
     async fn async_zstd() {
         use futures::io::{AsyncReadExt, AsyncWriteExt};
 
+        use crate::test_utils::StaticCursorVec;
+
         const TEST_SEQUENCE: &[u8] = &[39, 3, 6, 7, 5];
         let mut cursor = Cursor::default();
-        let backing = CursorVec {
-            inner: Mutex::new(&mut cursor),
-        };
-        assert!(backing.get_ref().is_empty());
+        let backing = StaticCursorVec::new(cursor);
 
         let mut zstd = ZstdDisk::<0, _>::new(backing);
         let mut write = zstd.async_write_disk().await.unwrap();

@@ -9,6 +9,7 @@ Defines memory protected storage that encrypts to disk.
 */
 
 use std::{
+    cell::UnsafeCell,
     io::{Cursor, Read, Write},
     marker::PhantomData,
     mem::transmute,
@@ -21,6 +22,7 @@ use aes_gcm::{
     aead::{generic_array::GenericArray, AeadMutInPlace, Buffer, OsRng},
     AeadCore, Aes256Gcm, KeyInit,
 };
+use num_traits::CheckedAdd;
 use secrets::{traits::Bytes, SecretBox, SecretVec};
 use serde::{de::Visitor, Deserialize, Serialize};
 use stable_deref_trait::StableDeref;
@@ -183,33 +185,32 @@ fn random_key_nonce() -> SecretBox<KeyNonce> {
 /// [`Unbuffered`][`super::Unbuffered`] is more efficient than
 /// [`Plainfile`][`super::Plainfile`].
 #[derive(Serialize, Deserialize)]
-pub struct Encrypted<'a, B> {
+pub struct Encrypted<B> {
     inner: B,
     #[serde(skip)]
     #[serde(default = "random_key_nonce")]
     secrets: SecretBox<KeyNonce>,
-    _phantom: PhantomData<&'a ()>,
 }
 
-impl<B> From<Encrypted<'_, B>> for PathBuf
+impl<B> From<Encrypted<B>> for PathBuf
 where
     PathBuf: From<B>,
 {
-    fn from(val: Encrypted<'_, B>) -> Self {
+    fn from(val: Encrypted<B>) -> Self {
         Self::from(val.inner)
     }
 }
 
-impl<B: AsRef<Path>> AsRef<Path> for Encrypted<'_, B> {
+impl<B: AsRef<Path>> AsRef<Path> for Encrypted<B> {
     fn as_ref(&self) -> &Path {
         self.inner.as_ref()
     }
 }
 
-unsafe impl<B: Send> Send for Encrypted<'_, B> {}
-unsafe impl<B: Sync> Sync for Encrypted<'_, B> {}
+unsafe impl<B: Send> Send for Encrypted<B> {}
+unsafe impl<B: Sync> Sync for Encrypted<B> {}
 
-impl<B> Encrypted<'_, B> {
+impl<B> Encrypted<B> {
     /// Create a new [`Encrypted`].
     ///
     /// # Parameters
@@ -236,7 +237,6 @@ impl<B> Encrypted<'_, B> {
                     ),
                 };
             }),
-            _phantom: PhantomData,
         }
     }
 
@@ -271,14 +271,14 @@ impl<B> Encrypted<'_, B> {
 }
 
 /// Beware, this generates a random key and nonce.
-impl From<Plainfile> for Encrypted<'_, Plainfile> {
+impl From<Plainfile> for Encrypted<Plainfile> {
     fn from(value: Plainfile) -> Self {
         Self::new::<Box<[u8; 32]>, Box<[u8; 12]>>(value, None, None)
     }
 }
 
 /// Beware, this generates a random key and nonce.
-impl From<PathBuf> for Encrypted<'_, Plainfile> {
+impl From<PathBuf> for Encrypted<Plainfile> {
     fn from(value: PathBuf) -> Self {
         let value: Plainfile = value.into();
         Self::from(value)
@@ -286,58 +286,75 @@ impl From<PathBuf> for Encrypted<'_, Plainfile> {
 }
 
 #[derive(Debug)]
-struct SecretVecU8<'a>(BorrowExtender<SecretVecWrapper<u8>, secrets::secret_vec::Ref<'a, u8>>);
+struct SecretVecU8(BorrowExtender<SecretVecWrapper<u8>, secrets::secret_vec::Ref<'static, u8>>);
 
-impl<'a> From<SecretVec<u8>> for SecretVecU8<'a> {
+impl From<SecretVec<u8>> for SecretVecU8 {
     fn from(value: SecretVec<u8>) -> Self {
-        // Lifetime shenanigans
+        // Lifetime shenanigans, this is 'static because it owns the underlying
+        // data for its own lifetime
         Self(BorrowExtender::new(SecretVecWrapper(value), |value| {
             let value =
-                unsafe { transmute::<&SecretVecWrapper<u8>, &'a SecretVecWrapper<u8>>(value) };
+                unsafe { transmute::<&SecretVecWrapper<u8>, &'static SecretVecWrapper<u8>>(value) };
             value.borrow()
         }))
     }
 }
 
-impl From<SecretVecBuffer<'_>> for SecretVecU8<'_> {
+impl From<SecretVecBuffer> for SecretVecU8 {
     fn from(value: SecretVecBuffer) -> Self {
         let value: SecretVec<u8> = value.into();
         Self::from(value)
     }
 }
 
-impl AsRef<[u8]> for SecretVecU8<'_> {
+impl AsRef<[u8]> for SecretVecU8 {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
 
-/// A SecretVec implementing [`Buffer`].
+/// Secret borrow handle, with three possible states.
 #[derive(Debug)]
-pub struct SecretVecBuffer<'a> {
-    inner: SecretVec<u8>,
-    ref_handle: OnceLock<secrets::secret_vec::Ref<'a, u8>>,
-    mut_handle: Option<secrets::secret_vec::RefMut<'a, u8>>,
+enum SecretVecBufferHandle<'a> {
+    Ref(secrets::secret_vec::Ref<'a, u8>),
+    Mut(secrets::secret_vec::RefMut<'a, u8>),
+    None,
 }
 
-impl From<SecretVec<u8>> for SecretVecBuffer<'_> {
+/// A SecretVec implementing [`Buffer`].
+#[derive(Debug)]
+pub struct SecretVecBuffer {
+    inner: SecretVec<u8>,
+    /// Tracks `inner` length.
+    len: usize,
+    /// Reference to the owned `inner` value.
+    ///
+    /// The usage of UnsafeCell is entirely constrained by Rust's borrowing
+    /// rules at function calls. The 'static lifetime is valid because
+    /// SecretVec's borrows point to heap allocated data, which do not change
+    /// address when SecretVec is moved. Then we know the borrows are valid
+    /// while the SecretVec is valid, which is for this struct lifetime.
+    handle: UnsafeCell<SecretVecBufferHandle<'static>>,
+}
+
+impl From<SecretVec<u8>> for SecretVecBuffer {
     fn from(value: SecretVec<u8>) -> Self {
-        // Lifetime shenanigans
+        let len = value.len();
         Self {
             inner: value,
-            ref_handle: OnceLock::new(),
-            mut_handle: None,
+            len,
+            handle: SecretVecBufferHandle::None.into(),
         }
     }
 }
 
-impl Default for SecretVecBuffer<'_> {
+impl Default for SecretVecBuffer {
     fn default() -> Self {
         SecretVec::<u8>::zero(0).into()
     }
 }
 
-impl Deref for SecretVecBuffer<'_> {
+impl Deref for SecretVecBuffer {
     type Target = SecretVec<u8>;
 
     fn deref(&self) -> &Self::Target {
@@ -345,74 +362,130 @@ impl Deref for SecretVecBuffer<'_> {
     }
 }
 
-impl From<SecretVecBuffer<'_>> for SecretVec<u8> {
-    fn from(mut val: SecretVecBuffer<'_>) -> Self {
-        // Clear handles
-        val.ref_handle = OnceLock::new();
-        val.mut_handle = None;
+impl From<SecretVecBuffer> for SecretVec<u8> {
+    fn from(val: SecretVecBuffer) -> Self {
+        let mut inner = val.inner;
 
-        val.inner
+        // Shrink the SecretVec to initialized size
+        if inner.len() != val.len {
+            inner = SecretVec::new(val.len, |s| s.copy_from_slice(&inner.borrow()[..val.len]));
+        }
+
+        inner
     }
 }
 
-impl AsRef<[u8]> for SecretVecBuffer<'_> {
+impl AsRef<[u8]> for SecretVecBuffer {
     fn as_ref(&self) -> &[u8] {
-        self.ref_handle.get_or_init(|| {
-            let this: *const _ = self;
-            unsafe { &*this }.inner.borrow()
-        })
+        // Taken mutable so we can initialize, if necessary.
+        let handle = unsafe { &mut *self.handle.get() };
+
+        // Intialize ref, if that isn't the current enum state
+        if matches!(handle, SecretVecBufferHandle::Ref(_)) {
+            let inner: *const _ = &self.inner;
+            *handle = SecretVecBufferHandle::Ref(unsafe { &*inner }.borrow());
+        }
+
+        if let SecretVecBufferHandle::Ref(x) = handle {
+            // Only give a slice to the initialized part
+            &(&*x)[..self.len]
+        } else {
+            panic!("This was previously initialized as Ref!")
+        }
     }
 }
 
-impl AsMut<[u8]> for SecretVecBuffer<'_> {
+impl AsMut<[u8]> for SecretVecBuffer {
     fn as_mut(&mut self) -> &mut [u8] {
-        if self.mut_handle.is_none() {
-            let this: *mut _ = self;
-            self.mut_handle = Some(unsafe { &mut *this }.inner.borrow_mut());
-        };
-        self.mut_handle.as_mut().unwrap()
+        let handle = self.handle.get_mut();
+
+        // Intialize mut, if that isn't the current enum state
+        if matches!(handle, SecretVecBufferHandle::Mut(_)) {
+            let inner: *mut _ = &mut self.inner;
+            *handle = SecretVecBufferHandle::Mut(unsafe { &mut *inner }.borrow_mut());
+        }
+
+        if let SecretVecBufferHandle::Mut(x) = handle {
+            // Only give a slice to the initialized part
+            &mut (&mut *x)[..self.len]
+        } else {
+            panic!("This was previously initialized as Mut!")
+        }
     }
 }
 
-impl Buffer for SecretVecBuffer<'_> {
+impl Buffer for SecretVecBuffer {
     fn len(&self) -> usize {
-        self.inner.len()
+        self.len
     }
-    fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-    fn extend_from_slice(&mut self, other: &[u8]) -> aes_gcm::aead::Result<()> {
-        // Clear handles
-        self.ref_handle = OnceLock::new();
-        self.mut_handle = None;
 
-        let prev_len = self.inner.len();
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    fn extend_from_slice(&mut self, other: &[u8]) -> aes_gcm::aead::Result<()> {
+        // Clear handle, since we're updating underlying state
+        *self.handle.get_mut() = SecretVecBufferHandle::None;
+
+        // Multiply size if other is beyond capacity
+        let mut capacity = self.inner.len();
+        if (self.len + other.len()) > capacity {
+            // Need special handling for zero case, multiplies by zero get us
+            // nowhere.
+            if capacity == 0 {
+                capacity = 1;
+            }
+
+            // factor = [(len + other - 1) / capacity] + 1;
+            // Since len + other is (almost) always > capacity, this is >= 2.
+            // If other's length is 1 and capacity was zero, this will be
+            //     [(0 + 1 - 1) / 1] + 1 = 1, an exact allocation.
+            let mult_factor = (self
+                .len
+                .checked_add(other.len())
+                .ok_or(aes_gcm::aead::Error)?
+                - 1)
+                / capacity;
+            let mult_factor = mult_factor.checked_add(1).ok_or(aes_gcm::aead::Error)?;
+
+            let new_capacity = capacity
+                .checked_mul(mult_factor)
+                .ok_or(aes_gcm::aead::Error)?;
+
+            self.inner = SecretVec::new(new_capacity, |s| {
+                s[..self.len].copy_from_slice(&self.inner.borrow()[..self.len])
+            });
+        }
+
+        // Copy over data and update length.
         let new_len = self
-            .inner
-            .len()
+            .len
             .checked_add(other.len())
             .ok_or(aes_gcm::aead::Error)?;
-        self.inner = SecretVec::new(new_len, |s| {
-            s[..prev_len].copy_from_slice(&self.inner.borrow());
-            s[prev_len..].copy_from_slice(other);
-        });
+        self.inner.borrow_mut()[self.len..new_len].copy_from_slice(other);
+        self.len = new_len;
+
         Ok(())
     }
-    fn truncate(&mut self, _len: usize) {
-        // Clear handles
-        self.ref_handle = OnceLock::new();
-        self.mut_handle = None;
 
-        // Always at exact length
+    fn truncate(&mut self, len: usize) {
+        // Take the chance to clear the handle, for minimum exposure
+        *self.handle.get_mut() = SecretVecBufferHandle::None;
+
+        self.len = len
     }
 }
 
+// Does not alias internal data, so ignore inherited !Send + !Sync
+unsafe impl Send for SecretVecBuffer {}
+unsafe impl Sync for SecretVecBuffer {}
+
 #[derive(Debug)]
-pub struct SecretReadVec<'a> {
-    inner: AsyncCompatCursor<SecretVecU8<'a>>,
+pub struct SecretReadVec {
+    inner: AsyncCompatCursor<SecretVecU8>,
 }
 
-impl From<SecretVec<u8>> for SecretReadVec<'_> {
+impl From<SecretVec<u8>> for SecretReadVec {
     fn from(value: SecretVec<u8>) -> Self {
         Self {
             inner: Cursor::new(value.into()).into(),
@@ -420,22 +493,22 @@ impl From<SecretVec<u8>> for SecretReadVec<'_> {
     }
 }
 
-impl<'a> From<SecretVecU8<'a>> for SecretReadVec<'a> {
-    fn from(value: SecretVecU8<'a>) -> Self {
+impl From<SecretVecU8> for SecretReadVec {
+    fn from(value: SecretVecU8) -> Self {
         Self {
             inner: Cursor::new(value).into(),
         }
     }
 }
 
-impl<'a> From<SecretVecBuffer<'a>> for SecretReadVec<'a> {
-    fn from(value: SecretVecBuffer<'a>) -> Self {
+impl From<SecretVecBuffer> for SecretReadVec {
+    fn from(value: SecretVecBuffer) -> Self {
         let value: SecretVecU8 = value.into();
         Self::from(value)
     }
 }
 
-impl Read for SecretReadVec<'_> {
+impl Read for SecretReadVec {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
@@ -444,12 +517,12 @@ impl Read for SecretReadVec<'_> {
     }
 }
 
-// Does not alias internal data, so ignore NonNull !Send + !Sync
-unsafe impl Send for SecretReadVec<'_> {}
-unsafe impl Sync for SecretReadVec<'_> {}
+// Does not alias internal data, so ignore inherited !Send + !Sync
+unsafe impl Send for SecretReadVec {}
+unsafe impl Sync for SecretReadVec {}
 
-impl<'a, B: ReadDisk> ReadDisk for Encrypted<'a, B> {
-    type ReadDisk = SecretReadVec<'a>;
+impl<B: ReadDisk> ReadDisk for Encrypted<B> {
+    type ReadDisk = SecretReadVec;
 
     fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
         let mut loaded = Vec::new();
@@ -471,13 +544,13 @@ impl<'a, B: ReadDisk> ReadDisk for Encrypted<'a, B> {
 }
 
 #[derive(Debug)]
-pub struct EncryptedWriter<'a, B> {
+pub struct EncryptedWriter<B> {
     inner: B,
     secrets: SecretBox<KeyNonce>,
-    buffer: SecretVecBuffer<'a>,
+    buffer: SecretVecBuffer,
 }
 
-impl<B: Write> Write for EncryptedWriter<'_, B> {
+impl<B: Write> Write for EncryptedWriter<B> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.buffer
             .extend_from_slice(buf)
@@ -501,7 +574,7 @@ impl<B: Write> Write for EncryptedWriter<'_, B> {
     }
 }
 
-impl<B> EncryptedWriter<'_, B> {
+impl<B> EncryptedWriter<B> {
     fn new(inner: B, secrets: SecretBox<KeyNonce>) -> Self {
         Self {
             inner,
@@ -511,8 +584,8 @@ impl<B> EncryptedWriter<'_, B> {
     }
 }
 
-impl<'a, B: WriteDisk> WriteDisk for Encrypted<'a, B> {
-    type WriteDisk = EncryptedWriter<'a, B::WriteDisk>;
+impl<B: WriteDisk> WriteDisk for Encrypted<B> {
+    type WriteDisk = EncryptedWriter<B::WriteDisk>;
 
     fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
         Ok(EncryptedWriter::new(
@@ -532,7 +605,7 @@ mod async_impl {
     use std::io::SeekFrom;
     use std::pin::Pin;
     use std::sync::{Arc, Mutex};
-    use std::task::{Context, Poll};
+    use std::task::{ready, Context, Poll};
 
     use crate::entry::disks::{AsyncReadDisk, AsyncWriteDisk};
     use crate::utils::blocking::BlockingFn;
@@ -542,18 +615,19 @@ mod async_impl {
     use futures::io::{AsyncRead, AsyncWrite};
     use futures::io::{AsyncReadExt, AsyncSeek};
     use futures::Future;
+    use pin_project::pin_project;
 
     /// Async wrapper of [`Encrypted`], which derefs to the sync variant.
     ///
     /// Adds handles for blocking operations, see [`crate::utils::blocking`]
     /// for convenience functions.
-    pub struct AsyncEncrypted<'a, B, FD, FE> {
-        sync: Encrypted<'a, B>,
+    pub struct AsyncEncrypted<B, FD, FE> {
+        sync: Encrypted<B>,
         decrypt_handle: FD,
         encrypt_handle: FE,
     }
 
-    impl<B: Bytes, FD, FE> AsyncEncrypted<'_, B, FD, FE> {
+    impl<B: Bytes, FD, FE> AsyncEncrypted<B, FD, FE> {
         pub fn new<K, N>(
             inner: B,
             key: Option<K>,
@@ -573,36 +647,36 @@ mod async_impl {
         }
     }
 
-    impl<'a, B, FD, FE> Deref for AsyncEncrypted<'a, B, FD, FE> {
-        type Target = Encrypted<'a, B>;
+    impl<B, FD, FE> Deref for AsyncEncrypted<B, FD, FE> {
+        type Target = Encrypted<B>;
         fn deref(&self) -> &Self::Target {
             &self.sync
         }
     }
 
-    impl<B, FD, FE> DerefMut for AsyncEncrypted<'_, B, FD, FE> {
+    impl<B, FD, FE> DerefMut for AsyncEncrypted<B, FD, FE> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.sync
         }
     }
 
-    impl<'a, B: ReadDisk, FE, FD> ReadDisk for AsyncEncrypted<'a, B, FE, FD> {
-        type ReadDisk = SecretReadVec<'a>;
+    impl<B: ReadDisk, FE, FD> ReadDisk for AsyncEncrypted<B, FE, FD> {
+        type ReadDisk = SecretReadVec;
 
         fn read_disk(&self) -> std::io::Result<Self::ReadDisk> {
             self.sync.read_disk()
         }
     }
 
-    impl<'a, B: WriteDisk, FE, FD> WriteDisk for AsyncEncrypted<'a, B, FE, FD> {
-        type WriteDisk = EncryptedWriter<'a, B::WriteDisk>;
+    impl<B: WriteDisk, FE, FD> WriteDisk for AsyncEncrypted<B, FE, FD> {
+        type WriteDisk = EncryptedWriter<B::WriteDisk>;
 
         fn write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
             self.sync.write_disk()
         }
     }
 
-    impl AsyncRead for SecretReadVec<'_> {
+    impl AsyncRead for SecretReadVec {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -612,7 +686,7 @@ mod async_impl {
         }
     }
 
-    impl AsyncSeek for SecretReadVec<'_> {
+    impl AsyncSeek for SecretReadVec {
         fn poll_seek(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -624,14 +698,13 @@ mod async_impl {
 
     /// [`BlockingFn`] that runs AES decryption.
     #[derive(Debug)]
-    pub struct DecryptBlocking<'a> {
+    pub struct DecryptBlocking {
         loaded: Vec<u8>,
         secrets: SecretBox<KeyNonce>,
-        _phantom: PhantomData<&'a ()>,
     }
 
-    impl<'a> BlockingFn for DecryptBlocking<'a> {
-        type Output = std::io::Result<SecretVecBuffer<'a>>;
+    impl BlockingFn for DecryptBlocking {
+        type Output = std::io::Result<SecretReadVec>;
 
         fn call(self) -> Self::Output {
             let mut decrypted: SecretVecBuffer =
@@ -643,197 +716,323 @@ mod async_impl {
                 &mut decrypted,
             )
             .map_err(|_| std::io::ErrorKind::Other)?;
-            Ok(decrypted)
+            Ok(decrypted.into())
         }
     }
 
-    impl<'a, B, FD, FE, R> AsyncReadDisk for AsyncEncrypted<'a, B, FD, FE>
+    #[derive(Debug)]
+    #[pin_project]
+    struct DecryptDiskRead<R> {
+        #[pin]
+        disk: R,
+        storage: Vec<u8>,
+    }
+
+    #[derive(Debug)]
+    #[pin_project]
+    struct DecryptGenHandle<H> {
+        handle: H,
+        storage: Vec<u8>,
+    }
+
+    #[derive(Debug)]
+    #[pin_project(project = DecryptGenPin)]
+    enum DecryptGenState<F, R, H> {
+        /// Initialize the read disk
+        Disk(#[pin] F),
+        /// Read from disk to a storage vector
+        Read(#[pin] DecryptDiskRead<R>),
+        /// Wait for the processing handle to complete
+        Handle(#[pin] H),
+    }
+
+    #[derive(Debug)]
+    #[pin_project]
+    pub struct DecryptGen<'h, F, R, FD, H> {
+        #[pin]
+        state: DecryptGenState<F, R, H>,
+        handle: &'h FD,
+        secrets: &'h SecretBox<KeyNonce>,
+    }
+
+    /// Arbitrary initial size for the local vector to start with.
+    ///
+    /// 8 KiB, based on [`std::io::BufReader`] size as of Rust 1.80.
+    const STORAGE_INIT_SIZE: usize = 8 * 1024;
+
+    impl<F, R, FD, H> Future for DecryptGen<'_, F, R, FD, H>
     where
-        B: AsyncReadDisk<ReadDisk: Sync + Send> + Sync + Send,
-        FE: Send + Sync + Unpin,
-        FD: Send + Sync + Unpin,
-        R: Send + Sync + Unpin,
-        FD: Fn(DecryptBlocking) -> R,
-        FD: Fn(DecryptBlocking) -> R,
-        R: Future<Output = std::io::Result<SecretVecBuffer<'a>>>,
+        R: AsyncRead,
+        F: Future<Output = std::io::Result<R>>,
+        FD: Fn(DecryptBlocking) -> H,
+        H: Future<Output = std::io::Result<SecretReadVec>>,
     {
-        type ReadDisk = SecretReadVec<'a>;
+        type Output = H::Output;
 
-        async fn async_read_disk(&self) -> std::io::Result<Self::ReadDisk> {
-            let mut loaded = Vec::new();
-            let mut read_disk = self.inner.async_read_disk().await?;
-            read_disk.read_to_end(&mut loaded).await?;
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            loop {
+                let mut this = self.as_mut().project();
+                let state = this.state.as_mut().project();
 
-            let decrypted = (self.decrypt_handle)(DecryptBlocking {
-                loaded,
-                secrets: self.secrets.clone(),
-                _phantom: PhantomData,
-            })
-            .await?;
+                match state {
+                    DecryptGenPin::Disk(disk_fut) => {
+                        let disk_res = ready!(disk_fut.poll(cx));
+                        match disk_res {
+                            Ok(disk) => {
+                                this.state.set(DecryptGenState::Read(DecryptDiskRead {
+                                    disk,
+                                    storage: Vec::with_capacity(STORAGE_INIT_SIZE),
+                                }));
+                            }
+                            Err(e) => {
+                                return Poll::Ready(Err(e));
+                            }
+                        }
+                    }
+                    DecryptGenPin::Read(disk_read) => {
+                        let disk_read = disk_read.project();
+                        let disk = disk_read.disk;
+                        let storage = disk_read.storage;
 
-            Ok(decrypted.into())
+                        match ready!(disk.poll_read(cx, storage))? {
+                            // Read complete
+                            0 => {
+                                let decrypted = (this.handle)(DecryptBlocking {
+                                    loaded: storage.clone(),
+                                    secrets: this.secrets.clone(),
+                                });
+                                this.state.set(DecryptGenState::Handle(decrypted));
+                            }
+                            // Read ongoing (> 0)
+                            _ => {
+                                // Double capacity if it's been filled
+                                if storage.len() == storage.capacity() {
+                                    storage.reserve(storage.capacity());
+                                }
+                            }
+                        }
+                    }
+                    DecryptGenPin::Handle(handle_fut) => {
+                        return handle_fut.poll(cx);
+                    }
+                }
+            }
+        }
+    }
+
+    impl<'h, F, R, FD, H> DecryptGen<'h, F, R, FD, H> {
+        fn new(disk_fut: F, handle: &'h FD, secrets: &'h SecretBox<KeyNonce>) -> Self {
+            Self {
+                state: DecryptGenState::Disk(disk_fut),
+                handle,
+                secrets,
+            }
+        }
+    }
+
+    impl<'a, B, FD, FE, R> AsyncReadDisk for AsyncEncrypted<B, FD, FE>
+    where
+        B: AsyncReadDisk,
+        FD: Fn(DecryptBlocking) -> R,
+        R: Future<Output = std::io::Result<SecretReadVec>>,
+    {
+        type ReadDisk<'r> = SecretReadVec where Self: 'r;
+        type ReadFut<'f> = DecryptGen<'f, B::ReadFut<'f>, B::ReadDisk<'f>, FD, R> where Self: 'f;
+
+        fn async_read_disk(&self) -> Self::ReadFut<'_> {
+            DecryptGen::new(
+                self.inner.async_read_disk(),
+                &self.decrypt_handle,
+                &self.secrets,
+            )
         }
     }
 
     /// [`BlockingFn`] that runs AES encryption.
     #[derive(Debug)]
     pub struct EncryptBlocking<'a> {
-        buffer: Arc<Mutex<SecretVecBuffer<'a>>>,
-        secrets: SecretBox<KeyNonce>,
+        buffer: SecretVecBuffer,
+        secrets: &'a SecretBox<KeyNonce>,
     }
 
-    impl<'a> BlockingFn for EncryptBlocking<'a> {
+    impl BlockingFn for EncryptBlocking<'_> {
         type Output = std::io::Result<SecretVec<u8>>;
 
-        fn call(self) -> Self::Output {
-            let buffer = self.buffer.lock().unwrap();
-            let mut buf: SecretVecBuffer = (**buffer).clone().into();
-
+        fn call(mut self) -> Self::Output {
             let mut aes = Aes256Gcm::new(&self.secrets.borrow().key.into());
             aes.encrypt_in_place(
                 GenericArray::from_slice(&self.secrets.borrow().nonce),
                 &[],
-                &mut buf,
+                &mut self.buffer,
             )
             .map_err(|_| std::io::ErrorKind::Other)?;
 
-            Ok(buf.into())
+            Ok(self.buffer.into())
         }
     }
 
+    #[derive(Debug)]
+    #[pin_project(project = AltOptionPin)]
+    enum AltOption<T> {
+        Some(#[pin] T),
+        None,
+    }
+
+    #[pin_project]
     pub struct AsyncEncryptedWriter<'a, B, F, R> {
+        #[pin]
         inner: B,
-        buffer: Arc<Mutex<SecretVecBuffer<'a>>>,
-        secrets: SecretBox<KeyNonce>,
+        buffer: SecretVecBuffer,
+        secrets: &'a SecretBox<KeyNonce>,
         handle: &'a F,
-        flush_fut: R,
+        #[pin]
+        flush_fut: AltOption<R>,
         flush_slice_start: usize,
     }
 
-    impl<'a, B, F, R> AsyncWrite for AsyncEncryptedWriter<'a, B, F, R>
+    impl<B, F, R> AsyncWrite for AsyncEncryptedWriter<'_, B, F, R>
     where
-        B: AsyncWrite + Unpin,
-        R: Sync + Send + Unpin,
+        B: AsyncWrite,
         F: Fn(EncryptBlocking) -> R,
-        R: Future<Output = std::io::Result<SecretVecBuffer<'a>>>,
+        R: Future<Output = std::io::Result<SecretVecBuffer>>,
     {
+        /// Stores bytes into an internal protected buffer.
+        ///
+        /// All bytes prior to flush need to be held in memory.
         fn poll_write(
             self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             buf: &[u8],
-        ) -> std::task::Poll<Result<usize, std::io::Error>> {
-            self.get_mut()
+        ) -> Poll<Result<usize, std::io::Error>> {
+            self.project()
                 .buffer
-                .lock()
-                .unwrap()
                 .extend_from_slice(buf)
                 .map_err(|_| std::io::ErrorKind::OutOfMemory)?;
             Poll::Ready(Ok(buf.len()))
         }
 
+        /// Does nothing.
+        ///
+        /// The underlying encryption lib can only write in one go, so we wait
+        /// until `poll_close` to pass over the buffer (since that invalidates
+        /// the writer).
         fn poll_flush(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
         ) -> Poll<Result<(), std::io::Error>> {
-            let reset = |this: &mut Self| {
-                this.flush_fut = (this.handle)(EncryptBlocking {
-                    buffer: this.buffer.clone(),
-                    secrets: this.secrets.clone(),
-                });
-                this.flush_slice_start = 0
-            };
-
-            let flush_fut_res = Pin::new(&mut self.flush_fut).poll(cx);
-            if let Poll::Ready(buf) = flush_fut_res {
-                let slice_start = self.flush_slice_start;
-                let write_res =
-                    Pin::new(&mut self.inner).poll_write(cx, &buf?.as_ref()[slice_start..]);
-
-                match write_res {
-                    Poll::Ready(Ok(0)) => {
-                        // Done
-                        let disk_progress = Pin::new(&mut self.inner).poll_flush(cx);
-                        if matches!(disk_progress, Poll::Ready(_)) {
-                            reset(&mut self);
-                        }
-                        disk_progress
-                    }
-                    Poll::Ready(Ok(x)) => {
-                        // More bytes to go
-                        self.flush_slice_start += x;
-                        Poll::Pending
-                    }
-                    Poll::Ready(Err(x)) if x.kind() == std::io::ErrorKind::Interrupted => {
-                        // Non-terminal error, does not produce its own wake
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
-                    }
-                    Poll::Ready(Err(x)) => {
-                        // Error that invalidates flush
-                        reset(&mut self);
-                        Poll::Ready(Err(x))
-                    }
-                    Poll::Pending => Poll::Pending,
-                }
-            } else {
-                Poll::Pending
-            }
+            Poll::Ready(Ok(()))
         }
 
+        /// Pass the buffer to the processing thread and write out encrypted.
         fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            if let Poll::Ready(poll_status) = self.as_mut().poll_flush(cx) {
-                poll_status?;
-                Pin::new(&mut self.inner).poll_close(cx)
-            } else {
-                Poll::Pending
+            let mut this = self.as_mut().project();
+
+            loop {
+                if let AltOptionPin::Some(fut) = this.flush_fut.as_mut().project() {
+                    let buf = ready!(fut.poll(cx))?;
+
+                    // Write in additional bytes until we've gone through
+                    // the entire buffer.
+                    if *this.flush_slice_start < buf.len() {
+                        let slice_start = *this.flush_slice_start;
+                        let advance_size = ready!(this
+                            .inner
+                            .as_mut()
+                            .poll_write(cx, &buf.as_ref()[slice_start..]))?;
+
+                        *this.flush_slice_start += advance_size;
+                    }
+
+                    ready!(this.inner.poll_close(cx))?;
+
+                    // Clear out this future, non-flush ops can proceed
+                    this.flush_fut.set(AltOption::None);
+
+                    return Poll::Ready(Ok(()));
+                } else {
+                    // Initialize encryption on a new flush
+                    this.flush_fut
+                        .set(AltOption::Some((this.handle)(EncryptBlocking {
+                            buffer: std::mem::take(&mut this.buffer),
+                            secrets: this.secrets,
+                        })));
+                    *this.flush_slice_start = 0;
+                }
             }
         }
     }
 
     impl<'a, B, F, R> AsyncEncryptedWriter<'a, B, F, R> {
-        fn new(inner: B, secrets: SecretBox<KeyNonce>, handle: &'a F) -> Self
-        where
-            B: AsyncWrite + Unpin,
-            R: Sync + Send + Unpin,
-            F: Fn(EncryptBlocking) -> R,
-            R: Future,
-        {
-            #[allow(clippy::arc_with_non_send_sync)]
-            let buffer = Arc::new(Mutex::default());
+        fn new(inner: B, secrets: &'a SecretBox<KeyNonce>, handle: &'a F) -> Self {
             Self {
                 inner,
-                buffer: buffer.clone(),
-                secrets: secrets.clone(),
+                buffer: SecretVecBuffer::default(),
+                secrets,
                 handle,
-                flush_fut: (handle)(EncryptBlocking { buffer, secrets }),
+                flush_fut: AltOption::None,
                 flush_slice_start: 0,
             }
         }
     }
 
-    // All internal data aliasing is via Mutex, so ignore NonNull !Send + !Sync
-    unsafe impl<A, B, C> Send for AsyncEncryptedWriter<'_, A, B, C> {}
-    unsafe impl<A, B, C> Sync for AsyncEncryptedWriter<'_, A, B, C> {}
+    #[derive(Debug)]
+    #[pin_project]
+    pub struct AsyncEncryptedWriterGen<'a, F, H, R> {
+        #[pin]
+        fut: F,
+        secrets: &'a SecretBox<KeyNonce>,
+        handle: &'a H,
+        _phantom: PhantomData<R>,
+    }
 
-    impl<'a, B, FD, FE, R> AsyncWriteDisk for AsyncEncrypted<'a, B, FD, FE>
+    impl<'a, F, D, H, R> Future for AsyncEncryptedWriterGen<'a, F, H, R>
     where
-        B: AsyncWriteDisk<WriteDisk: Sync + Send> + Sync + Send,
-        FE: Send + Sync + Unpin + 'a,
-        FD: Send + Sync + Unpin,
-        R: Sync + Send + Unpin,
-        FE: Fn(EncryptBlocking) -> R,
-        R: Future<Output = std::io::Result<SecretVecBuffer<'a>>> + Send + Sync,
+        D: AsyncWrite,
+        F: Future<Output = std::io::Result<D>>,
     {
-        type WriteDisk = AsyncEncryptedWriter<'a, B::WriteDisk, FE, R>;
+        type Output = std::io::Result<AsyncEncryptedWriter<'a, D, H, R>>;
 
-        async fn async_write_disk(&mut self) -> std::io::Result<Self::WriteDisk> {
-            let write_disk = self.inner.async_write_disk().await?;
-            let handle_ptr: *const _ = &self.encrypt_handle;
-            Ok(AsyncEncryptedWriter::new(
-                write_disk,
-                self.secrets.clone(),
-                unsafe { &*handle_ptr },
-            ))
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let disk = ready!(self.as_mut().project().fut.poll(cx))?;
+            Poll::Ready(Ok(AsyncEncryptedWriter::new(
+                disk,
+                self.secrets,
+                self.handle,
+            )))
+        }
+    }
+
+    impl<'a, F, H, R> AsyncEncryptedWriterGen<'a, F, H, R> {
+        fn new(fut: F, secrets: &'a SecretBox<KeyNonce>, handle: &'a H) -> Self {
+            Self {
+                fut,
+                secrets,
+                handle,
+                _phantom: PhantomData,
+            }
+        }
+    }
+
+    impl<B, FD, FE, R> AsyncWriteDisk for AsyncEncrypted<B, FD, FE>
+    where
+        B: AsyncWriteDisk,
+        FE: Fn(EncryptBlocking) -> R,
+        R: Future<Output = std::io::Result<SecretVecBuffer>>,
+    {
+        type WriteDisk<'w> = AsyncEncryptedWriter<'w, B::WriteDisk<'w>, FE, R> where Self: 'w;
+        type WriteFut<'f> = AsyncEncryptedWriterGen<'f, B::WriteFut<'f>, FE, R> where Self: 'f;
+
+        fn async_write_disk(&mut self) -> Self::WriteFut<'_> {
+            // These are all separate fields, so the borrows don't overlap,
+            // but the borrow checker can't figure this one out quite yet.
+
+            let inner_ptr: *mut _ = &mut self.inner;
+            let async_write_disk = unsafe { &mut *inner_ptr }.async_write_disk();
+
+            let secrets = &self.secrets;
+            let encrypt_handle = &self.encrypt_handle;
+
+            AsyncEncryptedWriterGen::new(async_write_disk, secrets, encrypt_handle)
         }
     }
 }
