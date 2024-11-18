@@ -65,7 +65,7 @@ derive-getters = "0.5"
 error-stack = "0.5"
 cfg-if = { version = "1", optional = true }
 nix = "0.29"
-thiserror = "1"
+thiserror = "2"
 embed-doc-image = "0.1" # Images in docs
 
 # Zstd dependencies
@@ -75,7 +75,7 @@ num-traits = { version = "0.2", optional = true }
 # Format dependencies
 bincode = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
-simd-json = { version = "0.13", optional = true }
+simd-json = { version = "0.14", optional = true }
 csv = { version = "1", optional = true }
 
 # Disk dependencies
@@ -135,7 +135,7 @@ reqwest = "0.12"
 
 # Benchmarking utility, only on non-Windows.
 [target.'cfg(not(target_os = "windows"))'.dev-dependencies]
-pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+pprof = { version = "0.14", features = ["criterion", "flamegraph"] }
 
 [[bench]]
 name = "io_bench"
