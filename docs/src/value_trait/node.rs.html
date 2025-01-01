@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.8.1/src/node.rs`."><title>node.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>node.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.10.1/src/node.rs`."><title>node.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>node.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -313,20 +313,52 @@
 <a href="#312" id="312">312</a>
 <a href="#313" id="313">313</a>
 <a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::base::{TypedValue, ValueAsScalar};
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::base::{TypedValue, ValueAsScalar};
 
 <span class="kw">use super</span>::{fmt, ValueType};
-<span class="kw">use </span>float_cmp::approx_eq;
 <span class="kw">use </span>std::convert::TryFrom;
 <span class="kw">use </span>std::ops::{Index, IndexMut};
+
+<span class="attr">#[cfg(feature = <span class="string">"ordered-float"</span>)]
+</span><span class="kw">use </span>ordered_float::OrderedFloat;
+
+<span class="attr">#[cfg(not(feature = <span class="string">"ordered-float"</span>))]
+</span><span class="kw">use </span>float_cmp::approx_eq;
 
 <span class="kw">mod </span>cmp;
 <span class="kw">mod </span>from;
 
 <span class="doccomment">/// Static tape node
 </span><span class="attr">#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = <span class="string">"ordered-float"</span>, derive(Eq))]
 #[cfg_attr(feature = <span class="string">"c-abi"</span>, repr(C))]
 #[cfg_attr(feature = <span class="string">"c-abi"</span>, derive(abi_stable::StableAbi))]
+
 </span><span class="kw">pub enum </span>StaticNode {
     <span class="doccomment">/// A signed 64 bit integer.
     </span>I64(i64),
@@ -339,7 +371,11 @@
     </span><span class="doccomment">/// An unsigned 128 bit integer.
     </span>U128(u128),
     <span class="doccomment">/// A floating point value
+    </span><span class="attr">#[cfg(not(feature = <span class="string">"ordered-float"</span>))]
     </span>F64(f64),
+    <span class="attr">#[cfg(feature = <span class="string">"ordered-float"</span>)]
+    </span><span class="doccomment">/// A floating point value, as an `OrderedFloat` (not allow for Eq)
+    </span>F64(OrderedFloat&lt;f64&gt;),
     <span class="doccomment">/// A boolean value
     </span>Bool(bool),
     <span class="doccomment">/// The null value
@@ -461,7 +497,7 @@
             <span class="self">Self</span>::I128(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i),
             <span class="self">Self</span>::U128(i) =&gt; i128::try_from(<span class="kw-2">*</span>i).ok(),
             <span class="self">Self</span>::I64(i) =&gt; <span class="prelude-val">Some</span>(i128::from(<span class="kw-2">*</span>i)),
-            <span class="self">Self</span>::U64(i) =&gt; i128::try_from(<span class="kw-2">*</span>i).ok(),
+            <span class="self">Self</span>::U64(i) =&gt; <span class="prelude-val">Some</span>(i128::from(<span class="kw-2">*</span>i)),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         }
     }
@@ -506,7 +542,8 @@
     #[must_use]
     </span><span class="kw">fn </span>as_f64(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;f64&gt; {
         <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::F64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i),
+            <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+            </span><span class="self">Self</span>::F64(i) =&gt; <span class="prelude-val">Some</span>((<span class="kw-2">*</span>i).into()),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         }
     }
@@ -517,7 +554,8 @@
     #[allow(clippy::cast_precision_loss)]
     </span><span class="kw">fn </span>cast_f64(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;f64&gt; {
         <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::F64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i),
+            <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+            </span><span class="self">Self</span>::F64(i) =&gt; <span class="prelude-val">Some</span>((<span class="kw-2">*</span>i).into()),
             <span class="self">Self</span>::I64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i <span class="kw">as </span>f64),
             <span class="self">Self</span>::U64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i <span class="kw">as </span>f64),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
@@ -529,7 +567,8 @@
     #[allow(clippy::cast_precision_loss)]
     </span><span class="kw">fn </span>cast_f64(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;f64&gt; {
         <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::F64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i),
+            <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+            </span><span class="self">Self</span>::F64(i) =&gt; <span class="prelude-val">Some</span>((<span class="kw-2">*</span>i).into()),
             <span class="self">Self</span>::I64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i <span class="kw">as </span>f64),
             <span class="self">Self</span>::U64(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i <span class="kw">as </span>f64),
             <span class="self">Self</span>::I128(i) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>i <span class="kw">as </span>f64),
@@ -545,8 +584,7 @@
     </span>}
 }
 
-<span class="attr">#[cfg(not(tarpaulin_include))]
-</span><span class="kw">impl </span>fmt::Display <span class="kw">for </span>StaticNode {
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>StaticNode {
     <span class="attr">#[cfg(not(feature = <span class="string">"128bit"</span>))]
     </span><span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter) -&gt; fmt::Result {
         <span class="kw">match </span><span class="self">self </span>{
@@ -554,7 +592,10 @@
             <span class="self">Self</span>::Bool(b) =&gt; <span class="macro">write!</span>(f, <span class="string">"{b}"</span>),
             <span class="self">Self</span>::I64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
             <span class="self">Self</span>::U64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
-            <span class="self">Self</span>::F64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
+            <span class="attr">#[cfg(not(feature = <span class="string">"ordered-float"</span>))]
+            </span><span class="self">Self</span>::F64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
+            <span class="attr">#[cfg(feature = <span class="string">"ordered-float"</span>)]
+            </span><span class="self">Self</span>::F64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, n.<span class="number">0</span>),
         }
     }
     <span class="attr">#[cfg(feature = <span class="string">"128bit"</span>)]
@@ -564,7 +605,10 @@
             <span class="self">Self</span>::Bool(b) =&gt; <span class="macro">write!</span>(f, <span class="string">"{b}"</span>),
             <span class="self">Self</span>::I64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
             <span class="self">Self</span>::U64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
-            <span class="self">Self</span>::F64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
+            <span class="attr">#[cfg(not(feature = <span class="string">"ordered-float"</span>))]
+            </span><span class="self">Self</span>::F64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
+            <span class="attr">#[cfg(feature = <span class="string">"ordered-float"</span>)]
+            </span><span class="self">Self</span>::F64(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, n.<span class="number">0</span>),
             <span class="self">Self</span>::I128(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
             <span class="self">Self</span>::U128(n) =&gt; <span class="macro">write!</span>(f, <span class="string">"{n}"</span>),
         }
@@ -580,7 +624,10 @@
         <span class="kw">match </span>(<span class="self">self</span>, other) {
             (<span class="self">Self</span>::Null, <span class="self">Self</span>::Null) =&gt; <span class="bool-val">true</span>,
             (<span class="self">Self</span>::Bool(v1), <span class="self">Self</span>::Bool(v2)) =&gt; v1.eq(v2),
-            (<span class="self">Self</span>::F64(v1), <span class="self">Self</span>::F64(v2)) =&gt; <span class="macro">approx_eq!</span>(f64, <span class="kw-2">*</span>v1, <span class="kw-2">*</span>v2),
+            <span class="attr">#[cfg(not(feature = <span class="string">"ordered-float"</span>))]
+            </span>(<span class="self">Self</span>::F64(v1), <span class="self">Self</span>::F64(v2)) =&gt; <span class="macro">approx_eq!</span>(f64, <span class="kw-2">*</span>v1, <span class="kw-2">*</span>v2),
+            <span class="attr">#[cfg(feature = <span class="string">"ordered-float"</span>)]
+            </span>(<span class="self">Self</span>::F64(v1), <span class="self">Self</span>::F64(v2)) =&gt; v1.eq(v2),
             (<span class="self">Self</span>::U64(v1), <span class="self">Self</span>::U64(v2)) =&gt; v1.eq(v2),
             (<span class="self">Self</span>::I64(v1), <span class="self">Self</span>::I64(v2)) =&gt; v1.eq(v2),
             (<span class="self">Self</span>::U64(v1), <span class="self">Self</span>::I64(v2)) <span class="kw">if </span><span class="kw-2">*</span>v2 &gt;= <span class="number">0 </span>=&gt; (<span class="kw-2">*</span>v2 <span class="kw">as </span>u64).eq(v1),
@@ -596,7 +643,10 @@
         <span class="kw">match </span>(<span class="self">self</span>, other) {
             (<span class="self">Self</span>::Null, <span class="self">Self</span>::Null) =&gt; <span class="bool-val">true</span>,
             (<span class="self">Self</span>::Bool(v1), <span class="self">Self</span>::Bool(v2)) =&gt; v1.eq(v2),
-            (<span class="self">Self</span>::F64(v1), <span class="self">Self</span>::F64(v2)) =&gt; <span class="macro">approx_eq!</span>(f64, <span class="kw-2">*</span>v1, <span class="kw-2">*</span>v2),
+            <span class="attr">#[cfg(not(feature = <span class="string">"ordered-float"</span>))]
+            </span>(<span class="self">Self</span>::F64(v1), <span class="self">Self</span>::F64(v2)) =&gt; <span class="macro">approx_eq!</span>(f64, <span class="kw-2">*</span>v1, <span class="kw-2">*</span>v2),
+            <span class="attr">#[cfg(feature = <span class="string">"ordered-float"</span>)]
+            </span>(<span class="self">Self</span>::F64(v1), <span class="self">Self</span>::F64(v2)) =&gt; v1.eq(v2),
             (<span class="self">Self</span>::U64(v1), <span class="self">Self</span>::U64(v2)) =&gt; v1.eq(v2),
             (<span class="self">Self</span>::U128(v1), <span class="self">Self</span>::U128(v2)) =&gt; v1.eq(v2),
             (<span class="self">Self</span>::I64(v1), <span class="self">Self</span>::I64(v2)) =&gt; v1.eq(v2),

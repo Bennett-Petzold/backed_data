@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/float-cmp-0.9.0/src/eq.rs`."><title>eq.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="float_cmp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">float_cmp/</div>eq.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/float-cmp-0.10.0/src/eq.rs`."><title>eq.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="float_cmp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">float_cmp/</div>eq.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -302,21 +302,96 @@
 <a href="#301" id="301">301</a>
 <a href="#302" id="302">302</a>
 <a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
 // Licensed under the MIT license.  See LICENSE for details.
 
-</span><span class="kw">use </span>core::{f32, f64};
+</span><span class="kw">use </span><span class="kw">super</span>::Ulps;
+<span class="kw">use </span>core::{f32, f64};
 <span class="attr">#[cfg(feature = <span class="string">"num-traits"</span>)]
 #[allow(unused_imports)]
 </span><span class="kw">use </span>num_traits::float::FloatCore;
-<span class="kw">use </span><span class="kw">super</span>::Ulps;
+
+<span class="doccomment">/// A margin specifying a maximum distance two floating point values can be while
+/// still being considered equal enough.
+</span><span class="kw">pub trait </span>FloatMargin: Copy + Default {
+    <span class="doccomment">/// A floating-point type used for epsilon values
+    </span><span class="kw">type </span>F;
+
+    <span class="doccomment">/// An integer type used for ulps values
+    </span><span class="kw">type </span>I;
+
+    <span class="doccomment">/// Zero margin
+    </span><span class="kw">fn </span>zero() -&gt; <span class="self">Self</span>;
+
+    <span class="doccomment">/// Set the epsilon value for this margin
+    </span><span class="kw">fn </span>epsilon(<span class="self">self</span>, epsilon: <span class="self">Self</span>::F) -&gt; <span class="self">Self</span>;
+
+    <span class="doccomment">/// Set the ulps value for this margin
+    </span><span class="kw">fn </span>ulps(<span class="self">self</span>, ulps: <span class="self">Self</span>::I) -&gt; <span class="self">Self</span>;
+}
 
 <span class="doccomment">/// A trait for approximate equality comparisons.
 </span><span class="kw">pub trait </span>ApproxEq: Sized {
     <span class="doccomment">/// This type type defines a margin within which two values are to be
     /// considered approximately equal. It must implement `Default` so that
     /// `approx_eq()` can be called on unknown types.
-    </span><span class="kw">type </span>Margin: Copy + Default;
+    </span><span class="kw">type </span>Margin: FloatMargin;
 
     <span class="doccomment">/// This method tests that the `self` and `other` values are equal within `margin`
     /// of each other.
@@ -349,45 +424,48 @@
 #[derive(Debug, Clone, Copy)]
 </span><span class="kw">pub struct </span>F32Margin {
     <span class="kw">pub </span>epsilon: f32,
-    <span class="kw">pub </span>ulps: i32
+    <span class="kw">pub </span>ulps: i32,
 }
 <span class="kw">impl </span>Default <span class="kw">for </span>F32Margin {
     <span class="attr">#[inline]
     </span><span class="kw">fn </span>default() -&gt; F32Margin {
         F32Margin {
             epsilon: f32::EPSILON,
-            ulps: <span class="number">4
-        </span>}
+            ulps: <span class="number">4</span>,
+        }
     }
 }
-<span class="kw">impl </span>F32Margin {
+<span class="kw">impl </span>FloatMargin <span class="kw">for </span>F32Margin {
+    <span class="kw">type </span>F = f32;
+    <span class="kw">type </span>I = i32;
+
     <span class="attr">#[inline]
-    </span><span class="kw">pub fn </span>zero() -&gt; F32Margin {
+    </span><span class="kw">fn </span>zero() -&gt; F32Margin {
         F32Margin {
             epsilon: <span class="number">0.0</span>,
-            ulps: <span class="number">0
-        </span>}
+            ulps: <span class="number">0</span>,
+        }
     }
-    <span class="kw">pub fn </span>epsilon(<span class="self">self</span>, epsilon: f32) -&gt; <span class="self">Self </span>{
-        F32Margin {
-            epsilon,
-            ..<span class="self">self
-        </span>}
+    <span class="kw">fn </span>epsilon(<span class="self">self</span>, epsilon: f32) -&gt; <span class="self">Self </span>{
+        F32Margin { epsilon, ..<span class="self">self </span>}
     }
-    <span class="kw">pub fn </span>ulps(<span class="self">self</span>, ulps: i32) -&gt; <span class="self">Self </span>{
-        F32Margin {
-            ulps,
-            ..<span class="self">self
-        </span>}
+    <span class="kw">fn </span>ulps(<span class="self">self</span>, ulps: i32) -&gt; <span class="self">Self </span>{
+        F32Margin { ulps, ..<span class="self">self </span>}
     }
 }
 <span class="kw">impl </span>From&lt;(f32, i32)&gt; <span class="kw">for </span>F32Margin {
     <span class="kw">fn </span>from(m: (f32, i32)) -&gt; F32Margin {
         F32Margin {
             epsilon: m.<span class="number">0</span>,
-            ulps: m.<span class="number">1
-        </span>}
+            ulps: m.<span class="number">1</span>,
+        }
     }
+}
+
+<span class="comment">// no-std compatible abs function
+</span><span class="attr">#[inline(always)]
+</span><span class="kw">fn </span>f32abs(x: f32) -&gt; f32 {
+    f32::from_bits(x.to_bits() &amp; !(<span class="number">1 </span>&lt;&lt; <span class="number">31</span>))
 }
 
 <span class="kw">impl </span>ApproxEq <span class="kw">for </span>f32 {
@@ -398,15 +476,14 @@
 
         <span class="comment">// Check for exact equality first. This is often true, and so we get the
         // performance benefit of only doing one compare in most cases.
-        </span><span class="self">self</span>==other ||
-
-        <span class="comment">// Perform epsilon comparison next
-            </span>((<span class="self">self </span>- other).abs() &lt;= margin.epsilon) ||
-
-        {
-            <span class="comment">// Perform ulps comparion last
-            </span><span class="kw">let </span>diff: i32 = <span class="self">self</span>.ulps(<span class="kw-2">&amp;</span>other);
-            <span class="macro">saturating_abs_i32!</span>(diff) &lt;= margin.ulps
+        </span><span class="self">self </span>== other || {
+            <span class="comment">// Perform epsilon comparison next
+            </span><span class="kw">let </span>eps = f32abs(<span class="self">self </span>- other);
+            (eps &lt;= margin.epsilon) || {
+                <span class="comment">// Perform ulps comparison last
+                </span><span class="kw">let </span>diff: i32 = <span class="self">self</span>.ulps(<span class="kw-2">&amp;</span>other);
+                <span class="macro">saturating_abs_i32!</span>(diff) &lt;= margin.ulps
+            }
         }
     }
 }
@@ -440,7 +517,9 @@
 </span><span class="kw">fn </span>f32_approx_eq_test5() {
     <span class="kw">let </span>f: f32 = <span class="number">0.1_f32</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>sum: f32 = <span class="number">0.0_f32</span>;
-    <span class="kw">for _ in </span><span class="number">0_isize</span>..<span class="number">10_isize </span>{ sum += f; }
+    <span class="kw">for _ in </span><span class="number">0_isize</span>..<span class="number">10_isize </span>{
+        sum += f;
+    }
     <span class="kw">let </span>product: f32 = f * <span class="number">10.0_f32</span>;
     <span class="macro">assert!</span>(sum != product); <span class="comment">// Should not be directly equal:
     </span><span class="macro">assert!</span>(sum.approx_eq(product, (f32::EPSILON, <span class="number">1</span>)) == <span class="bool-val">true</span>);
@@ -452,7 +531,7 @@
     <span class="kw">let </span>y: f32 = <span class="number">1000000.1_f32</span>;
     <span class="macro">assert!</span>(x != y); <span class="comment">// Should not be directly equal
     </span><span class="macro">assert!</span>(x.approx_eq(y, (<span class="number">0.0</span>, <span class="number">2</span>)) == <span class="bool-val">true</span>); <span class="comment">// 2 ulps does it
-    // epsilon method no good here:
+                                               // epsilon method no good here:
     </span><span class="macro">assert!</span>(x.approx_eq(y, (<span class="number">1000.0 </span>* f32::EPSILON, <span class="number">0</span>)) == <span class="bool-val">false</span>);
 }
 
@@ -475,45 +554,48 @@
 </span><span class="attr">#[derive(Debug, Clone, Copy)]
 </span><span class="kw">pub struct </span>F64Margin {
     <span class="kw">pub </span>epsilon: f64,
-    <span class="kw">pub </span>ulps: i64
+    <span class="kw">pub </span>ulps: i64,
 }
 <span class="kw">impl </span>Default <span class="kw">for </span>F64Margin {
     <span class="attr">#[inline]
     </span><span class="kw">fn </span>default() -&gt; F64Margin {
         F64Margin {
             epsilon: f64::EPSILON,
-            ulps: <span class="number">4
-        </span>}
+            ulps: <span class="number">4</span>,
+        }
     }
 }
-<span class="kw">impl </span>F64Margin {
+<span class="kw">impl </span>FloatMargin <span class="kw">for </span>F64Margin {
+    <span class="kw">type </span>F = f64;
+    <span class="kw">type </span>I = i64;
+
     <span class="attr">#[inline]
-    </span><span class="kw">pub fn </span>zero() -&gt; F64Margin {
+    </span><span class="kw">fn </span>zero() -&gt; F64Margin {
         F64Margin {
             epsilon: <span class="number">0.0</span>,
-            ulps: <span class="number">0
-        </span>}
+            ulps: <span class="number">0</span>,
+        }
     }
-    <span class="kw">pub fn </span>epsilon(<span class="self">self</span>, epsilon: f64) -&gt; <span class="self">Self </span>{
-        F64Margin {
-            epsilon,
-            ..<span class="self">self
-        </span>}
+    <span class="kw">fn </span>epsilon(<span class="self">self</span>, epsilon: f64) -&gt; <span class="self">Self </span>{
+        F64Margin { epsilon, ..<span class="self">self </span>}
     }
-    <span class="kw">pub fn </span>ulps(<span class="self">self</span>, ulps: i64) -&gt; <span class="self">Self </span>{
-        F64Margin {
-            ulps,
-            ..<span class="self">self
-        </span>}
+    <span class="kw">fn </span>ulps(<span class="self">self</span>, ulps: i64) -&gt; <span class="self">Self </span>{
+        F64Margin { ulps, ..<span class="self">self </span>}
     }
 }
 <span class="kw">impl </span>From&lt;(f64, i64)&gt; <span class="kw">for </span>F64Margin {
     <span class="kw">fn </span>from(m: (f64, i64)) -&gt; F64Margin {
         F64Margin {
             epsilon: m.<span class="number">0</span>,
-            ulps: m.<span class="number">1
-        </span>}
+            ulps: m.<span class="number">1</span>,
+        }
     }
+}
+
+<span class="comment">// no-std compatible abs function
+</span><span class="attr">#[inline(always)]
+</span><span class="kw">fn </span>f64abs(x: f64) -&gt; f64 {
+    f64::from_bits(x.to_bits() &amp; !(<span class="number">1 </span>&lt;&lt; <span class="number">63</span>))
 }
 
 <span class="kw">impl </span>ApproxEq <span class="kw">for </span>f64 {
@@ -524,15 +606,14 @@
 
         <span class="comment">// Check for exact equality first. This is often true, and so we get the
         // performance benefit of only doing one compare in most cases.
-        </span><span class="self">self </span>== other ||
-
-        <span class="comment">// Perform epsilon comparison next
-            </span>((<span class="self">self </span>- other).abs() &lt;= margin.epsilon) ||
-
-        {
-            <span class="comment">// Perform ulps comparion last
-            </span><span class="kw">let </span>diff: i64 = <span class="self">self</span>.ulps(<span class="kw-2">&amp;</span>other);
-            <span class="macro">saturating_abs_i64!</span>(diff) &lt;= margin.ulps
+        </span><span class="self">self </span>== other || {
+            <span class="comment">// Perform epsilon comparison next
+            </span><span class="kw">let </span>eps = f64abs(<span class="self">self </span>- other);
+            (eps &lt;= margin.epsilon) || {
+                <span class="comment">// Perform ulps comparison last
+                </span><span class="kw">let </span>diff: i64 = <span class="self">self</span>.ulps(<span class="kw-2">&amp;</span>other);
+                <span class="macro">saturating_abs_i64!</span>(diff) &lt;= margin.ulps
+            }
         }
     }
 }
@@ -543,7 +624,7 @@
     <span class="kw">let </span>g: f64 = -<span class="number">0.0000000000000005551115123125783_f64</span>;
     <span class="macro">assert!</span>(f != g); <span class="comment">// Should not be precisely equal.
     </span><span class="macro">assert!</span>(f.approx_eq(g, (<span class="number">3.0 </span>* f64::EPSILON, <span class="number">0</span>)) == <span class="bool-val">true</span>); <span class="comment">// 3e is enough.
-    // ULPs test won't ever call these equal.
+                                                              // ULPs test won't ever call these equal.
 </span>}
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f64_approx_eq_test2() {
@@ -567,9 +648,11 @@
 </span><span class="kw">fn </span>f64_approx_eq_test5() {
     <span class="kw">let </span>f: f64 = <span class="number">0.1_f64</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>sum: f64 = <span class="number">0.0_f64</span>;
-    <span class="kw">for _ in </span><span class="number">0_isize</span>..<span class="number">10_isize </span>{ sum += f; }
+    <span class="kw">for _ in </span><span class="number">0_isize</span>..<span class="number">10_isize </span>{
+        sum += f;
+    }
     <span class="kw">let </span>product: f64 = f * <span class="number">10.0_f64</span>;
-    <span class="macro">assert!</span>(sum != product); <span class="comment">// Should not be precisely equaly.
+    <span class="macro">assert!</span>(sum != product); <span class="comment">// Should not be precisely equally.
     </span><span class="macro">assert!</span>(sum.approx_eq(product, (f64::EPSILON, <span class="number">0</span>)) == <span class="bool-val">true</span>);
     <span class="macro">assert!</span>(sum.approx_eq(product, (<span class="number">0.0</span>, <span class="number">1</span>)) == <span class="bool-val">true</span>);
 }
@@ -586,24 +669,53 @@
 }
 
 <span class="kw">impl</span>&lt;T&gt; ApproxEq <span class="kw">for </span><span class="kw-2">&amp;</span>[T]
-<span class="kw">where </span>T: Copy + ApproxEq {
+<span class="kw">where
+    </span>T: Copy + ApproxEq,
+{
     <span class="kw">type </span>Margin = &lt;T <span class="kw">as </span>ApproxEq&gt;::Margin;
 
     <span class="kw">fn </span>approx_eq&lt;M: Into&lt;<span class="self">Self</span>::Margin&gt;&gt;(<span class="self">self</span>, other: <span class="self">Self</span>, margin: M) -&gt; bool {
         <span class="kw">let </span>margin = margin.into();
-        <span class="kw">if </span><span class="self">self</span>.len() != other.len() { <span class="kw">return </span><span class="bool-val">false</span>; }
-        <span class="self">self</span>.iter().zip(other.iter()).all(|(a,b)| {
-            a.approx_eq(<span class="kw-2">*</span>b, margin)
-        })
+        <span class="kw">if </span><span class="self">self</span>.len() != other.len() {
+            <span class="kw">return </span><span class="bool-val">false</span>;
+        }
+        <span class="self">self</span>.iter()
+            .zip(other.iter())
+            .all(|(a, b)| a.approx_eq(<span class="kw-2">*</span>b, margin))
     }
 }
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>test_slices() {
-    <span class="macro">assert!</span>( [<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)) );
-    <span class="macro">assert!</span>( !  [<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.6</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)) );
-    <span class="macro">assert!</span>( !  [<span class="number">1.33</span>, <span class="number">2.4</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)) );
-    <span class="macro">assert!</span>( !  [<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)) );
+    <span class="macro">assert!</span>([<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)));
+    <span class="macro">assert!</span>(![<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.6</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)));
+    <span class="macro">assert!</span>(![<span class="number">1.33</span>, <span class="number">2.4</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)));
+    <span class="macro">assert!</span>(![<span class="number">1.33</span>, <span class="number">2.4</span>, <span class="number">2.5</span>].approx_eq(<span class="kw-2">&amp;</span>[<span class="number">1.33</span>, <span class="number">2.4</span>], (<span class="number">0.0</span>, <span class="number">0_i64</span>)));
 }
 
+<span class="kw">impl</span>&lt;T&gt; ApproxEq <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;T&gt;
+<span class="kw">where
+    </span>T: Copy + ApproxEq,
+{
+    <span class="kw">type </span>Margin = &lt;T <span class="kw">as </span>ApproxEq&gt;::Margin;
+
+    <span class="kw">fn </span>approx_eq&lt;M: Into&lt;<span class="self">Self</span>::Margin&gt;&gt;(<span class="self">self</span>, other: <span class="self">Self</span>, margin: M) -&gt; bool {
+        <span class="kw">let </span>margin = margin.into();
+        <span class="kw">match </span>(<span class="self">self</span>, other) {
+            (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; <span class="bool-val">true</span>,
+            (<span class="prelude-val">Some</span>(slf), <span class="prelude-val">Some</span>(oth)) =&gt; slf.approx_eq(oth, margin),
+            <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
+        }
+    }
+}
+
+<span class="attr">#[test]
+</span><span class="kw">fn </span>test_option() {
+    <span class="kw">let </span>x: <span class="prelude-ty">Option</span>&lt;f32&gt; = <span class="prelude-val">None</span>;
+    <span class="macro">assert!</span>(x.approx_eq(<span class="prelude-val">None</span>, (<span class="number">0.0</span>, <span class="number">0_i32</span>)));
+    <span class="macro">assert!</span>(<span class="prelude-val">Some</span>(<span class="number">5.3_f32</span>).approx_eq(<span class="prelude-val">Some</span>(<span class="number">5.3</span>), (<span class="number">0.0</span>, <span class="number">0_i32</span>)));
+    <span class="macro">assert!</span>(<span class="prelude-val">Some</span>(<span class="number">5.3_f32</span>).approx_ne(<span class="prelude-val">Some</span>(<span class="number">5.7</span>), (<span class="number">0.0</span>, <span class="number">0_i32</span>)));
+    <span class="macro">assert!</span>(<span class="prelude-val">Some</span>(<span class="number">5.3_f32</span>).approx_ne(<span class="prelude-val">None</span>, (<span class="number">0.0</span>, <span class="number">0_i32</span>)));
+    <span class="macro">assert!</span>(x.approx_ne(<span class="prelude-val">Some</span>(<span class="number">5.3</span>), (<span class="number">0.0</span>, <span class="number">0_i32</span>)));
+}
 </code></pre></div></section></main></body></html>

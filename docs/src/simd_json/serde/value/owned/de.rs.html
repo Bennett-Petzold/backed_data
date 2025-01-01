@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.13.10/src/serde/value/owned/de.rs`."><title>de.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../../../static.files/storage-59e33391.js"></script><script defer src="../../../../../static.files/src-script-56102188.js"></script><script defer src="../../../../../src-files.js"></script><script defer src="../../../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/serde/value/owned/</div>de.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.14.3/src/serde/value/owned/de.rs`."><title>de.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../../../static.files/storage-59e33391.js"></script><script defer src="../../../../../static.files/src-script-56102188.js"></script><script defer src="../../../../../src-files.js"></script><script defer src="../../../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/serde/value/owned/</div>de.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -954,7 +954,24 @@
 <a href="#953" id="953">953</a>
 <a href="#954" id="954">954</a>
 <a href="#955" id="955">955</a>
-<a href="#956" id="956">956</a></pre></div><pre class="rust"><code><span class="comment">// A lot of this logic is a re-implementation or copy of serde_json::Value
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
+<a href="#960" id="960">960</a>
+<a href="#961" id="961">961</a>
+<a href="#962" id="962">962</a>
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
+<a href="#966" id="966">966</a>
+<a href="#967" id="967">967</a>
+<a href="#968" id="968">968</a>
+<a href="#969" id="969">969</a>
+<a href="#970" id="970">970</a>
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a>
+<a href="#973" id="973">973</a></pre></div><pre class="rust"><code><span class="comment">// A lot of this logic is a re-implementation or copy of serde_json::Value
 </span><span class="kw">use </span><span class="kw">crate</span>::ErrorType;
 <span class="kw">use crate</span>::{
     prelude::<span class="kw-2">*</span>,
@@ -990,7 +1007,8 @@
             Value::Static(StaticNode::U64(n)) =&gt; visitor.visit_u64(n),
             <span class="attr">#[cfg(feature = <span class="string">"128bit"</span>)]
             </span>Value::Static(StaticNode::U128(n)) =&gt; visitor.visit_u128(n),
-            Value::Static(StaticNode::F64(n)) =&gt; visitor.visit_f64(n),
+            <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+            </span>Value::Static(StaticNode::F64(n)) =&gt; visitor.visit_f64(n.into()),
             Value::String(s) =&gt; visitor.visit_string(s),
             Value::Array(a) =&gt; visitor.visit_seq(Array(a.into_iter())),
             Value::Object(o) =&gt; visitor.visit_map(ObjectAccess {
@@ -1342,7 +1360,7 @@
     <span class="kw">where
         </span>E: de::Error,
     {
-        <span class="prelude-val">Ok</span>(Value::Static(StaticNode::F64(f64::from(value))))
+        <span class="prelude-val">Ok</span>(Value::Static(StaticNode::from(f64::from(value))))
     }
 
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
@@ -1350,7 +1368,7 @@
     <span class="kw">where
         </span>E: de::Error,
     {
-        <span class="prelude-val">Ok</span>(Value::Static(StaticNode::F64(value)))
+        <span class="prelude-val">Ok</span>(Value::Static(StaticNode::from(value)))
     }
 
     <span class="comment">/****************** stringy stuff ******************/
@@ -1442,7 +1460,7 @@
         <span class="kw">while let </span><span class="prelude-val">Some</span>(e) = seq.next_element()<span class="question-mark">? </span>{
             v.push(e);
         }
-        <span class="prelude-val">Ok</span>(Value::Array(v))
+        <span class="prelude-val">Ok</span>(Value::Array(Box::new(v)))
     }
 }
 
@@ -1564,7 +1582,8 @@
             Value::Static(StaticNode::U64(n)) =&gt; visitor.visit_u64(<span class="kw-2">*</span>n),
             <span class="attr">#[cfg(feature = <span class="string">"128bit"</span>)]
             </span>Value::Static(StaticNode::U128(n)) =&gt; visitor.visit_u128(<span class="kw-2">*</span>n),
-            Value::Static(StaticNode::F64(n)) =&gt; visitor.visit_f64(<span class="kw-2">*</span>n),
+            <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+            </span>Value::Static(StaticNode::F64(n)) =&gt; visitor.visit_f64((<span class="kw-2">*</span>n).into()),
             Value::String(s) =&gt; visitor.visit_borrowed_str(s),
             Value::Array(a) =&gt; visitor.visit_seq(ArrayRef(a.as_slice().iter())),
             Value::Object(o) =&gt; visitor.visit_map(ObjectRefAccess::new(o.iter())),
@@ -1757,7 +1776,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>option_field_absent_owned() {
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         </span><span class="kw">pub struct </span>Person {
             <span class="kw">pub </span>name: String,
             <span class="kw">pub </span>middle_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
@@ -1766,16 +1785,23 @@
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"name":"bob","friends":[]}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Person, <span class="kw">_</span>&gt; = <span class="kw">crate</span>::to_owned_value(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() })
             .and_then(<span class="kw">super</span>::<span class="kw">super</span>::from_value);
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(
+            result,
+            <span class="prelude-val">Ok</span>(Person {
+                name: <span class="string">"bob"</span>.to_string(),
+                middle_name: <span class="prelude-val">None</span>,
+                friends: <span class="macro">vec!</span>[]
+            })
+        );
     }
     <span class="attr">#[test]
     </span><span class="kw">fn </span>option_field_present_owned() {
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         </span><span class="kw">pub struct </span>Point {
             <span class="kw">pub </span>x: u64,
             <span class="kw">pub </span>y: u64,
         }
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         </span><span class="kw">pub struct </span>Person {
             <span class="kw">pub </span>name: String,
             <span class="kw">pub </span>middle_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
@@ -1786,7 +1812,15 @@
             <span class="string">r#"{"name":"bob","middle_name": "frank", "friends":[], "pos": [1,2]}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Person, <span class="kw">_</span>&gt; = <span class="kw">crate</span>::to_owned_value(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() })
             .and_then(<span class="kw">super</span>::<span class="kw">super</span>::from_value);
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(
+            result,
+            <span class="prelude-val">Ok</span>(Person {
+                name: <span class="string">"bob"</span>.to_string(),
+                middle_name: <span class="prelude-val">Some</span>(<span class="string">"frank"</span>.to_string()),
+                friends: <span class="macro">vec!</span>[],
+                pos: Point { x: <span class="number">1</span>, y: <span class="number">2 </span>}
+            })
+        );
     }
 
     <span class="attr">#[test]

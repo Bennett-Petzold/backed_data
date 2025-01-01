@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.13.10/src/numberparse/correct.rs`."><title>correct.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../static.files/storage-59e33391.js"></script><script defer src="../../../static.files/src-script-56102188.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/numberparse/</div>correct.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.14.3/src/numberparse/correct.rs`."><title>correct.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../static.files/storage-59e33391.js"></script><script defer src="../../../static.files/src-script-56102188.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/numberparse/</div>correct.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -576,7 +576,18 @@
 <a href="#575" id="575">575</a>
 <a href="#576" id="576">576</a>
 <a href="#577" id="577">577</a>
-<a href="#578" id="578">578</a></pre></div><pre class="rust"><code><span class="kw">mod </span>numberconst;
+<a href="#578" id="578">578</a>
+<a href="#579" id="579">579</a>
+<a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a></pre></div><pre class="rust"><code><span class="kw">mod </span>numberconst;
 
 <span class="kw">use </span><span class="self">self</span>::numberconst::{MANTISSA_128, POW10, POW10_COMPONENTS};
 <span class="kw">use super</span>::{is_integer, is_not_structural_or_whitespace_or_exponent_or_decimal};
@@ -769,11 +780,12 @@
         } <span class="kw">else if </span>is_structural_or_whitespace(<span class="macro">get!</span>(buf, idx)) == <span class="number">0 </span>{
             <span class="macro">err!</span>(idx, <span class="macro">get!</span>(buf, idx))
         } <span class="kw">else </span>{
-            <span class="prelude-val">Ok</span>(StaticNode::I64(<span class="kw">if </span>negative {
-                <span class="kw">unsafe </span>{ <span class="macro">static_cast_i64!</span>(num.wrapping_neg()) } <span class="comment">// -(num as i64)
+            <span class="prelude-val">Ok</span>(<span class="kw">if </span>negative {
+                StaticNode::I64(<span class="kw">unsafe </span>{ <span class="macro">static_cast_i64!</span>(num.wrapping_neg()) })
+            <span class="comment">// -(num as i64)
             </span>} <span class="kw">else </span>{
-                num <span class="kw">as </span>i64
-            }))
+                StaticNode::U64(num)
+            })
         }
     }
 }
@@ -816,7 +828,6 @@
         (<span class="bool-val">true</span>, <span class="number">9_223_372_036_854_775_808</span>) =&gt; <span class="prelude-val">Ok</span>(StaticNode::I64(i64::MIN)),
         (<span class="bool-val">true</span>, <span class="number">9_223_372_036_854_775_809</span>..=u64::MAX) =&gt; <span class="macro">err!</span>(idx, <span class="macro">get!</span>(buf, idx)),
         (<span class="bool-val">true</span>, <span class="number">0</span>..=<span class="number">9_223_372_036_854_775_807</span>) =&gt; <span class="prelude-val">Ok</span>(StaticNode::I64(-(num <span class="kw">as </span>i64))),
-        (<span class="bool-val">false</span>, <span class="number">0</span>..=<span class="number">9_223_372_036_854_775_807</span>) =&gt; <span class="prelude-val">Ok</span>(StaticNode::I64(num <span class="kw">as </span>i64)),
         (<span class="bool-val">false</span>, <span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(StaticNode::U64(num)),
     }
 }
@@ -899,9 +910,9 @@
         } <span class="kw">else </span>{
             f <span class="kw-2">*</span>= <span class="macro">get!</span>(POW10, exponent);
         }
-        <span class="prelude-val">Ok</span>(StaticNode::F64(<span class="kw">if </span>positive { f } <span class="kw">else </span>{ -f }))
+        <span class="prelude-val">Ok</span>(StaticNode::from(<span class="kw">if </span>positive { f } <span class="kw">else </span>{ -f }))
     } <span class="kw">else if </span>significand == <span class="number">0 </span>{
-        <span class="prelude-val">Ok</span>(StaticNode::F64(<span class="kw">if </span>positive { <span class="number">0.0 </span>} <span class="kw">else </span>{ -<span class="number">0.0 </span>}))
+        <span class="prelude-val">Ok</span>(StaticNode::from(<span class="kw">if </span>positive { <span class="number">0.0 </span>} <span class="kw">else </span>{ -<span class="number">0.0 </span>}))
     } <span class="kw">else if </span>(-<span class="number">325</span>..=<span class="number">308</span>).contains(<span class="kw-2">&amp;</span>exponent) {
         <span class="kw">let </span>(factor_mantissa, factor_exponent) = <span class="macro">get!</span>(POW10_COMPONENTS, exponent + <span class="number">325</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>leading_zeroes = u64::from(significand.leading_zeros());
@@ -951,7 +962,7 @@
         <span class="kw">if </span>res.is_infinite() {
             <span class="macro">err!</span>(offset, <span class="macro">get!</span>(slice, offset))
         }
-        <span class="prelude-val">Ok</span>(StaticNode::F64(res))
+        <span class="prelude-val">Ok</span>(StaticNode::from(res))
     } <span class="kw">else </span>{
         f64_from_parts_slow(slice, offset)
     }
@@ -959,16 +970,15 @@
 
 <span class="attr">#[cold]
 </span><span class="kw">fn </span>f64_from_parts_slow(slice: <span class="kw-2">&amp;</span>[u8], offset: usize) -&gt; <span class="prelude-ty">Result</span>&lt;StaticNode&gt; {
-    <span class="kw">match </span>lexical_core::parse_with_options::&lt;f64, { lexical_core::format::JSON }&gt;(
-        slice,
-        <span class="kw-2">&amp;</span>lexical_core::parse_float_options::JSON,
-    ) {
+    <span class="comment">// we already validated the content of the slice we only need to translate
+    // the slice to a string and parse it as parse is not defined for a u8 slice
+    </span><span class="kw">match unsafe </span>{ std::str::from_utf8_unchecked(slice).parse::&lt;f64&gt;() } {
         <span class="prelude-val">Ok</span>(val) =&gt; {
             <span class="kw">if </span>val.is_infinite() {
                 <span class="macro">err!</span>(offset, <span class="macro">get!</span>(slice, <span class="number">0</span>))
             }
 
-            <span class="prelude-val">Ok</span>(StaticNode::F64(val))
+            <span class="prelude-val">Ok</span>(StaticNode::from(val))
         }
         <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="macro">err!</span>(offset, <span class="macro">get!</span>(slice, offset)),
     }
@@ -981,8 +991,7 @@
     <span class="kw">use </span><span class="kw">crate</span>::value::owned::to_value;
     <span class="kw">use </span><span class="kw">crate</span>::value::owned::Value;
     <span class="kw">use </span><span class="kw">crate</span>::value::owned::Value::Static;
-    <span class="kw">use </span>value_trait::StaticNode::F64;
-    <span class="kw">use </span>value_trait::StaticNode::I64;
+    <span class="kw">use </span>value_trait::StaticNode::{<span class="self">self</span>, I64, U64};
 
     <span class="kw">fn </span>to_value_from_str(buf: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Value, Error&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>val = String::from(buf);
@@ -995,28 +1004,34 @@
     </span><span class="kw">fn </span>float() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"0.4e5"</span>).expect(<span class="string">"40000.0"</span>),
-            Static(F64(<span class="number">40000.0</span>))
+            Static(StaticNode::from(<span class="number">40000.0</span>))
         );
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"-12345678901234.56789012"</span>)<span class="question-mark">?</span>,
-            Static(F64(-<span class="number">12_345_678_901_234.568</span>))
+            Static(StaticNode::from(-<span class="number">12_345_678_901_234.568</span>))
         );
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0.4e-001"</span>)<span class="question-mark">?</span>, Static(F64(<span class="number">0.04</span>)));
+        <span class="macro">assert_eq!</span>(
+            to_value_from_str(<span class="string">"0.4e-001"</span>)<span class="question-mark">?</span>,
+            Static(StaticNode::from(<span class="number">0.04</span>))
+        );
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"0.123456789e-12"</span>)<span class="question-mark">?</span>,
-            Static(F64(<span class="number">1.234_567_89e-13</span>))
+            Static(StaticNode::from(<span class="number">1.234_567_89e-13</span>))
         );
         <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"1.234567890E+34"</span>)<span class="question-mark">?</span>, <span class="number">1.234_567_89e34</span>);
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"23456789012E66"</span>)<span class="question-mark">?</span>,
-            Static(F64(<span class="number">2.345_678_901_2e76</span>))
+            Static(StaticNode::from(<span class="number">2.345_678_901_2e76</span>))
         );
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"0.0000000000000000000000000000000000000000000000000123e50"</span>)
                 .expect(<span class="string">"1.23"</span>),
-            Static(F64(<span class="number">1.23</span>))
+            Static(StaticNode::from(<span class="number">1.23</span>))
         );
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0.6"</span>).expect(<span class="string">"0.6"</span>), Static(F64(<span class="number">0.6</span>)));
+        <span class="macro">assert_eq!</span>(
+            to_value_from_str(<span class="string">"0.6"</span>).expect(<span class="string">"0.6"</span>),
+            Static(StaticNode::from(<span class="number">0.6</span>))
+        );
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -1109,23 +1124,30 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>zero_int() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0"</span>)<span class="question-mark">?</span>, Static(I64(<span class="number">0</span>)));
+        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0"</span>)<span class="question-mark">?</span>, Static(U64(<span class="number">0</span>)));
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>zero_float() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0e1"</span>)<span class="question-mark">?</span>, Static(F64(<span class="number">0.0</span>)));
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0.00e-00"</span>)<span class="question-mark">?</span>, Static(F64(<span class="number">0.0</span>)));
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0e-1"</span>)<span class="question-mark">?</span>, Static(F64(-<span class="number">0.0</span>)));
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"-0.00e-00"</span>)<span class="question-mark">?</span>, Static(F64(-<span class="number">0.0</span>)));
+        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0e1"</span>)<span class="question-mark">?</span>, Static(StaticNode::from(<span class="number">0.0</span>)));
+        <span class="macro">assert_eq!</span>(
+            to_value_from_str(<span class="string">"0.00e-00"</span>)<span class="question-mark">?</span>,
+            Static(StaticNode::from(<span class="number">0.0</span>))
+        );
+        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"0e-1"</span>)<span class="question-mark">?</span>, Static(StaticNode::from(-<span class="number">0.0</span>)));
+        <span class="macro">assert_eq!</span>(
+            to_value_from_str(<span class="string">"-0.00e-00"</span>)<span class="question-mark">?</span>,
+            Static(StaticNode::from(-<span class="number">0.0</span>))
+        );
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>int() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"1"</span>)<span class="question-mark">?</span>, Static(I64(<span class="number">1</span>)));
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"257"</span>)<span class="question-mark">?</span>, Static(I64(<span class="number">257</span>)));
+        <span class="macro">assert!</span>(<span class="macro">matches!</span>(to_value_from_str(<span class="string">"1"</span>)<span class="question-mark">?</span>, Static(U64(<span class="number">1</span>))));
+        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"-1"</span>)<span class="question-mark">?</span>, Static(I64(-<span class="number">1</span>)));
+        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"257"</span>)<span class="question-mark">?</span>, Static(U64(<span class="number">257</span>)));
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -1133,14 +1155,14 @@
     </span><span class="kw">fn </span>minus_309() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"-5.96916642387374e-309"</span>)<span class="question-mark">?</span>,
-            Static(F64(-<span class="number">5.969_166_423_873_74e-_309</span>))
+            Static(StaticNode::from(-<span class="number">5.969_166_423_873_74e-_309</span>))
         );
         <span class="prelude-val">Ok</span>(())
     }
     <span class="attr">#[allow(clippy::unreadable_literal)]
     #[test]
     </span><span class="kw">fn </span>tiny_float() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
-        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"-0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000596916642387374"</span>)<span class="question-mark">?</span>, Static(F64(-<span class="number">0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000596916642387374</span>)));
+        <span class="macro">assert_eq!</span>(to_value_from_str(<span class="string">"-0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000596916642387374"</span>)<span class="question-mark">?</span>, Static(StaticNode::from(-<span class="number">0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000596916642387374</span>)));
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -1149,7 +1171,7 @@
     </span><span class="kw">fn </span>huge_int() -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::Error&gt; {
         <span class="macro">assert_eq!</span>(
             to_value_from_str(<span class="string">"999999999999999999999999999999"</span>)<span class="question-mark">?</span>,
-            Static(F64(<span class="number">999999999999999999999999999999f64</span>))
+            StaticNode::from(<span class="number">999999999999999999999999999999f64</span>)
         );
         <span class="prelude-val">Ok</span>(())
     }

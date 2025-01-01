@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.8.1/src/array.rs`."><title>array.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>array.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.10.1/src/array.rs`."><title>array.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>array.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -126,20 +126,56 @@
 <a href="#125" id="125">125</a>
 <a href="#126" id="126">126</a>
 <a href="#127" id="127">127</a>
-<a href="#128" id="128">128</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::slice::SliceIndex;
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::slice::SliceIndex;
 
-<span class="doccomment">/// A trait for the minimal common functionality of a vale array
-</span><span class="kw">pub trait </span>Array {
+<span class="doccomment">/// Trait for indexing into an array
+</span><span class="kw">pub trait </span>Indexed&lt;T&gt; {
     <span class="doccomment">/// Elements of the array
-    </span><span class="kw">type </span>Element;
+    </span><span class="kw">type </span>Element: <span class="question-mark">?</span>Sized;
 
     <span class="doccomment">/// Gets a ref to a value based on n index, returns `None` if the
     /// current Value isn't an Array or doesn't contain the index
     /// it was asked for.
     </span><span class="attr">#[must_use]
-    </span><span class="kw">fn </span>get&lt;I&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>&lt;I <span class="kw">as </span>SliceIndex&lt;[<span class="self">Self</span>::Element]&gt;&gt;::Output&gt;
-    <span class="kw">where
-        </span>I: SliceIndex&lt;[<span class="self">Self</span>::Element]&gt;;
+    </span><span class="kw">fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, i: T) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Element&gt;;
+}
+<span class="doccomment">/// A trait for the minimal common functionality of a vale array
+</span><span class="kw">pub trait </span>Array {
+    <span class="doccomment">/// Elements of the array
+    </span><span class="kw">type </span>Element;
 
     <span class="doccomment">/// Iterates over the values paris
     </span><span class="attr">#[must_use]
@@ -156,17 +192,21 @@
     </span>}
 }
 
-<span class="doccomment">/// Mutability functions for a value array
-
-</span><span class="kw">pub trait </span>ArrayMut {
+<span class="doccomment">/// Trait for indexing into an array
+</span><span class="kw">pub trait </span>IndexedMut&lt;T&gt; {
     <span class="doccomment">/// Elements of the array
-    </span><span class="kw">type </span>Element;
+    </span><span class="kw">type </span>Element: <span class="question-mark">?</span>Sized;
 
     <span class="doccomment">/// Gets a ref to a value based on n index, returns `None` if the
     /// current Value isn't an Array or doesn't contain the index
     /// it was asked for.
     </span><span class="attr">#[must_use]
-    </span><span class="kw">fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Element&gt;;
+    </span><span class="kw">fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: T) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Element&gt;;
+}
+<span class="doccomment">/// Mutability functions for a value array
+</span><span class="kw">pub trait </span>ArrayMut {
+    <span class="doccomment">/// Elements of the array
+    </span><span class="kw">type </span>Element;
 
     <span class="doccomment">/// Returns the last element of the array or `None`
     </span><span class="attr">#[must_use]
@@ -176,15 +216,19 @@
     </span><span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, e: <span class="self">Self</span>::Element);
 }
 
-<span class="kw">impl</span>&lt;T&gt; Array <span class="kw">for </span>Vec&lt;T&gt; {
-    <span class="kw">type </span>Element = T;
+<span class="kw">impl</span>&lt;T, I&gt; Indexed&lt;I&gt; <span class="kw">for </span>Vec&lt;T&gt;
+<span class="kw">where
+    </span>I: SliceIndex&lt;[T]&gt;,
+{
+    <span class="kw">type </span>Element = &lt;I <span class="kw">as </span>SliceIndex&lt;[T]&gt;&gt;::Output;
     <span class="attr">#[inline]
-    </span><span class="kw">fn </span>get&lt;I&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>&lt;I <span class="kw">as </span>SliceIndex&lt;[T]&gt;&gt;::Output&gt;
-    <span class="kw">where
-        </span>I: SliceIndex&lt;[T]&gt;,
-    {
+    </span><span class="kw">fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Element&gt; {
         &lt;[T]&gt;::get(<span class="self">self</span>, i)
     }
+}
+
+<span class="kw">impl</span>&lt;T&gt; Array <span class="kw">for </span>Vec&lt;T&gt; {
+    <span class="kw">type </span>Element = T;
 
     <span class="kw">fn </span>iter&lt;<span class="lifetime">'i</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'i </span><span class="self">self</span>) -&gt; Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = <span class="kw-2">&amp;</span>T&gt; + <span class="lifetime">'i</span>&gt; {
         Box::new(&lt;[T]&gt;::iter(<span class="self">self</span>))
@@ -196,12 +240,19 @@
     }
 }
 
-<span class="kw">impl</span>&lt;T&gt; ArrayMut <span class="kw">for </span>Vec&lt;T&gt; {
-    <span class="kw">type </span>Element = T;
+<span class="kw">impl</span>&lt;T, I&gt; IndexedMut&lt;I&gt; <span class="kw">for </span>Vec&lt;T&gt;
+<span class="kw">where
+    </span>I: SliceIndex&lt;[T]&gt;,
+{
+    <span class="kw">type </span>Element = &lt;I <span class="kw">as </span>SliceIndex&lt;[T]&gt;&gt;::Output;
     <span class="attr">#[inline]
-    </span><span class="kw">fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>T&gt; {
+    </span><span class="kw">fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Element&gt; {
         &lt;[T]&gt;::get_mut(<span class="self">self</span>, i)
     }
+}
+
+<span class="kw">impl</span>&lt;T&gt; ArrayMut <span class="kw">for </span>Vec&lt;T&gt; {
+    <span class="kw">type </span>Element = T;
 
     <span class="attr">#[inline]
     </span><span class="kw">fn </span>pop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
@@ -215,43 +266,58 @@
 }
 
 <span class="attr">#[cfg(feature = <span class="string">"c-abi"</span>)]
-</span><span class="kw">impl</span>&lt;T&gt; Array <span class="kw">for </span>abi_stable::std_types::RVec&lt;T&gt; {
-    <span class="kw">type </span>Element = T;
+</span><span class="kw">mod </span>cabi {
+    <span class="kw">use super</span>::{Array, ArrayMut, Indexed, IndexedMut, SliceIndex};
+    <span class="kw">use </span>abi_stable::std_types::RVec;
 
-    <span class="attr">#[inline]
-    </span><span class="kw">fn </span>get&lt;I&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>&lt;I <span class="kw">as </span>SliceIndex&lt;[T]&gt;&gt;::Output&gt;
+    <span class="kw">impl</span>&lt;T, I&gt; Indexed&lt;I&gt; <span class="kw">for </span>RVec&lt;T&gt;
     <span class="kw">where
         </span>I: SliceIndex&lt;[T]&gt;,
     {
-        &lt;[T]&gt;::get(<span class="self">self</span>, i)
+        <span class="kw">type </span>Element = &lt;I <span class="kw">as </span>SliceIndex&lt;[T]&gt;&gt;::Output;
+        <span class="attr">#[inline]
+        </span><span class="kw">fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Element&gt; {
+            &lt;[T]&gt;::get(<span class="self">self</span>, i)
+        }
     }
 
-    <span class="kw">fn </span>iter&lt;<span class="lifetime">'i</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'i </span><span class="self">self</span>) -&gt; Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = <span class="kw-2">&amp;</span>T&gt; + <span class="lifetime">'i</span>&gt; {
-        Box::new(&lt;[T]&gt;::iter(<span class="self">self</span>))
+    <span class="kw">impl</span>&lt;T&gt; Array <span class="kw">for </span>RVec&lt;T&gt; {
+        <span class="kw">type </span>Element = T;
+
+        <span class="kw">fn </span>iter&lt;<span class="lifetime">'i</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'i </span><span class="self">self</span>) -&gt; Box&lt;<span class="kw">dyn </span>Iterator&lt;Item = <span class="kw-2">&amp;</span>T&gt; + <span class="lifetime">'i</span>&gt; {
+            Box::new(&lt;[T]&gt;::iter(<span class="self">self</span>))
+        }
+
+        <span class="attr">#[inline]
+        </span><span class="kw">fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+            <span class="self">self</span>.len()
+        }
     }
 
-    <span class="attr">#[inline]
-    </span><span class="kw">fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-        <span class="self">self</span>.len()
-    }
-}
-<span class="attr">#[cfg(feature = <span class="string">"c-abi"</span>)]
-</span><span class="kw">impl</span>&lt;T&gt; ArrayMut <span class="kw">for </span>abi_stable::std_types::RVec&lt;T&gt; {
-    <span class="kw">type </span>Element = T;
-
-    <span class="attr">#[inline]
-    </span><span class="kw">fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>T&gt; {
-        &lt;[T]&gt;::get_mut(<span class="self">self</span>, i)
+    <span class="kw">impl</span>&lt;T, I&gt; IndexedMut&lt;I&gt; <span class="kw">for </span>RVec&lt;T&gt;
+    <span class="kw">where
+        </span>I: SliceIndex&lt;[T]&gt;,
+    {
+        <span class="kw">type </span>Element = &lt;I <span class="kw">as </span>SliceIndex&lt;[T]&gt;&gt;::Output;
+        <span class="attr">#[inline]
+        </span><span class="kw">fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Element&gt; {
+            &lt;[T]&gt;::get_mut(<span class="self">self</span>, i)
+        }
     }
 
-    <span class="attr">#[inline]
-    </span><span class="kw">fn </span>pop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
-        abi_stable::std_types::RVec::pop(<span class="self">self</span>)
-    }
+    <span class="attr">#[cfg(feature = <span class="string">"c-abi"</span>)]
+    </span><span class="kw">impl</span>&lt;T&gt; ArrayMut <span class="kw">for </span>RVec&lt;T&gt; {
+        <span class="kw">type </span>Element = T;
 
-    <span class="attr">#[inline]
-    </span><span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, e: T) {
-        abi_stable::std_types::RVec::push(<span class="self">self</span>, e);
+        <span class="attr">#[inline]
+        </span><span class="kw">fn </span>pop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
+            abi_stable::std_types::RVec::pop(<span class="self">self</span>)
+        }
+
+        <span class="attr">#[inline]
+        </span><span class="kw">fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, e: T) {
+            abi_stable::std_types::RVec::push(<span class="self">self</span>, e);
+        }
     }
 }
 </code></pre></div></section></main></body></html>

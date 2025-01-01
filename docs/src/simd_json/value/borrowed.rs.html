@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.13.10/src/value/borrowed.rs`."><title>borrowed.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../static.files/storage-59e33391.js"></script><script defer src="../../../static.files/src-script-56102188.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/value/</div>borrowed.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.14.3/src/value/borrowed.rs`."><title>borrowed.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../static.files/storage-59e33391.js"></script><script defer src="../../../static.files/src-script-56102188.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/value/</div>borrowed.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -1060,7 +1060,85 @@
 <a href="#1059" id="1059">1059</a>
 <a href="#1060" id="1060">1060</a>
 <a href="#1061" id="1061">1061</a>
-<a href="#1062" id="1062">1062</a></pre></div><pre class="rust"><code><span class="doccomment">/// A dom object that references the raw input data to avoid allocations
+<a href="#1062" id="1062">1062</a>
+<a href="#1063" id="1063">1063</a>
+<a href="#1064" id="1064">1064</a>
+<a href="#1065" id="1065">1065</a>
+<a href="#1066" id="1066">1066</a>
+<a href="#1067" id="1067">1067</a>
+<a href="#1068" id="1068">1068</a>
+<a href="#1069" id="1069">1069</a>
+<a href="#1070" id="1070">1070</a>
+<a href="#1071" id="1071">1071</a>
+<a href="#1072" id="1072">1072</a>
+<a href="#1073" id="1073">1073</a>
+<a href="#1074" id="1074">1074</a>
+<a href="#1075" id="1075">1075</a>
+<a href="#1076" id="1076">1076</a>
+<a href="#1077" id="1077">1077</a>
+<a href="#1078" id="1078">1078</a>
+<a href="#1079" id="1079">1079</a>
+<a href="#1080" id="1080">1080</a>
+<a href="#1081" id="1081">1081</a>
+<a href="#1082" id="1082">1082</a>
+<a href="#1083" id="1083">1083</a>
+<a href="#1084" id="1084">1084</a>
+<a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
+<a href="#1133" id="1133">1133</a>
+<a href="#1134" id="1134">1134</a>
+<a href="#1135" id="1135">1135</a>
+<a href="#1136" id="1136">1136</a>
+<a href="#1137" id="1137">1137</a>
+<a href="#1138" id="1138">1138</a>
+<a href="#1139" id="1139">1139</a>
+<a href="#1140" id="1140">1140</a></pre></div><pre class="rust"><code><span class="doccomment">/// A dom object that references the raw input data to avoid allocations
 /// it trades having lifetimes for a gain in performance.
 ///
 /// Access via array indexes is possible:
@@ -1087,7 +1165,7 @@
 <span class="kw">mod </span>serialize;
 
 <span class="kw">use </span><span class="kw">super</span>::ObjectHasher;
-<span class="kw">use </span><span class="kw">crate</span>::cow::Cow;
+<span class="kw">use crate</span>::{cow::Cow, safer_unchecked::GetSaferUnchecked <span class="kw">as _</span>};
 <span class="kw">use crate</span>::{prelude::<span class="kw-2">*</span>, Buffers};
 <span class="kw">use crate</span>::{Deserializer, Node, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>halfbrown::HashMap;
@@ -1096,9 +1174,12 @@
 
 <span class="doccomment">/// Representation of a JSON object
 </span><span class="kw">pub type </span>Object&lt;<span class="lifetime">'value</span>&gt; = HashMap&lt;Cow&lt;<span class="lifetime">'value</span>, str&gt;, Value&lt;<span class="lifetime">'value</span>&gt;, ObjectHasher&gt;;
+<span class="doccomment">/// Representation of a JSON array
+</span><span class="kw">pub type </span>Array&lt;<span class="lifetime">'value</span>&gt; = Vec&lt;Value&lt;<span class="lifetime">'value</span>&gt;&gt;;
 
-<span class="doccomment">/// Parses a slice of bytes into a Value dom. This function will
-/// rewrite the slice to de-escape strings.
+<span class="doccomment">/// Parses a slice of bytes into a Value dom.
+///
+/// This function will rewrite the slice to de-escape strings.
 /// As we reference parts of the input slice the resulting dom
 /// has the same lifetime as the slice it was created from.
 ///
@@ -1112,8 +1193,9 @@
     }
 }
 
-<span class="doccomment">/// Parses a slice of bytes into a Value dom. This function will
-/// rewrite the slice to de-escape strings.
+<span class="doccomment">/// Parses a slice of bytes into a Value dom.
+///
+/// This function will rewrite the slice to de-escape strings.
 /// As we reference parts of the input slice the resulting dom
 /// has the same lifetime as the slice it was created from.
 ///
@@ -1135,13 +1217,14 @@
 <span class="doccomment">/// Borrowed JSON-DOM Value, consider using the `ValueTrait`
 /// to access its content
 </span><span class="attr">#[derive(Debug, Clone)]
+#[cfg_attr(feature = <span class="string">"ordered-float"</span>, derive(Eq))]
 </span><span class="kw">pub enum </span>Value&lt;<span class="lifetime">'value</span>&gt; {
     <span class="doccomment">/// Static values
     </span>Static(StaticNode),
     <span class="doccomment">/// string type
     </span>String(Cow&lt;<span class="lifetime">'value</span>, str&gt;),
     <span class="doccomment">/// array type
-    </span>Array(Vec&lt;Value&lt;<span class="lifetime">'value</span>&gt;&gt;),
+    </span>Array(Box&lt;Vec&lt;Value&lt;<span class="lifetime">'value</span>&gt;&gt;&gt;),
     <span class="doccomment">/// object type
     </span>Object(Box&lt;Object&lt;<span class="lifetime">'value</span>&gt;&gt;),
 }
@@ -1225,7 +1308,7 @@
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     #[must_use]
     </span><span class="kw">fn </span>array_with_capacity(capacity: usize) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>::Array(Vec::with_capacity(capacity))
+        <span class="self">Self</span>::Array(Box::new(Vec::with_capacity(capacity)))
     }
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     #[must_use]
@@ -1237,9 +1320,8 @@
     }
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueAsMutContainer <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
-    <span class="kw">type </span>Array = Vec&lt;<span class="self">Self</span>&gt;;
-    <span class="kw">type </span>Object = Object&lt;<span class="lifetime">'value</span>&gt;;
+<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueAsMutArray <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
+    <span class="kw">type </span>Array = Array&lt;<span class="lifetime">'value</span>&gt;;
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     #[must_use]
     </span><span class="kw">fn </span>as_array_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>Vec&lt;Value&lt;<span class="lifetime">'value</span>&gt;&gt;&gt; {
@@ -1248,6 +1330,9 @@
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         }
     }
+}
+<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueAsMutObject <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
+    <span class="kw">type </span>Object = Object&lt;<span class="lifetime">'value</span>&gt;;
     <span class="doccomment">/// Get mutable access to a map.
     ///
     /// ```rust
@@ -1347,9 +1432,8 @@
         }
     }
 }
-<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueAsContainer <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
-    <span class="kw">type </span>Array = Vec&lt;<span class="self">Self</span>&gt;;
-    <span class="kw">type </span>Object = Object&lt;<span class="lifetime">'value</span>&gt;;
+<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueAsArray <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
+    <span class="kw">type </span>Array = Array&lt;<span class="lifetime">'value</span>&gt;;
 
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     #[must_use]
@@ -1359,6 +1443,10 @@
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         }
     }
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueAsObject <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
+    <span class="kw">type </span>Object = Object&lt;<span class="lifetime">'value</span>&gt;;
 
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     #[must_use]
@@ -1381,18 +1469,21 @@
     }
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueIntoContainer <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
-    <span class="kw">type </span>Array = Vec&lt;<span class="self">Self</span>&gt;;
-    <span class="kw">type </span>Object = Object&lt;<span class="lifetime">'value</span>&gt;;
+<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueIntoArray <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
+    <span class="kw">type </span>Array = Array&lt;<span class="lifetime">'value</span>&gt;;
 
-    <span class="kw">fn </span>into_array(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;<span class="self">Self </span><span class="kw">as </span>ValueIntoContainer&gt;::Array&gt; {
+    <span class="kw">fn </span>into_array(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;<span class="self">Self </span><span class="kw">as </span>ValueIntoArray&gt;::Array&gt; {
         <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::Array(a) =&gt; <span class="prelude-val">Some</span>(a),
+            <span class="self">Self</span>::Array(a) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>a),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         }
     }
+}
 
-    <span class="kw">fn </span>into_object(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;<span class="self">Self </span><span class="kw">as </span>ValueIntoContainer&gt;::Object&gt; {
+<span class="kw">impl</span>&lt;<span class="lifetime">'value</span>&gt; ValueIntoObject <span class="kw">for </span>Value&lt;<span class="lifetime">'value</span>&gt; {
+    <span class="kw">type </span>Object = Object&lt;<span class="lifetime">'value</span>&gt;;
+
+    <span class="kw">fn </span>into_object(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;<span class="self">Self </span><span class="kw">as </span>ValueIntoObject&gt;::Object&gt; {
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::Object(a) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>a),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
@@ -1454,7 +1545,7 @@
     }
 }
 
-<span class="kw">struct </span>BorrowDeserializer&lt;<span class="lifetime">'de</span>&gt;(Deserializer&lt;<span class="lifetime">'de</span>&gt;);
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>BorrowDeserializer&lt;<span class="lifetime">'de</span>&gt;(Deserializer&lt;<span class="lifetime">'de</span>&gt;);
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'de</span>&gt; BorrowDeserializer&lt;<span class="lifetime">'de</span>&gt; {
     <span class="kw">pub fn </span>from_deserializer(de: Deserializer&lt;<span class="lifetime">'de</span>&gt;) -&gt; <span class="self">Self </span>{
@@ -1484,7 +1575,7 @@
             }
             res.set_len(len);
         }
-        Value::Array(res)
+        Value::Array(Box::new(res))
     }
 
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
@@ -1495,6 +1586,66 @@
         // element so we eat this
         </span><span class="kw">for _ in </span><span class="number">0</span>..len {
             <span class="kw">if let </span>Node::String(key) = <span class="kw">unsafe </span>{ <span class="self">self</span>.<span class="number">0</span>.next_() } {
+                <span class="attr">#[cfg(not(feature = <span class="string">"value-no-dup-keys"</span>))]
+                </span>res.insert_nocheck(key.into(), <span class="self">self</span>.parse());
+                <span class="attr">#[cfg(feature = <span class="string">"value-no-dup-keys"</span>)]
+                </span>res.insert(key.into(), <span class="self">self</span>.parse());
+            } <span class="kw">else </span>{
+                <span class="macro">unreachable!</span>();
+            }
+        }
+        Value::from(res)
+    }
+}
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>BorrowSliceDeserializer&lt;<span class="lifetime">'tape</span>, <span class="lifetime">'de</span>&gt; {
+    tape: <span class="kw-2">&amp;</span><span class="lifetime">'tape </span>[Node&lt;<span class="lifetime">'de</span>&gt;],
+    idx: usize,
+}
+<span class="kw">impl</span>&lt;<span class="lifetime">'tape</span>, <span class="lifetime">'de</span>&gt; BorrowSliceDeserializer&lt;<span class="lifetime">'tape</span>, <span class="lifetime">'de</span>&gt; {
+    <span class="kw">pub fn </span>from_tape(de: <span class="kw-2">&amp;</span><span class="lifetime">'tape </span>[Node&lt;<span class="lifetime">'de</span>&gt;]) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{ tape: de, idx: <span class="number">0 </span>}
+    }
+    <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
+    </span><span class="kw">pub unsafe fn </span>next_(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Node&lt;<span class="lifetime">'de</span>&gt; {
+        <span class="kw">let </span>r = <span class="kw">unsafe </span>{ <span class="kw-2">*</span><span class="self">self</span>.tape.get_kinda_unchecked(<span class="self">self</span>.idx) };
+        <span class="self">self</span>.idx += <span class="number">1</span>;
+        r
+    }
+
+    <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
+    </span><span class="kw">pub fn </span>parse(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Value&lt;<span class="lifetime">'de</span>&gt; {
+        <span class="kw">match unsafe </span>{ <span class="self">self</span>.next_() } {
+            Node::Static(s) =&gt; Value::Static(s),
+            Node::String(s) =&gt; Value::from(s),
+            Node::Array { len, count: <span class="kw">_ </span>} =&gt; <span class="self">self</span>.parse_array(len),
+            Node::Object { len, count: <span class="kw">_ </span>} =&gt; <span class="self">self</span>.parse_map(len),
+        }
+    }
+
+    <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
+    </span><span class="kw">fn </span>parse_array(<span class="kw-2">&amp;mut </span><span class="self">self</span>, len: usize) -&gt; Value&lt;<span class="lifetime">'de</span>&gt; {
+        <span class="comment">// Rust doesn't optimize the normal loop away here
+        // so we write our own avoiding the length
+        // checks during push
+        </span><span class="kw">let </span><span class="kw-2">mut </span>res: Vec&lt;Value&lt;<span class="lifetime">'de</span>&gt;&gt; = Vec::with_capacity(len);
+        <span class="kw">let </span>res_ptr = res.as_mut_ptr();
+        <span class="kw">unsafe </span>{
+            <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..len {
+                res_ptr.add(i).write(<span class="self">self</span>.parse());
+            }
+            res.set_len(len);
+        }
+        Value::Array(Box::new(res))
+    }
+
+    <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
+    </span><span class="kw">fn </span>parse_map(<span class="kw-2">&amp;mut </span><span class="self">self</span>, len: usize) -&gt; Value&lt;<span class="lifetime">'de</span>&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>res = Object::with_capacity_and_hasher(len, ObjectHasher::default());
+
+        <span class="comment">// Since we checked if it's empty we know that we at least have one
+        // element so we eat this
+        </span><span class="kw">for _ in </span><span class="number">0</span>..len {
+            <span class="kw">if let </span>Node::String(key) = <span class="kw">unsafe </span>{ <span class="self">self</span>.next_() } {
                 <span class="attr">#[cfg(not(feature = <span class="string">"value-no-dup-keys"</span>))]
                 </span>res.insert_nocheck(key.into(), <span class="self">self</span>.parse());
                 <span class="attr">#[cfg(feature = <span class="string">"value-no-dup-keys"</span>)]
@@ -1545,7 +1696,7 @@
     <span class="attr">#[cfg(feature = <span class="string">"128bit"</span>)]
     #[test]
     </span><span class="kw">fn </span>conversions_i128() {
-        <span class="kw">let </span>v = Value::from(i128::max_value());
+        <span class="kw">let </span>v = Value::from(i128::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(!v.is_i64());
@@ -1559,7 +1710,7 @@
         <span class="macro">assert!</span>(!v.is_f64());
         <span class="macro">assert!</span>(!v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(i128::min_value());
+        <span class="kw">let </span>v = Value::from(i128::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(!v.is_u128());
         <span class="macro">assert!</span>(!v.is_i64());
@@ -1577,7 +1728,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_i64() {
-        <span class="kw">let </span>v = Value::from(i64::max_value());
+        <span class="kw">let </span>v = Value::from(i64::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1591,7 +1742,7 @@
         <span class="macro">assert!</span>(!v.is_f64());
         <span class="macro">assert!</span>(!v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(i64::min_value());
+        <span class="kw">let </span>v = Value::from(i64::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(!v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1609,7 +1760,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_i32() {
-        <span class="kw">let </span>v = Value::from(i32::max_value());
+        <span class="kw">let </span>v = Value::from(i32::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1623,7 +1774,7 @@
         <span class="macro">assert!</span>(!v.is_f64());
         <span class="macro">assert!</span>(!v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(i32::min_value());
+        <span class="kw">let </span>v = Value::from(i32::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(!v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1641,7 +1792,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_i16() {
-        <span class="kw">let </span>v = Value::from(i16::max_value());
+        <span class="kw">let </span>v = Value::from(i16::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1655,7 +1806,7 @@
         <span class="macro">assert!</span>(!v.is_f64());
         <span class="macro">assert!</span>(!v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(i16::min_value());
+        <span class="kw">let </span>v = Value::from(i16::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(!v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1674,7 +1825,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_i8() {
-        <span class="kw">let </span>v = Value::from(i8::max_value());
+        <span class="kw">let </span>v = Value::from(i8::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1688,7 +1839,7 @@
         <span class="macro">assert!</span>(!v.is_f64());
         <span class="macro">assert!</span>(!v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(i8::min_value());
+        <span class="kw">let </span>v = Value::from(i8::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(!v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1706,7 +1857,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_usize() {
-        <span class="kw">let </span>v = Value::from(usize::min_value() <span class="kw">as </span>u64);
+        <span class="kw">let </span>v = Value::from(usize::MIN <span class="kw">as </span>u64);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1728,7 +1879,7 @@
     <span class="attr">#[cfg(feature = <span class="string">"128bit"</span>)]
     #[test]
     </span><span class="kw">fn </span>conversions_u128() {
-        <span class="kw">let </span>v = Value::from(u128::min_value());
+        <span class="kw">let </span>v = Value::from(u128::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1746,7 +1897,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_u64() {
-        <span class="kw">let </span>v = Value::from(u64::min_value());
+        <span class="kw">let </span>v = Value::from(u64::MIN);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1764,7 +1915,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_u32() {
-        <span class="kw">let </span>v = Value::from(u32::max_value());
+        <span class="kw">let </span>v = Value::from(u32::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1782,7 +1933,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_u16() {
-        <span class="kw">let </span>v = Value::from(u16::max_value());
+        <span class="kw">let </span>v = Value::from(u16::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1800,7 +1951,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_u8() {
-        <span class="kw">let </span>v = Value::from(u8::max_value());
+        <span class="kw">let </span>v = Value::from(u8::MAX);
         <span class="macro">assert!</span>(v.is_i128());
         <span class="macro">assert!</span>(v.is_u128());
         <span class="macro">assert!</span>(v.is_i64());
@@ -1818,13 +1969,13 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_f64() {
-        <span class="kw">let </span>v = Value::from(std::f64::MAX);
+        <span class="kw">let </span>v = Value::from(f64::MAX);
         <span class="macro">assert!</span>(!v.is_i64());
         <span class="macro">assert!</span>(!v.is_u64());
         <span class="macro">assert!</span>(v.is_f64());
         <span class="macro">assert!</span>(!v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(std::f64::MIN);
+        <span class="kw">let </span>v = Value::from(f64::MIN);
         <span class="macro">assert!</span>(!v.is_i64());
         <span class="macro">assert!</span>(!v.is_u64());
         <span class="macro">assert!</span>(v.is_f64());
@@ -1836,13 +1987,13 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>conversions_f32() {
-        <span class="kw">let </span>v = Value::from(std::f32::MAX);
+        <span class="kw">let </span>v = Value::from(f32::MAX);
         <span class="macro">assert!</span>(!v.is_i64());
         <span class="macro">assert!</span>(!v.is_u64());
         <span class="macro">assert!</span>(v.is_f64());
         <span class="macro">assert!</span>(v.is_f32());
         <span class="macro">assert!</span>(v.is_f64_castable());
-        <span class="kw">let </span>v = Value::from(std::f32::MIN);
+        <span class="kw">let </span>v = Value::from(f32::MIN);
         <span class="macro">assert!</span>(!v.is_i64());
         <span class="macro">assert!</span>(!v.is_u64());
         <span class="macro">assert!</span>(v.is_f64());
@@ -1961,7 +2112,7 @@
                 .prop_map(StaticNode::U64)
                 .prop_map(Value::Static),
             any::&lt;f64&gt;()
-                .prop_map(StaticNode::F64)
+                .prop_map(StaticNode::from)
                 .prop_map(Value::Static),
             <span class="string">".*"</span>.prop_map(Value::from),
         ];
@@ -1972,7 +2123,7 @@
             </span>|inner| {
                 <span class="macro">prop_oneof!</span>[
                     <span class="comment">// Take the inner strategy and make the two recursive cases.
-                    </span>prop::collection::vec(inner.clone(), <span class="number">0</span>..<span class="number">10</span>).prop_map(Value::Array),
+                    </span>prop::collection::vec(inner.clone(), <span class="number">0</span>..<span class="number">10</span>).prop_map(Value::from),
                     prop::collection::hash_map(<span class="string">".*"</span>.prop_map(Cow::from), inner, <span class="number">0</span>..<span class="number">10</span>)
                         .prop_map(|m| m.into_iter().collect()),
                 ]
@@ -2121,5 +2272,10 @@
         <span class="kw">let </span>v: Value = v.into();
         <span class="macro">assert_eq!</span>(v, <span class="number">42</span>);
     }
-}
+
+    <span class="comment">// #[test]
+    // fn size() {
+    //     assert_eq!(std::mem::size_of::&lt;Value&gt;(), 24);
+    // }
+</span>}
 </code></pre></div></section></main></body></html>

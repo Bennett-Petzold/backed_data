@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/float-cmp-0.9.0/src/ulps.rs`."><title>ulps.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="float_cmp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">float_cmp/</div>ulps.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/float-cmp-0.10.0/src/ulps.rs`."><title>ulps.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="float_cmp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">float_cmp/</div>ulps.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -230,15 +230,56 @@
 <a href="#229" id="229">229</a>
 <a href="#230" id="230">230</a>
 <a href="#231" id="231">231</a>
-<a href="#232" id="232">232</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
+<a href="#236" id="236">236</a>
+<a href="#237" id="237">237</a>
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a>
+<a href="#241" id="241">241</a>
+<a href="#242" id="242">242</a>
+<a href="#243" id="243">243</a>
+<a href="#244" id="244">244</a>
+<a href="#245" id="245">245</a>
+<a href="#246" id="246">246</a>
+<a href="#247" id="247">247</a>
+<a href="#248" id="248">248</a>
+<a href="#249" id="249">249</a>
+<a href="#250" id="250">250</a>
+<a href="#251" id="251">251</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
 // Licensed under the MIT license.  See LICENSE for details.
 
-</span><span class="attr">#[cfg(feature=<span class="string">"num_traits"</span>)]
+</span><span class="attr">#[cfg(feature = <span class="string">"num-traits"</span>)]
 </span><span class="kw">use </span>num_traits::NumCast;
+
+<span class="attr">#[inline]
+</span><span class="kw">fn </span>f32_ordered_bits(f: f32) -&gt; u32 {
+    <span class="kw">const </span>SIGN_BIT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>;
+    <span class="kw">let </span>bits = f.to_bits();
+    <span class="kw">if </span>bits &amp; SIGN_BIT != <span class="number">0 </span>{
+        !bits
+    } <span class="kw">else </span>{
+        bits ^ SIGN_BIT
+    }
+}
+
+<span class="attr">#[inline]
+</span><span class="kw">fn </span>f64_ordered_bits(f: f64) -&gt; u64 {
+    <span class="kw">const </span>SIGN_BIT: u64 = <span class="number">1 </span>&lt;&lt; <span class="number">63</span>;
+    <span class="kw">let </span>bits = f.to_bits();
+    <span class="kw">if </span>bits &amp; SIGN_BIT != <span class="number">0 </span>{
+        !bits
+    } <span class="kw">else </span>{
+        bits ^ SIGN_BIT
+    }
+}
 
 <span class="doccomment">/// A trait for floating point numbers which computes the number of representable
 /// values or ULPs (Units of Least Precision) that separate the two given values.
-</span><span class="attr">#[cfg(feature=<span class="string">"num_traits"</span>)]
+</span><span class="attr">#[cfg(feature = <span class="string">"num-traits"</span>)]
 </span><span class="kw">pub trait </span>Ulps {
     <span class="kw">type </span>U: Copy + NumCast;
 
@@ -254,7 +295,7 @@
     </span><span class="kw">fn </span>prev(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self</span>;
 }
 
-<span class="attr">#[cfg(not(feature=<span class="string">"num_traits"</span>))]
+<span class="attr">#[cfg(not(feature = <span class="string">"num-traits"</span>))]
 </span><span class="kw">pub trait </span>Ulps {
     <span class="kw">type </span>U: Copy;
 
@@ -274,7 +315,6 @@
     <span class="kw">type </span>U = i32;
 
     <span class="kw">fn </span>ulps(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>f32) -&gt; i32 {
-
         <span class="comment">// IEEE754 defined floating point storage representation to
         // maintain their order when their bit patterns are interpreted as
         // integers.  This is a huge boon to the task at hand, as we can
@@ -282,8 +322,8 @@
         // two floats are
 
         // Setup integer representations of the input
-        </span><span class="kw">let </span>ai32: i32 = <span class="self">self</span>.to_bits() <span class="kw">as </span>i32;
-        <span class="kw">let </span>bi32: i32 = other.to_bits() <span class="kw">as </span>i32;
+        </span><span class="kw">let </span>ai32: i32 = f32_ordered_bits(<span class="kw-2">*</span><span class="self">self</span>) <span class="kw">as </span>i32;
+        <span class="kw">let </span>bi32: i32 = f32_ordered_bits(<span class="kw-2">*</span>other) <span class="kw">as </span>i32;
 
         ai32.wrapping_sub(bi32)
     }
@@ -332,13 +372,13 @@
 </span><span class="kw">fn </span>f32_ulps_test2() {
     <span class="kw">let </span>pzero: f32 = f32::from_bits(<span class="number">0x00000000_u32</span>);
     <span class="kw">let </span>nzero: f32 = f32::from_bits(<span class="number">0x80000000_u32</span>);
-    <span class="macro">assert!</span>(pzero.ulps(<span class="kw-2">&amp;</span>nzero) == -<span class="number">2147483648</span>);
+    <span class="macro">assert_eq!</span>(pzero.ulps(<span class="kw-2">&amp;</span>nzero), <span class="number">1</span>);
 }
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f32_ulps_test3() {
     <span class="kw">let </span>pinf: f32 = f32::from_bits(<span class="number">0x7f800000_u32</span>);
     <span class="kw">let </span>ninf: f32 = f32::from_bits(<span class="number">0xff800000_u32</span>);
-    <span class="macro">assert!</span>(pinf.ulps(<span class="kw-2">&amp;</span>ninf) == -<span class="number">2147483648</span>);
+    <span class="macro">assert_eq!</span>(pinf.ulps(<span class="kw-2">&amp;</span>ninf), -<span class="number">16777215</span>);
 }
 
 <span class="attr">#[test]
@@ -370,7 +410,6 @@
     <span class="kw">type </span>U = i64;
 
     <span class="kw">fn </span>ulps(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>f64) -&gt; i64 {
-
         <span class="comment">// IEEE754 defined floating point storage representation to
         // maintain their order when their bit patterns are interpreted as
         // integers.  This is a huge boon to the task at hand, as we can
@@ -378,8 +417,8 @@
         // two floats are
 
         // Setup integer representations of the input
-        </span><span class="kw">let </span>ai64: i64 = <span class="self">self</span>.to_bits() <span class="kw">as </span>i64;
-        <span class="kw">let </span>bi64: i64 = other.to_bits() <span class="kw">as </span>i64;
+        </span><span class="kw">let </span>ai64: i64 = f64_ordered_bits(<span class="kw-2">*</span><span class="self">self</span>) <span class="kw">as </span>i64;
+        <span class="kw">let </span>bi64: i64 = f64_ordered_bits(<span class="kw-2">*</span>other) <span class="kw">as </span>i64;
 
         ai64.wrapping_sub(bi64)
     }
@@ -428,20 +467,20 @@
 </span><span class="kw">fn </span>f64_ulps_test2() {
     <span class="kw">let </span>pzero: f64 = f64::from_bits(<span class="number">0x0000000000000000_u64</span>);
     <span class="kw">let </span>nzero: f64 = f64::from_bits(<span class="number">0x8000000000000000_u64</span>);
-    <span class="macro">assert!</span>(pzero.ulps(<span class="kw-2">&amp;</span>nzero) == -<span class="number">9223372036854775808i64</span>);
+    <span class="macro">assert_eq!</span>(pzero.ulps(<span class="kw-2">&amp;</span>nzero), <span class="number">1</span>);
 }
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f64_ulps_test3() {
     <span class="kw">let </span>pinf: f64 = f64::from_bits(<span class="number">0x7f80000000000000_u64</span>);
     <span class="kw">let </span>ninf: f64 = f64::from_bits(<span class="number">0xff80000000000000_u64</span>);
-    <span class="macro">assert!</span>(pinf.ulps(<span class="kw-2">&amp;</span>ninf) == -<span class="number">9223372036854775808i64</span>);
+    <span class="macro">assert_eq!</span>(pinf.ulps(<span class="kw-2">&amp;</span>ninf), -<span class="number">72057594037927935</span>);
 }
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f64_ulps_test4() {
     <span class="kw">let </span>x: f64 = f64::from_bits(<span class="number">0xd017f6cc63a7f026_u64</span>);
     <span class="kw">let </span>y: f64 = f64::from_bits(<span class="number">0xd017f6cc63a7f023_u64</span>);
-    <span class="macro">assert!</span>(x.ulps(<span class="kw-2">&amp;</span>y) == <span class="number">3</span>);
+    <span class="macro">assert!</span>(x.ulps(<span class="kw-2">&amp;</span>y) == -<span class="number">3</span>);
 }
 
 <span class="attr">#[test]
@@ -461,5 +500,4 @@
     <span class="macro">assert!</span>(negzero.prev() &lt; <span class="number">0.0</span>);
     <span class="macro">assert!</span>(zero.next() &gt; <span class="number">0.0</span>);
 }
-
 </code></pre></div></section></main></body></html>

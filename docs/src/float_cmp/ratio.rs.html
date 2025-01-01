@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/float-cmp-0.9.0/src/ratio.rs`."><title>ratio.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="float_cmp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">float_cmp/</div>ratio.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/float-cmp-0.10.0/src/ratio.rs`."><title>ratio.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="float_cmp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">float_cmp/</div>ratio.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -139,48 +139,46 @@
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
 <a href="#140" id="140">140</a>
-<a href="#141" id="141">141</a>
-<a href="#142" id="142">142</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+<a href="#141" id="141">141</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
 // Licensed under the MIT license.  See LICENSE for details.
 
 </span><span class="kw">use </span>core::cmp::PartialOrd;
-<span class="kw">use </span>core::ops::{Sub, Div, Neg};
+<span class="kw">use </span>core::ops::{Div, Neg, Sub};
 <span class="kw">use </span>num_traits::Zero;
 
 <span class="doccomment">/// ApproxEqRatio is a trait for approximate equality comparisons bounding the ratio
 /// of the difference to the larger.
-</span><span class="kw">pub trait </span>ApproxEqRatio : Div&lt;Output = <span class="self">Self</span>&gt; + Sub&lt;Output = <span class="self">Self</span>&gt; + Neg&lt;Output = <span class="self">Self</span>&gt;
-    + PartialOrd + Zero + Sized + Copy
+</span><span class="kw">pub trait </span>ApproxEqRatio:
+    Div&lt;Output = <span class="self">Self</span>&gt; + Sub&lt;Output = <span class="self">Self</span>&gt; + Neg&lt;Output = <span class="self">Self</span>&gt; + PartialOrd + Zero + Sized + Copy
 {
     <span class="doccomment">/// This method tests if `self` and `other` are nearly equal by bounding the
     /// difference between them to some number much less than the larger of the two.
     /// This bound is set as the ratio of the difference to the larger.
     </span><span class="kw">fn </span>approx_eq_ratio(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>, ratio: <span class="self">Self</span>) -&gt; bool {
-
         <span class="comment">// Not equal if signs are not equal
-        </span><span class="kw">if </span><span class="kw-2">*</span><span class="self">self </span>&lt; <span class="self">Self</span>::zero() &amp;&amp; <span class="kw-2">*</span>other &gt; <span class="self">Self</span>::zero() { <span class="kw">return </span><span class="bool-val">false</span>; }
-        <span class="kw">if </span><span class="kw-2">*</span><span class="self">self </span>&gt; <span class="self">Self</span>::zero() &amp;&amp; <span class="kw-2">*</span>other &lt; <span class="self">Self</span>::zero() { <span class="kw">return </span><span class="bool-val">false</span>; }
+        </span><span class="kw">if </span><span class="kw-2">*</span><span class="self">self </span>&lt; <span class="self">Self</span>::zero() &amp;&amp; <span class="kw-2">*</span>other &gt; <span class="self">Self</span>::zero() {
+            <span class="kw">return </span><span class="bool-val">false</span>;
+        }
+        <span class="kw">if </span><span class="kw-2">*</span><span class="self">self </span>&gt; <span class="self">Self</span>::zero() &amp;&amp; <span class="kw-2">*</span>other &lt; <span class="self">Self</span>::zero() {
+            <span class="kw">return </span><span class="bool-val">false</span>;
+        }
 
         <span class="comment">// Handle all zero cases
         </span><span class="kw">match </span>(<span class="kw-2">*</span><span class="self">self </span>== <span class="self">Self</span>::zero(), <span class="kw-2">*</span>other == <span class="self">Self</span>::zero()) {
-            (<span class="bool-val">true</span>,<span class="bool-val">true</span>) =&gt; <span class="kw">return </span><span class="bool-val">true</span>,
-            (<span class="bool-val">true</span>,<span class="bool-val">false</span>) =&gt; <span class="kw">return </span><span class="bool-val">false</span>,
-            (<span class="bool-val">false</span>,<span class="bool-val">true</span>) =&gt; <span class="kw">return </span><span class="bool-val">false</span>,
-            <span class="kw">_ </span>=&gt; { }
+            (<span class="bool-val">true</span>, <span class="bool-val">true</span>) =&gt; <span class="kw">return </span><span class="bool-val">true</span>,
+            (<span class="bool-val">true</span>, <span class="bool-val">false</span>) =&gt; <span class="kw">return </span><span class="bool-val">false</span>,
+            (<span class="bool-val">false</span>, <span class="bool-val">true</span>) =&gt; <span class="kw">return </span><span class="bool-val">false</span>,
+            <span class="kw">_ </span>=&gt; {}
         }
 
         <span class="comment">// abs
-        </span><span class="kw">let </span>(s,o) = <span class="kw">if </span><span class="kw-2">*</span><span class="self">self </span>&lt; <span class="self">Self</span>::zero() {
+        </span><span class="kw">let </span>(s, o) = <span class="kw">if </span><span class="kw-2">*</span><span class="self">self </span>&lt; <span class="self">Self</span>::zero() {
             (-<span class="kw-2">*</span><span class="self">self</span>, -<span class="kw-2">*</span>other)
         } <span class="kw">else </span>{
             (<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">*</span>other)
         };
 
-        <span class="kw">let </span>(smaller,larger) = <span class="kw">if </span>s &lt; o {
-            (s,o)
-        } <span class="kw">else </span>{
-            (o,s)
-        };
+        <span class="kw">let </span>(smaller, larger) = <span class="kw">if </span>s &lt; o { (s, o) } <span class="kw">else </span>{ (o, s) };
         <span class="kw">let </span>difference: <span class="self">Self </span>= larger.sub(smaller);
         <span class="kw">let </span>actual_ratio: <span class="self">Self </span>= difference.div(larger);
         actual_ratio &lt; ratio
@@ -195,7 +193,7 @@
     }
 }
 
-<span class="kw">impl </span>ApproxEqRatio <span class="kw">for </span>f32 { }
+<span class="kw">impl </span>ApproxEqRatio <span class="kw">for </span>f32 {}
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f32_approx_eq_ratio_test1() {
@@ -218,21 +216,21 @@
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f32_approx_eq_ratio_test_zero_eq_zero_returns_true() {
     <span class="kw">let </span>x: f32 = <span class="number">0.0_f32</span>;
-    <span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>x,<span class="number">0.1</span>) == <span class="bool-val">true</span>);
+    <span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>x, <span class="number">0.1</span>) == <span class="bool-val">true</span>);
 }
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f32_approx_eq_ratio_test_zero_ne_zero_returns_false() {
     <span class="kw">let </span>x: f32 = <span class="number">0.0_f32</span>;
-    <span class="macro">assert!</span>(x.approx_ne_ratio(<span class="kw-2">&amp;</span>x,<span class="number">0.1</span>) == <span class="bool-val">false</span>);
+    <span class="macro">assert!</span>(x.approx_ne_ratio(<span class="kw-2">&amp;</span>x, <span class="number">0.1</span>) == <span class="bool-val">false</span>);
 }
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f32_approx_eq_ratio_test_against_a_zero_is_false() {
     <span class="kw">let </span>x: f32 = <span class="number">0.0_f32</span>;
     <span class="kw">let </span>y: f32 = <span class="number">0.1_f32</span>;
-    <span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>y,<span class="number">0.1</span>) == <span class="bool-val">false</span>);
-    <span class="macro">assert!</span>(y.approx_eq_ratio(<span class="kw-2">&amp;</span>x,<span class="number">0.1</span>) == <span class="bool-val">false</span>);
+    <span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>y, <span class="number">0.1</span>) == <span class="bool-val">false</span>);
+    <span class="macro">assert!</span>(y.approx_eq_ratio(<span class="kw-2">&amp;</span>x, <span class="number">0.1</span>) == <span class="bool-val">false</span>);
 }
 
 <span class="attr">#[test]
@@ -240,10 +238,10 @@
     <span class="kw">let </span>x: f32 = -<span class="number">3.0_f32</span>;
     <span class="kw">let </span>y: f32 = -<span class="number">4.0_f32</span>;
     <span class="comment">// -3 and -4 should not be equal at a ratio of 0.1
-    </span><span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>y,<span class="number">0.1</span>) == <span class="bool-val">false</span>);
+    </span><span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>y, <span class="number">0.1</span>) == <span class="bool-val">false</span>);
 }
 
-<span class="kw">impl </span>ApproxEqRatio <span class="kw">for </span>f64 { }
+<span class="kw">impl </span>ApproxEqRatio <span class="kw">for </span>f64 {}
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f64_approx_eq_ratio_test1() {
@@ -266,13 +264,13 @@
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f64_approx_eq_ratio_test_zero_eq_zero_returns_true() {
     <span class="kw">let </span>x: f64 = <span class="number">0.0_f64</span>;
-    <span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>x,<span class="number">0.1</span>) == <span class="bool-val">true</span>);
+    <span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>x, <span class="number">0.1</span>) == <span class="bool-val">true</span>);
 }
 
 <span class="attr">#[test]
 </span><span class="kw">fn </span>f64_approx_eq_ratio_test_zero_ne_zero_returns_false() {
     <span class="kw">let </span>x: f64 = <span class="number">0.0_f64</span>;
-    <span class="macro">assert!</span>(x.approx_ne_ratio(<span class="kw-2">&amp;</span>x,<span class="number">0.1</span>) == <span class="bool-val">false</span>);
+    <span class="macro">assert!</span>(x.approx_ne_ratio(<span class="kw-2">&amp;</span>x, <span class="number">0.1</span>) == <span class="bool-val">false</span>);
 }
 
 <span class="attr">#[test]
@@ -280,6 +278,6 @@
     <span class="kw">let </span>x: f64 = -<span class="number">3.0_f64</span>;
     <span class="kw">let </span>y: f64 = -<span class="number">4.0_f64</span>;
     <span class="comment">// -3 and -4 should not be equal at a ratio of 0.1
-    </span><span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>y,<span class="number">0.1</span>) == <span class="bool-val">false</span>);
+    </span><span class="macro">assert!</span>(x.approx_eq_ratio(<span class="kw-2">&amp;</span>y, <span class="number">0.1</span>) == <span class="bool-val">false</span>);
 }
 </code></pre></div></section></main></body></html>

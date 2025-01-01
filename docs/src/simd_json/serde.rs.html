@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.13.10/src/serde.rs`."><title>serde.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/</div>serde.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.14.3/src/serde.rs`."><title>serde.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/</div>serde.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -974,7 +974,37 @@
 <a href="#973" id="973">973</a>
 <a href="#974" id="974">974</a>
 <a href="#975" id="975">975</a>
-<a href="#976" id="976">976</a></pre></div><pre class="rust"><code><span class="doccomment">/// simd-json integrates with serde, this module holds this integration.
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a>
+<a href="#989" id="989">989</a>
+<a href="#990" id="990">990</a>
+<a href="#991" id="991">991</a>
+<a href="#992" id="992">992</a>
+<a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
+<a href="#997" id="997">997</a>
+<a href="#998" id="998">998</a>
+<a href="#999" id="999">999</a>
+<a href="#1000" id="1000">1000</a>
+<a href="#1001" id="1001">1001</a>
+<a href="#1002" id="1002">1002</a>
+<a href="#1003" id="1003">1003</a>
+<a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a></pre></div><pre class="rust"><code><span class="doccomment">/// simd-json integrates with serde, this module holds this integration.
 /// note that when parsing to a dom you should use the functions in
 /// `to_owned_value` or `to_borrowed_value` as they provide much
 /// better performance.
@@ -1074,7 +1104,7 @@
 <span class="kw">where
     </span>T: Deserialize&lt;<span class="lifetime">'a</span>&gt;,
 {
-    <span class="kw">let </span><span class="kw-2">mut </span>deserializer = <span class="macro">stry!</span>(Deserializer::from_slice(s.as_bytes_mut()));
+    <span class="kw">let </span><span class="kw-2">mut </span>deserializer = <span class="macro">stry!</span>(Deserializer::from_slice(<span class="kw">unsafe </span>{ s.as_bytes_mut() }));
 
     T::deserialize(<span class="kw-2">&amp;mut </span>deserializer)
 }
@@ -1102,7 +1132,7 @@
     </span>T: Deserialize&lt;<span class="lifetime">'a</span>&gt;,
 {
     <span class="kw">let </span><span class="kw-2">mut </span>deserializer = <span class="macro">stry!</span>(Deserializer::from_slice_with_buffers(
-        s.as_bytes_mut(),
+        <span class="kw">unsafe </span>{ s.as_bytes_mut() },
         buffers
     ));
 
@@ -1198,7 +1228,8 @@
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     #[allow(clippy::cast_sign_loss)]
     </span><span class="kw">fn </span>parse_u16(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;u16&gt; {
-        <span class="kw">match unsafe </span>{ <span class="self">self</span>.next_() } {
+        <span class="kw">let </span>next = <span class="kw">unsafe </span>{ <span class="self">self</span>.next_() };
+        <span class="kw">match </span>next {
             Node::Static(s) =&gt; s
                 .as_u16()
                 .ok_or_else(|| <span class="self">Self</span>::error(ErrorType::ExpectedUnsigned)),
@@ -1298,7 +1329,8 @@
     #[allow(clippy::cast_possible_wrap, clippy::cast_precision_loss)]
     </span><span class="kw">fn </span>parse_double(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;f64&gt; {
         <span class="kw">match unsafe </span>{ <span class="self">self</span>.next_() } {
-            Node::Static(StaticNode::F64(n)) =&gt; <span class="prelude-val">Ok</span>(n),
+            <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+            </span>Node::Static(StaticNode::F64(n)) =&gt; <span class="prelude-val">Ok</span>(n.into()),
             Node::Static(StaticNode::I64(n)) =&gt; <span class="prelude-val">Ok</span>(n <span class="kw">as </span>f64),
             Node::Static(StaticNode::U64(n)) =&gt; <span class="prelude-val">Ok</span>(n <span class="kw">as </span>f64),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(<span class="self">Self</span>::error(ErrorType::ExpectedFloat)),
@@ -1319,7 +1351,7 @@
                 } <span class="kw">else if let </span><span class="prelude-val">Some</span>(n) = b.as_u64() {
                     <span class="self">Self</span>::Static(StaticNode::U64(n))
                 } <span class="kw">else if let </span><span class="prelude-val">Some</span>(n) = b.as_f64() {
-                    <span class="self">Self</span>::Static(StaticNode::F64(n))
+                    <span class="self">Self</span>::Static(StaticNode::from(n))
                 } <span class="kw">else </span>{
                     <span class="kw">return </span><span class="prelude-val">Err</span>(SerdeConversionError::Oops);
                 }
@@ -1359,7 +1391,8 @@
                     </span>.into(),
             ),
             <span class="self">Self</span>::Static(StaticNode::F64(n)) =&gt; {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(n) = serde_json::Number::from_f64(n) {
+                <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(n) = serde_json::Number::from_f64(n.into()) {
                     Value::Number(n)
                 } <span class="kw">else </span>{
                     <span class="kw">return </span><span class="prelude-val">Err</span>(SerdeConversionError::NanOrInfinity);
@@ -1425,7 +1458,8 @@
                     </span>.into(),
             ),
             BorrowedValue::Static(StaticNode::F64(n)) =&gt; {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(n) = serde_json::Number::from_f64(n) {
+                <span class="attr">#[allow(clippy::useless_conversion)] </span><span class="comment">// .into() required by ordered-float
+                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(n) = serde_json::Number::from_f64(n.into()) {
                     Value::Number(n)
                 } <span class="kw">else </span>{
                     <span class="kw">return </span><span class="prelude-val">Err</span>(SerdeConversionError::NanOrInfinity);
@@ -1604,7 +1638,7 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>option_field_absent() {
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         </span><span class="kw">pub struct </span>Person {
             <span class="kw">pub </span>name: String,
             <span class="kw">pub </span>middle_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
@@ -1612,11 +1646,18 @@
         }
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"name":"bob","friends":[]}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Person, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(
+            result,
+            <span class="prelude-val">Ok</span>(Person {
+                name: <span class="string">"bob"</span>.to_string(),
+                middle_name: <span class="prelude-val">None</span>,
+                friends: <span class="macro">vec!</span>[],
+            })
+        );
     }
     <span class="attr">#[test]
     </span><span class="kw">fn </span>option_field_present() {
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         </span><span class="kw">pub struct </span>Person {
             <span class="kw">pub </span>name: String,
             <span class="kw">pub </span>middle_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
@@ -1624,20 +1665,27 @@
         }
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"name":"bob","middle_name": "frank", "friends":[]}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Person, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(
+            result,
+            <span class="prelude-val">Ok</span>(Person {
+                name: <span class="string">"bob"</span>.to_string(),
+                middle_name: <span class="prelude-val">Some</span>(<span class="string">"frank"</span>.to_string()),
+                friends: <span class="macro">vec!</span>[],
+            })
+        );
     }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>convert_enum() {
         <span class="attr">#[allow(dead_code)]
-        #[derive(serde::Deserialize, Debug)]
+        #[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         #[serde(tag = <span class="string">"type"</span>)]
         </span><span class="kw">enum </span>Message {
             Request { id: usize, method: String },
             Response { id: String, result: String },
         }
 
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         #[serde(tag = <span class="string">"type"</span>, content = <span class="string">"v"</span>)]
         </span><span class="kw">pub enum </span>Color {
             Red(String), <span class="comment">// TODO: If `content` flag is present, `Red` works and `Green` doesn't
@@ -1645,7 +1693,7 @@
             Blue,
         }
 
-        <span class="attr">#[derive(serde::Deserialize, Debug)]
+        <span class="attr">#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
         #[serde(tag = <span class="string">"type"</span>)]
         </span><span class="kw">pub enum </span>Color1 {
             Red(String),
@@ -1655,27 +1703,39 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"type": "Request", "id": 1, "method": "..."}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Message, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(
+            result,
+            <span class="prelude-val">Ok</span>(Message::Request {
+                id: <span class="number">1</span>,
+                method: <span class="string">"..."</span>.to_string()
+            })
+        );
 
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"type": "Response", "id": "1", "result": "..."}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Message, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(
+            result,
+            <span class="prelude-val">Ok</span>(Message::Response {
+                id: <span class="string">"1"</span>.to_string(),
+                result: <span class="string">"..."</span>.to_string()
+            })
+        );
 
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"type": "Red", "v": "1"}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Color, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(result, <span class="prelude-val">Ok</span>(Color::Red(<span class="string">"1"</span>.to_string())));
 
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"type": "Blue"}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Color, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(result, <span class="prelude-val">Ok</span>(Color::Blue));
 
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"type": "Green", "v": false}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Color1, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(result, <span class="prelude-val">Ok</span>(Color1::Green { v: <span class="bool-val">false </span>}));
 
         <span class="kw">let </span><span class="kw-2">mut </span>raw_json = <span class="string">r#"{"type": "Blue"}"#</span>.to_string();
         <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;Color1, <span class="kw">_</span>&gt; = <span class="kw">super</span>::from_slice(<span class="kw">unsafe </span>{ raw_json.as_bytes_mut() });
-        <span class="macro">assert!</span>(result.is_ok());
+        <span class="macro">assert_eq!</span>(result, <span class="prelude-val">Ok</span>(Color1::Blue));
     }
 
     <span class="attr">#[derive(serde_ext::Deserialize)]

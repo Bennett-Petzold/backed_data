@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.13.10/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/simd-json-0.14.3/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="simd_json" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">simd_json/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -1188,111 +1188,9 @@
     missing_docs
 )]
 #![allow(clippy::module_name_repetitions, renamed_and_removed_lints)]
+#![doc = <span class="macro">include_str!</span>(<span class="macro">concat!</span>(<span class="macro">env!</span>(<span class="string">"CARGO_MANIFEST_DIR"</span>), <span class="string">"/README.md"</span>))]
 
-</span><span class="doccomment">//! simd-json is a rust port of the simdjson c++ library. It follows
-//! most of the design closely with a few exceptions to make it better
-//! fit into the rust ecosystem.
-//!
-//! Note: On `x86` it will select the best SIMD featureset
-//! (`avx2`, or `sse4.2`) during runtime. If `simd-json` is compiled
-//! with SIMD support, it will disable runtime detection.
-//!
-//! ## Goals
-//!
-//! the goal of the rust port of simdjson is not to create a one to
-//! one copy, but to integrate the principles of the c++ library into
-//! a rust library that plays well with the rust ecosystem. As such
-//! we provide both compatibility with serde as well as parsing to a
-//! dom to manipulate data.
-//!
-//! ## Performance
-//!
-//! As a rule of thumb this library tries to get as close as possible
-//! to the performance of the c++ implementation, but some of the
-//! design decisions - such as parsing to a dom or a tape, weigh
-//! ergonomics over performance. In other places Rust makes it harder
-//! to achieve the same level of performance.
-//!
-//! ## Safety
-//!
-//! this library uses unsafe all over the place, and while it leverages
-//! quite a few test cases along with property based testing, please use
-//! this library with caution.
-//!
-//!
-//! ## Features
-//!
-//! simd-json.rs comes with a number of features that can be toggled,
-//! the following features are intended for 'user' selection. Additional
-//! features in the `Cargo.toml` exist to work around cargo limitations.
-//!
-//! ### `swar-number-parsing` (default)
-//!
-//! Enables a parsing method that will parse 8 digits at a time for
-//! floats - this is a common pattern but comes as a slight perf hit
-//! if all the floats have less then 8 digits.
-//!
-//! ### `serde_impl` (default)
-//!
-//! Compatibility with [serde](https://serde.rs/). This allows to use
-//! [simd-json.rs](https://simd-json.rs) to deserialize serde objects
-//! as well as serde compatibility of the different Value types.
-//! This can be disabled if serde is not used alongside simd-json.
-//!
-//! ### `128bit`
-//!
-//! Support for signed and unsigned 128 bit integer. This feature
-//! is disabled by default as 128 bit integers are rare in the wild
-//! and parsing them comes as a performance penalty due to extra logic
-//! and a changed memory layout.
-//!
-//! ### `known-key`
-//!
-//! The known-key feature changes hasher for the objects, from ahash
-//! to fxhash, ahash is faster at hashing and provides protection
-//! against DOS attacks by forcing multiple keys into a single hashing
-//! bucket. fxhash on the other hand allows for repeatable hashing
-//! results, that allows memorizing hashes for well know keys and saving
-//! time on lookups. In workloads that are heavy at accessing some well
-//! known keys this can be a performance advantage.
-//!
-//! ## Usage
-//!
-//! simd-json offers two main entry points for usage:
-//!
-//! ### Values API
-//!
-//! The values API is a set of optimized DOM objects that allow parsed
-//! json to JSON data that has no known variable structure. simd-lite
-//! has two versions of this:
-//!
-//! **Borrowed Values**
-//!
-//! ```
-//! use simd_json;
-//! let mut d = br#"{"some": ["key", "value", 2]}"#.to_vec();
-//! let v: simd_json::BorrowedValue = simd_json::to_borrowed_value(&amp;mut d).unwrap();
-//! ```
-//!
-//! **Owned Values**
-//!
-//! ```
-//! use simd_json;
-//! let mut d = br#"{"some": ["key", "value", 2]}"#.to_vec();
-//! let v: simd_json::OwnedValue = simd_json::to_owned_value(&amp;mut d).unwrap();
-//! ```
-//!
-//! ### Serde Compatible API
-//!
-//! ```ignore
-//! use simd_json;
-//! use serde_json::Value;
-//!
-//! let mut d = br#"{"some": ["key", "value", 2]}"#.to_vec();
-//! let v: Value = simd_json::serde::from_slice(&amp;mut d).unwrap();
-//! ```
-
-</span><span class="attr">#[cfg(feature = <span class="string">"serde_impl"</span>)]
+#[cfg(feature = <span class="string">"serde_impl"</span>)]
 </span><span class="kw">extern crate </span>serde <span class="kw">as </span>serde_ext;
 
 <span class="attr">#[cfg(feature = <span class="string">"serde_impl"</span>)]
@@ -1319,10 +1217,11 @@
 
 <span class="kw">use </span>safer_unchecked::GetSaferUnchecked;
 <span class="kw">use </span>stage2::StackState;
+<span class="kw">use </span>tape::Value;
 
 <span class="kw">mod </span>impls;
 
-<span class="doccomment">/// Reexport of Cow
+<span class="doccomment">/// Re-export of Cow
 </span><span class="kw">pub mod </span>cow;
 
 <span class="doccomment">/// The maximum padding size required by any SIMD implementation
@@ -1338,7 +1237,8 @@
 <span class="kw">pub use </span>value_trait::StaticNode;
 
 <span class="kw">pub use </span><span class="kw">crate</span>::error::{Error, ErrorType};
-<span class="kw">pub use </span><span class="kw">crate</span>::value::<span class="kw-2">*</span>;
+<span class="attr">#[doc(inline)]
+</span><span class="kw">pub use </span><span class="kw">crate</span>::value::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>value_trait::ValueType;
 
 <span class="doccomment">/// simd-json Result type
@@ -1559,6 +1459,7 @@
 }
 
 <span class="doccomment">/// Deserializer struct to deserialize a JSON
+</span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub struct </span>Deserializer&lt;<span class="lifetime">'de</span>&gt; {
     <span class="comment">// Note: we use the 2nd part as both index and length since only one is ever
     // used (array / object use len) everything else uses idx
@@ -1613,7 +1514,7 @@
 </span><span class="kw">pub enum </span>Implementation {
     <span class="doccomment">/// Rust native implementation
     </span>Native,
-    <span class="doccomment">/// Rust native implementation with using std::simd
+    <span class="doccomment">/// Rust native implementation with using [`std::simd`]
     </span>StdSimd,
     <span class="doccomment">/// SSE4.2 implementation
     </span>SSE42,
@@ -1980,7 +1881,7 @@
         input: <span class="kw-2">&amp;</span>[u8],
         structural_indexes: <span class="kw-2">&amp;mut </span>Vec&lt;u32&gt;,
     ) -&gt; std::result::Result&lt;(), ErrorType&gt; {
-        <span class="self">Self</span>::_find_structural_bits::&lt;impls::neon::SimdInput&gt;(input, structural_indexes)
+        <span class="kw">unsafe </span>{ <span class="self">Self</span>::_find_structural_bits::&lt;impls::neon::SimdInput&gt;(input, structural_indexes) }
     }
 
     <span class="attr">#[cfg(all(target_feature = <span class="string">"simd128"</span>, not(feature = <span class="string">"portable"</span>)))]
@@ -1998,6 +1899,19 @@
     </span><span class="attr">#[must_use]
     </span><span class="kw">pub fn </span>into_tape(<span class="self">self</span>) -&gt; Tape&lt;<span class="lifetime">'de</span>&gt; {
         Tape(<span class="self">self</span>.tape)
+    }
+
+    <span class="doccomment">/// Gives a `Value` view of the tape in the Deserializer
+    </span><span class="attr">#[must_use]
+    </span><span class="kw">pub fn </span>as_value(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Value&lt;<span class="lifetime">'_</span>, <span class="lifetime">'de</span>&gt; {
+        <span class="comment">// Skip initial zero
+        </span>Value(<span class="kw-2">&amp;</span><span class="self">self</span>.tape)
+    }
+
+    <span class="doccomment">/// Resets the Deserializer tape index to 0
+    </span><span class="kw">pub fn </span>restart(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="comment">// Skip initial zero
+        </span><span class="self">self</span>.idx = <span class="number">0</span>;
     }
 
     <span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
@@ -2041,7 +1955,7 @@
         <span class="kw">let </span>len = input.len();
         <span class="kw">let </span>simd_safe_len = len + SIMDINPUT_LENGTH;
 
-        <span class="kw">if </span>len &gt; std::u32::MAX <span class="kw">as </span>usize {
+        <span class="kw">if </span>len &gt; u32::MAX <span class="kw">as </span>usize {
             <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="self">Self</span>::error(ErrorType::InputTooLarge));
         }
 
@@ -2115,7 +2029,7 @@
     /// where it's know the tape isn't finished.
     </span><span class="attr">#[cfg_attr(not(feature = <span class="string">"no-inline"</span>), inline)]
     </span><span class="kw">pub unsafe fn </span>next_(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Node&lt;<span class="lifetime">'de</span>&gt; {
-        <span class="kw">let </span>r = <span class="kw-2">*</span><span class="self">self</span>.tape.get_kinda_unchecked(<span class="self">self</span>.idx);
+        <span class="kw">let </span>r = <span class="kw-2">*</span><span class="kw">unsafe </span>{ <span class="self">self</span>.tape.get_kinda_unchecked(<span class="self">self</span>.idx) };
         <span class="self">self</span>.idx += <span class="number">1</span>;
         r
     }
@@ -2132,7 +2046,7 @@
         </span>structural_indexes.clear();
         structural_indexes.reserve(len / <span class="number">8</span>);
 
-        <span class="kw">let </span><span class="kw-2">mut </span>utf8_validator = S::Utf8Validator::new();
+        <span class="kw">let </span><span class="kw-2">mut </span>utf8_validator = <span class="kw">unsafe </span>{ S::Utf8Validator::new() };
 
         <span class="comment">// we have padded the input out to 64 byte multiple with the remainder being
         // zeros
@@ -2168,10 +2082,10 @@
               __builtin_prefetch(buf + idx + 128);
             #endif
              */
-            </span><span class="kw">let </span>chunk = input.get_kinda_unchecked(idx..idx + <span class="number">64</span>);
-            utf8_validator.update_from_chunks(chunk);
+            </span><span class="kw">let </span>chunk = <span class="kw">unsafe </span>{ input.get_kinda_unchecked(idx..idx + <span class="number">64</span>) };
+            <span class="kw">unsafe </span>{ utf8_validator.update_from_chunks(chunk) };
 
-            <span class="kw">let </span>input = S::new(chunk);
+            <span class="kw">let </span>input = <span class="kw">unsafe </span>{ S::new(chunk) };
             <span class="comment">// detect odd sequences of backslashes
             </span><span class="kw">let </span>odd_ends: u64 =
                 input.find_odd_backslash_sequences(<span class="kw-2">&amp;mut </span>prev_iter_ends_odd_backslash);
@@ -2188,10 +2102,10 @@
 
             <span class="comment">// take the previous iterations structural bits, not our current iteration,
             // and flatten
-            </span>S::flatten_bits(structural_indexes, idx <span class="kw">as </span>u32, structurals);
+            </span><span class="kw">unsafe </span>{ S::flatten_bits(structural_indexes, idx <span class="kw">as </span>u32, structurals) };
 
             <span class="kw">let </span><span class="kw-2">mut </span>whitespace: u64 = <span class="number">0</span>;
-            input.find_whitespace_and_structurals(<span class="kw-2">&amp;mut </span>whitespace, <span class="kw-2">&amp;mut </span>structurals);
+            <span class="kw">unsafe </span>{ input.find_whitespace_and_structurals(<span class="kw-2">&amp;mut </span>whitespace, <span class="kw-2">&amp;mut </span>structurals) };
 
             <span class="comment">// fixup structurals to reflect quotes and add pseudo-structural characters
             </span>structurals = S::finalize_structurals(
@@ -2209,12 +2123,14 @@
         // risk invalidating the UTF-8 checks.
         </span><span class="kw">if </span>idx &lt; len {
             <span class="kw">let </span><span class="kw-2">mut </span>tmpbuf: [u8; SIMDINPUT_LENGTH] = [<span class="number">0x20</span>; SIMDINPUT_LENGTH];
-            tmpbuf
-                .as_mut_ptr()
-                .copy_from(input.as_ptr().add(idx), len - idx);
-            utf8_validator.update_from_chunks(<span class="kw-2">&amp;</span>tmpbuf);
+            <span class="kw">unsafe </span>{
+                tmpbuf
+                    .as_mut_ptr()
+                    .copy_from(input.as_ptr().add(idx), len - idx);
+            };
+            <span class="kw">unsafe </span>{ utf8_validator.update_from_chunks(<span class="kw-2">&amp;</span>tmpbuf) };
 
-            <span class="kw">let </span>input = S::new(<span class="kw-2">&amp;</span>tmpbuf);
+            <span class="kw">let </span>input = <span class="kw">unsafe </span>{ S::new(<span class="kw-2">&amp;</span>tmpbuf) };
 
             <span class="comment">// detect odd sequences of backslashes
             </span><span class="kw">let </span>odd_ends: u64 =
@@ -2232,10 +2148,10 @@
 
             <span class="comment">// take the previous iterations structural bits, not our current iteration,
             // and flatten
-            </span>S::flatten_bits(structural_indexes, idx <span class="kw">as </span>u32, structurals);
+            </span><span class="kw">unsafe </span>{ S::flatten_bits(structural_indexes, idx <span class="kw">as </span>u32, structurals) };
 
             <span class="kw">let </span><span class="kw-2">mut </span>whitespace: u64 = <span class="number">0</span>;
-            input.find_whitespace_and_structurals(<span class="kw-2">&amp;mut </span>whitespace, <span class="kw-2">&amp;mut </span>structurals);
+            <span class="kw">unsafe </span>{ input.find_whitespace_and_structurals(<span class="kw-2">&amp;mut </span>whitespace, <span class="kw-2">&amp;mut </span>structurals) };
 
             <span class="comment">// fixup structurals to reflect quotes and add pseudo-structural characters
             </span>structurals = S::finalize_structurals(
@@ -2252,7 +2168,7 @@
             <span class="kw">return </span><span class="prelude-val">Err</span>(ErrorType::Syntax);
         }
         <span class="comment">// finally, flatten out the remaining structurals from the last iteration
-        </span>S::flatten_bits(structural_indexes, idx <span class="kw">as </span>u32, structurals);
+        </span><span class="kw">unsafe </span>{ S::flatten_bits(structural_indexes, idx <span class="kw">as </span>u32, structurals) };
 
         <span class="comment">// a valid JSON file cannot have zero structural indexes - we should have
         // found something (note that we compare to 1 as we always add the root!)
@@ -2264,7 +2180,7 @@
             <span class="kw">return </span><span class="prelude-val">Err</span>(ErrorType::Syntax);
         }
 
-        <span class="kw">if </span>utf8_validator.finalize(<span class="prelude-val">None</span>).is_err() {
+        <span class="kw">if unsafe </span>{ utf8_validator.finalize(<span class="prelude-val">None</span>).is_err() } {
             <span class="prelude-val">Err</span>(ErrorType::InvalidUtf8)
         } <span class="kw">else </span>{
             <span class="prelude-val">Ok</span>(())
@@ -2352,6 +2268,90 @@
     }
 }
 
-<span class="attr">#[cfg(test)]
-</span><span class="kw">mod </span>tests;
+<span class="attr">#[cfg(feature = <span class="string">"serde_impl"</span>)] </span><span class="comment">//since the tested features are there to help work better with serde ...
+</span><span class="attr">#[cfg(test)]
+</span><span class="kw">mod </span>tests {
+    <span class="kw">use </span><span class="kw">crate</span>::Deserializer;
+    <span class="kw">use </span>serde_ext::Deserialize;
+
+    <span class="kw">static </span>JSON: <span class="kw-2">&amp;</span>str = <span class="string">r#"{
+        "code": 200,
+        "success": true,
+        "payload": {
+            "features": [
+                "serde",
+                "json"
+            ]
+        }
+    }"#</span>;
+
+    <span class="attr">#[derive(Deserialize, PartialEq, Debug)]
+    </span><span class="kw">struct </span>TestPayload {
+        features: Vec&lt;String&gt;,
+    }
+
+    <span class="attr">#[derive(Deserialize, PartialEq, Debug)]
+    </span><span class="kw">struct </span>TestEnvelope {
+        code: usize,
+        success: bool,
+        payload: TestPayload,
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_deser_to_value() {
+        <span class="kw">let </span><span class="kw-2">mut </span>json = JSON.as_bytes().to_vec();
+        <span class="kw">let </span>d = Deserializer::from_slice(<span class="kw-2">&amp;mut </span>json).expect(<span class="string">"Invalid JSON"</span>);
+
+        <span class="kw">let </span>original_index = d.idx;
+        <span class="kw">let </span>original_nodes = d.tape.len();
+
+        <span class="kw">let </span>v = d.as_value();
+
+        <span class="macro">assert!</span>(v.contains_key(<span class="string">"payload"</span>), <span class="string">"Failed to find payload key"</span>);
+        <span class="kw">let </span>v = v.get(<span class="string">"payload"</span>).expect(<span class="string">"Can't get payload"</span>);
+        <span class="macro">assert!</span>(v.is_object(), <span class="string">"payload not recognized as object: {v:?}"</span>);
+        <span class="macro">assert!</span>(v.contains_key(<span class="string">"features"</span>), <span class="string">"Failed to find features key"</span>);
+        <span class="kw">let </span>v = v.get(<span class="string">"features"</span>).expect(<span class="string">"can't get features"</span>);
+        <span class="macro">assert!</span>(v.is_array(), <span class="string">"features not recognized as array: {v:?}"</span>);
+
+        <span class="comment">// proving that value peeking doesn't affect the deserializer
+
+        </span><span class="macro">assert_eq!</span>(
+            original_index, d.idx,
+            <span class="string">"Deserializer has been internally modified"
+        </span>);
+        <span class="macro">assert_eq!</span>(
+            original_nodes,
+            d.tape.len(),
+            <span class="string">"Deserializer has been internally modified"
+        </span>);
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_deser_restart() {
+        <span class="kw">let </span><span class="kw-2">mut </span>json = JSON.as_bytes().to_vec();
+        <span class="kw">let </span><span class="kw-2">mut </span>d = Deserializer::from_slice(<span class="kw-2">&amp;mut </span>json).expect(<span class="string">"Invalid JSON"</span>);
+
+        <span class="kw">let </span>original_index = d.idx;
+        <span class="kw">let </span>original_nodes = d.tape.len();
+
+        <span class="kw">let </span>test1 = TestEnvelope::deserialize(<span class="kw-2">&amp;mut </span>d).expect(<span class="string">"Deserialization failed"</span>);
+
+        <span class="macro">assert!</span>(
+            original_index != d.idx,
+            <span class="string">"Deserializer has NOT been internally modified"
+        </span>);
+        <span class="macro">assert_eq!</span>(
+            original_nodes,
+            d.tape.len(),
+            <span class="string">"Deserializer nodes are NOT intact"
+        </span>);
+
+        d.restart();
+
+        <span class="kw">let </span>test2 = TestEnvelope::deserialize(<span class="kw-2">&amp;mut </span>d).expect(<span class="string">"Deserialization failed"</span>);
+
+        <span class="macro">assert_eq!</span>(test2, test1, <span class="string">"Deserializer is not idempotent"</span>);
+    }
+}
 </code></pre></div></section></main></body></html>

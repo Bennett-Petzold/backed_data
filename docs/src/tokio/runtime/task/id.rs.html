@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.39.3/src/runtime/task/id.rs`."><title>id.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="tokio" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../../static.files/storage-59e33391.js"></script><script defer src="../../../../static.files/src-script-56102188.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">tokio/runtime/task/</div>id.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.41.1/src/runtime/task/id.rs`."><title>id.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="tokio" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../../../static.files/storage-59e33391.js"></script><script defer src="../../../../static.files/src-script-56102188.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">tokio/runtime/task/</div>id.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -78,27 +78,9 @@
 <a href="#77" id="77">77</a>
 <a href="#78" id="78">78</a>
 <a href="#79" id="79">79</a>
-<a href="#80" id="80">80</a>
-<a href="#81" id="81">81</a>
-<a href="#82" id="82">82</a>
-<a href="#83" id="83">83</a>
-<a href="#84" id="84">84</a>
-<a href="#85" id="85">85</a>
-<a href="#86" id="86">86</a>
-<a href="#87" id="87">87</a>
-<a href="#88" id="88">88</a>
-<a href="#89" id="89">89</a>
-<a href="#90" id="90">90</a>
-<a href="#91" id="91">91</a>
-<a href="#92" id="92">92</a>
-<a href="#93" id="93">93</a>
-<a href="#94" id="94">94</a>
-<a href="#95" id="95">95</a>
-<a href="#96" id="96">96</a>
-<a href="#97" id="97">97</a>
-<a href="#98" id="98">98</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::runtime::context;
+<a href="#80" id="80">80</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::runtime::context;
 
-<span class="kw">use </span>std::fmt;
+<span class="kw">use </span>std::{fmt, num::NonZeroU64};
 
 <span class="doccomment">/// An opaque ID that uniquely identifies a task relative to all other currently
 /// running tasks.
@@ -113,16 +95,9 @@
 ///   task via the [`task::try_id()`](crate::task::try_id()) and
 ///   [`task::id()`](crate::task::id()) functions and from outside the task via
 ///   the [`JoinHandle::id()`](crate::task::JoinHandle::id()) function.
-///
-/// **Note**: This is an [unstable API][unstable]. The public API of this type
-/// may break in 1.x releases. See [the documentation on unstable
-/// features][unstable] for details.
-///
-/// [unstable]: crate#unstable-features
-</span><span class="attr">#[cfg_attr(docsrs, doc(cfg(all(feature = <span class="string">"rt"</span>, tokio_unstable))))]
-#[cfg_attr(not(tokio_unstable), allow(unreachable_pub))]
+</span><span class="attr">#[cfg_attr(docsrs, doc(cfg(all(feature = <span class="string">"rt"</span>))))]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
-</span><span class="kw">pub struct </span>Id(<span class="kw">pub</span>(<span class="kw">crate</span>) u64);
+</span><span class="kw">pub struct </span>Id(<span class="kw">pub</span>(<span class="kw">crate</span>) NonZeroU64);
 
 <span class="doccomment">/// Returns the [`Id`] of the currently running task.
 ///
@@ -133,14 +108,8 @@
 /// within a call to `block_on`. For a version of this function that doesn't
 /// panic, see [`task::try_id()`](crate::runtime::task::try_id()).
 ///
-/// **Note**: This is an [unstable API][unstable]. The public API of this type
-/// may break in 1.x releases. See [the documentation on unstable
-/// features][unstable] for details.
-///
 /// [task ID]: crate::task::Id
-/// [unstable]: crate#unstable-features
-</span><span class="attr">#[cfg_attr(not(tokio_unstable), allow(unreachable_pub))]
-#[track_caller]
+</span><span class="attr">#[track_caller]
 </span><span class="kw">pub fn </span>id() -&gt; Id {
     context::current_task_id().expect(<span class="string">"Can't get a task id when not inside a task"</span>)
 }
@@ -152,14 +121,8 @@
 /// that it returns `None` rather than panicking if called outside of a task
 /// context.
 ///
-/// **Note**: This is an [unstable API][unstable]. The public API of this type
-/// may break in 1.x releases. See [the documentation on unstable
-/// features][unstable] for details.
-///
 /// [task ID]: crate::task::Id
-/// [unstable]: crate#unstable-features
-</span><span class="attr">#[cfg_attr(not(tokio_unstable), allow(unreachable_pub))]
-#[track_caller]
+</span><span class="attr">#[track_caller]
 </span><span class="kw">pub fn </span>try_id() -&gt; <span class="prelude-ty">Option</span>&lt;Id&gt; {
     context::current_task_id()
 }
@@ -176,22 +139,23 @@
         <span class="kw">use </span><span class="kw">crate</span>::loom::sync::atomic::StaticAtomicU64;
 
         <span class="attr">#[cfg(all(test, loom))]
-        </span>{
-            <span class="macro">crate::loom::lazy_static!</span> {
-                <span class="kw">static </span><span class="kw-2">ref </span>NEXT_ID: StaticAtomicU64 = StaticAtomicU64::new(<span class="number">1</span>);
-            }
-            <span class="self">Self</span>(NEXT_ID.fetch_add(<span class="number">1</span>, Relaxed))
+        </span><span class="macro">crate::loom::lazy_static!</span> {
+            <span class="kw">static </span><span class="kw-2">ref </span>NEXT_ID: StaticAtomicU64 = StaticAtomicU64::new(<span class="number">1</span>);
         }
 
         <span class="attr">#[cfg(not(all(test, loom)))]
-        </span>{
-            <span class="kw">static </span>NEXT_ID: StaticAtomicU64 = StaticAtomicU64::new(<span class="number">1</span>);
-            <span class="self">Self</span>(NEXT_ID.fetch_add(<span class="number">1</span>, Relaxed))
+        </span><span class="kw">static </span>NEXT_ID: StaticAtomicU64 = StaticAtomicU64::new(<span class="number">1</span>);
+
+        <span class="kw">loop </span>{
+            <span class="kw">let </span>id = NEXT_ID.fetch_add(<span class="number">1</span>, Relaxed);
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = NonZeroU64::new(id) {
+                <span class="kw">return </span><span class="self">Self</span>(id);
+            }
         }
     }
 
     <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>as_u64(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-        <span class="self">self</span>.<span class="number">0
-    </span>}
+        <span class="self">self</span>.<span class="number">0</span>.get()
+    }
 }
 </code></pre></div></section></main></body></html>

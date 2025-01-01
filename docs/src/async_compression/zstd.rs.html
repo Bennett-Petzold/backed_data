@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-compression-0.4.12/src/zstd.rs`."><title>zstd.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="async_compression" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">async_compression/</div>zstd.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-compression-0.4.18/src/zstd.rs`."><title>zstd.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="async_compression" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">async_compression/</div>zstd.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -127,15 +127,9 @@
 <a href="#126" id="126">126</a>
 <a href="#127" id="127">127</a>
 <a href="#128" id="128">128</a>
-<a href="#129" id="129">129</a>
-<a href="#130" id="130">130</a>
-<a href="#131" id="131">131</a>
-<a href="#132" id="132">132</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains zstd-specific types for async-compression.
+<a href="#129" id="129">129</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains zstd-specific types for async-compression.
 
-</span><span class="kw">use </span>libzstd::stream::raw::CParameter::<span class="kw-2">*</span>;
-<span class="kw">use </span>libzstd::stream::raw::DParameter::<span class="kw-2">*</span>;
-
-<span class="doccomment">/// A compression parameter for zstd. This is a stable wrapper around zstd's own `CParameter`
+/// A compression parameter for zstd. This is a stable wrapper around zstd's own `CParameter`
 /// type, to abstract over different versions of the zstd library.
 ///
 /// See the [zstd documentation](https://facebook.github.io/zstd/zstd_manual.html) for more
@@ -146,74 +140,74 @@
 <span class="kw">impl </span>CParameter {
     <span class="doccomment">/// Window size in bytes (as a power of two)
     </span><span class="kw">pub fn </span>window_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(WindowLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::WindowLog(value))
     }
 
     <span class="doccomment">/// Size of the initial probe table in 4-byte entries (as a power of two)
     </span><span class="kw">pub fn </span>hash_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(HashLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::HashLog(value))
     }
 
     <span class="doccomment">/// Size of the multi-probe table in 4-byte entries (as a power of two)
     </span><span class="kw">pub fn </span>chain_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(ChainLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::ChainLog(value))
     }
 
     <span class="doccomment">/// Number of search attempts (as a power of two)
     </span><span class="kw">pub fn </span>search_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(SearchLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::SearchLog(value))
     }
 
     <span class="doccomment">/// Minimum size of matches searched for
     </span><span class="kw">pub fn </span>min_match(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(MinMatch(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::MinMatch(value))
     }
 
     <span class="doccomment">/// Strategy-dependent length modifier
     </span><span class="kw">pub fn </span>target_length(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(TargetLength(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::TargetLength(value))
     }
 
     <span class="doccomment">/// Enable long-distance matching mode to look for and emit long-distance references.
     ///
     /// This increases the default window size.
     </span><span class="kw">pub fn </span>enable_long_distance_matching(value: bool) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(EnableLongDistanceMatching(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::EnableLongDistanceMatching(value))
     }
 
     <span class="doccomment">/// Size of the long-distance matching table (as a power of two)
     </span><span class="kw">pub fn </span>ldm_hash_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(LdmHashLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::LdmHashLog(value))
     }
 
     <span class="doccomment">/// Minimum size of long-distance matches searched for
     </span><span class="kw">pub fn </span>ldm_min_match(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(LdmMinMatch(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::LdmMinMatch(value))
     }
 
     <span class="doccomment">/// Size of each bucket in the LDM hash table for collision resolution (as a power of two)
     </span><span class="kw">pub fn </span>ldm_bucket_size_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(LdmBucketSizeLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::LdmBucketSizeLog(value))
     }
 
     <span class="doccomment">/// Frequency of using the LDM hash table (as a power of two)
     </span><span class="kw">pub fn </span>ldm_hash_rate_log(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(LdmHashRateLog(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::LdmHashRateLog(value))
     }
 
     <span class="doccomment">/// Emit the size of the content (default: true).
     </span><span class="kw">pub fn </span>content_size_flag(value: bool) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(ContentSizeFlag(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::ContentSizeFlag(value))
     }
 
     <span class="doccomment">/// Emit a checksum (default: false).
     </span><span class="kw">pub fn </span>checksum_flag(value: bool) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(ChecksumFlag(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::ChecksumFlag(value))
     }
 
     <span class="doccomment">/// Emit a dictionary ID when using a custom dictionary (default: true).
     </span><span class="kw">pub fn </span>dict_id_flag(value: bool) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(DictIdFlag(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::DictIdFlag(value))
     }
 
     <span class="doccomment">/// Number of threads to spawn.
@@ -229,14 +223,14 @@
     // TODO: make this a normal feature guarded fn on next breaking release
     </span><span class="attr">#[cfg_attr(docsrs, doc(cfg(feature = <span class="string">"zstdmt"</span>)))]
     </span><span class="kw">pub fn </span>nb_workers(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(NbWorkers(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::NbWorkers(value))
     }
 
     <span class="doccomment">/// Number of bytes given to each worker.
     ///
     /// If set to 0, zstd selects a job size based on compression parameters.
     </span><span class="kw">pub fn </span>job_size(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(JobSize(value))
+        <span class="self">Self</span>(libzstd::stream::raw::CParameter::JobSize(value))
     }
 
     <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>as_zstd(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; libzstd::stream::raw::CParameter {
@@ -255,7 +249,7 @@
 <span class="kw">impl </span>DParameter {
     <span class="doccomment">/// Maximum window size in bytes (as a power of two)
     </span><span class="kw">pub fn </span>window_log_max(value: u32) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(WindowLogMax(value))
+        <span class="self">Self</span>(libzstd::stream::raw::DParameter::WindowLogMax(value))
     }
 
     <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>as_zstd(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; libzstd::stream::raw::DParameter {

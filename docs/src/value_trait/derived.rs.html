@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.8.1/src/derived.rs`."><title>derived.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>derived.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.10.1/src/derived.rs`."><title>derived.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>derived.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -697,7 +697,28 @@
 <a href="#696" id="696">696</a>
 <a href="#697" id="697">697</a>
 <a href="#698" id="698">698</a>
-<a href="#699" id="699">699</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{borrow::Borrow, hash::Hash};
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
+<a href="#720" id="720">720</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{borrow::Borrow, hash::Hash};
 
 <span class="kw">use crate</span>::{array::Array, object::Object, AccessError, TryTypeError};
 
@@ -874,34 +895,41 @@
     </span><span class="kw">fn </span>is_char(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool;
 }
 
-<span class="doccomment">/// Type checks for container values on a value
-</span><span class="kw">pub trait </span>TypedContainerValue {
+<span class="doccomment">/// Type checks for array values on a value
+</span><span class="kw">pub trait </span>TypedArrayValue {
     <span class="doccomment">/// returns true if the current value can be represented as an array
     </span><span class="attr">#[must_use]
     </span><span class="kw">fn </span>is_array(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool;
+}
 
+<span class="doccomment">/// Type checks for object values on a value
+</span><span class="kw">pub trait </span>TypedObjectValue {
     <span class="doccomment">/// returns true if the current value can be represented as an object
     </span><span class="attr">#[must_use]
     </span><span class="kw">fn </span>is_object(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool;
 }
 
-<span class="doccomment">/// `try_as_*` access to container value types
-</span><span class="kw">pub trait </span>ValueTryAsContainer {
+<span class="doccomment">/// `try_as_*` access to array value types
+</span><span class="kw">pub trait </span>ValueTryAsArray {
     <span class="doccomment">/// The array structure
     </span><span class="kw">type </span>Array: Array;
-    <span class="doccomment">/// The object structure
-    </span><span class="kw">type </span>Object: Object;
 
     <span class="doccomment">/// Tries to represent the value as an array and returns a reference to it
     /// # Errors
     /// if the requested type doesn't match the actual type
     </span><span class="kw">fn </span>try_as_array(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Array, TryTypeError&gt;;
+}
+<span class="doccomment">/// `try_as_*` access to object value types
+</span><span class="kw">pub trait </span>ValueTryAsObject {
+    <span class="doccomment">/// The object structure
+    </span><span class="kw">type </span>Object: Object;
 
     <span class="doccomment">/// Tries to represent the value as an object and returns a reference to it
     /// # Errors
     /// if the requested type doesn't match the actual type
     </span><span class="kw">fn </span>try_as_object(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Object, TryTypeError&gt;;
 }
+
 <span class="doccomment">/// Access to a value as an object
 </span><span class="kw">pub trait </span>ValueObjectAccess {
     <span class="doccomment">/// The type for Objects
@@ -914,26 +942,26 @@
     /// it was asked for.
     </span><span class="kw">fn </span>get&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Target&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Checks if a Value contains a given key. This will return
     /// flase if Value isn't an object  
     </span><span class="kw">fn </span>contains_key&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; bool
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 
 <span class="doccomment">/// Access to a value as an array
-</span><span class="kw">pub trait </span>ValueArrayAccess {
+</span><span class="kw">pub trait </span>ValueArrayAccess&lt;I&gt; {
     <span class="doccomment">/// The target for nested lookups
-    </span><span class="kw">type </span>Target;
+    </span><span class="kw">type </span>Target: <span class="question-mark">?</span>Sized;
     <span class="doccomment">/// Gets a ref to a value based on n index, returns `None` if the
     /// current Value isn't an Array or doesn't contain the index
     /// it was asked for.
     </span><span class="attr">#[must_use]
-    </span><span class="kw">fn </span>get_idx(<span class="kw-2">&amp;</span><span class="self">self</span>, i: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Target&gt;;
+    </span><span class="kw">fn </span>get_idx(<span class="kw-2">&amp;</span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Target&gt;;
 }
 
 <span class="doccomment">/// Access to scalar values in an object
@@ -943,91 +971,91 @@
     <span class="doccomment">/// Tries to get an element of an object as a bool
     </span><span class="kw">fn </span>get_bool&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;bool&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i128
     </span><span class="kw">fn </span>get_i128&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i64
     </span><span class="kw">fn </span>get_i64&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;i64&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i32
     </span><span class="kw">fn </span>get_i32&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;i32&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i16
     </span><span class="kw">fn </span>get_i16&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;i16&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i8
     </span><span class="kw">fn </span>get_i8&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;i8&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u128
     </span><span class="kw">fn </span>get_u128&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;u128&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u64
     </span><span class="kw">fn </span>get_u64&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a usize
     </span><span class="kw">fn </span>get_usize&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u32
     </span><span class="kw">fn </span>get_u32&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;u32&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u16
     </span><span class="kw">fn </span>get_u16&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;u16&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u8
     </span><span class="kw">fn </span>get_u8&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;u8&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a f64
     </span><span class="kw">fn </span>get_f64&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;f64&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a f32
     </span><span class="kw">fn </span>get_f32&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;f32&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a str
     </span><span class="kw">fn </span>get_str&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 <span class="doccomment">/// `try_as_*` access to scalar values in an object
@@ -1041,7 +1069,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_bool&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;bool&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i128, returns
@@ -1050,7 +1078,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_i128&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;i128&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i64, returns
@@ -1059,7 +1087,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_i64&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;i64&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i32, returns
@@ -1068,7 +1096,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_i32&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;i32&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i16, returns
@@ -1077,7 +1105,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_i16&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;i16&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a i8, returns
@@ -1086,7 +1114,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_i8&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;i8&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u128, returns
@@ -1095,7 +1123,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_u128&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u128&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u64, returns
@@ -1104,7 +1132,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_u64&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u64&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a usize, returns
@@ -1113,7 +1141,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_usize&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u32, returns
@@ -1122,7 +1150,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_u32&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u32&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u16, returns
@@ -1131,7 +1159,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_u16&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u16&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a u8, returns
@@ -1140,7 +1168,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_u8&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u8&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a f64, returns
@@ -1149,7 +1177,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_f64&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;f64&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a f32, returns
@@ -1158,7 +1186,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_f32&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;f32&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to get an element of an object as a str, returns
@@ -1167,44 +1195,44 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_str&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 
-<span class="doccomment">/// Access to container values in an object
-</span><span class="kw">pub trait </span>ValueObjectAccessAsContainer {
+<span class="doccomment">/// Access to array values in an object
+</span><span class="kw">pub trait </span>ValueObjectAccessAsArray {
     <span class="doccomment">/// The type for Objects
     </span><span class="kw">type </span>Key: <span class="question-mark">?</span>Sized;
-    <span class="doccomment">/// The target for nested lookups
-    </span><span class="kw">type </span>Target;
     <span class="doccomment">/// The array structure
     </span><span class="kw">type </span>Array: Array;
-    <span class="doccomment">/// The object structure
-    </span><span class="kw">type </span>Object: Object;
 
     <span class="doccomment">/// Tries to get an element of an object as a array
     </span><span class="kw">fn </span>get_array&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Array&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
+}
+
+<span class="doccomment">/// Access to object values in an object
+</span><span class="kw">pub trait </span>ValueObjectAccessAsObject {
+    <span class="doccomment">/// The type for Objects
+    </span><span class="kw">type </span>Key: <span class="question-mark">?</span>Sized;
+    <span class="doccomment">/// The object structure
+    </span><span class="kw">type </span>Object: Object;
 
     <span class="doccomment">/// Tries to get an element of an object as a object
     </span><span class="kw">fn </span>get_object&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Object&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 
-<span class="doccomment">/// `try_as_*` access to container values in an object
-</span><span class="kw">pub trait </span>ValueObjectAccessTryAsContainer {
+<span class="doccomment">/// `try_get_array` access to object values in an object
+</span><span class="kw">pub trait </span>ValueObjectAccessTryAsArray {
     <span class="doccomment">/// The type for Objects
     </span><span class="kw">type </span>Key: <span class="question-mark">?</span>Sized;
-    <span class="doccomment">/// The target for nested lookups
-    </span><span class="kw">type </span>Target;
     <span class="doccomment">/// The array structure
     </span><span class="kw">type </span>Array: Array;
-    <span class="doccomment">/// The object structure
-    </span><span class="kw">type </span>Object: Object;
 
     <span class="doccomment">/// Tries to get an element of an object as an array, returns
     /// an error if it isn't a array
@@ -1212,8 +1240,15 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_array&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Array&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
+}
+<span class="doccomment">/// `try_get_object` access to object values in an object
+</span><span class="kw">pub trait </span>ValueObjectAccessTryAsObject {
+    <span class="doccomment">/// The type for Objects
+    </span><span class="kw">type </span>Key: <span class="question-mark">?</span>Sized;
+    <span class="doccomment">/// The object structure
+    </span><span class="kw">type </span>Object: Object;
 
     <span class="doccomment">/// Tries to get an element of an object as an object, returns
     /// an error if it isn't an object
@@ -1222,7 +1257,7 @@
     /// if the requested type doesn't match the actual type or the value is not an object
     </span><span class="kw">fn </span>try_get_object&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Object&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 <span class="doccomment">/// Mutatability for object like values
@@ -1270,7 +1305,7 @@
     /// Will return `Err` if `self` is not an Object.
     </span><span class="kw">fn </span>remove&lt;Q&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; std::result::Result&lt;<span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Target&gt;, AccessError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 
     <span class="doccomment">/// Tries to remove from this `Value` as an `Object`.
@@ -1279,7 +1314,7 @@
     </span><span class="attr">#[inline]
     </span><span class="kw">fn </span>try_remove&lt;Q&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Target&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord,
     {
         <span class="self">self</span>.remove(k).ok().flatten()
@@ -1289,7 +1324,7 @@
     </span><span class="comment">//    fn get_amut(&amp;mut self, k: &amp;str) -&gt; Option&lt;&amp;mut Self&gt;;
     </span><span class="kw">fn </span>get_mut&lt;Q&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 <span class="doccomment">/// `try_as_*` access to a value as an object
@@ -1304,7 +1339,7 @@
     /// if the value is not an object
     </span><span class="kw">fn </span>try_get&lt;Q&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>Q) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Target&gt;, TryTypeError&gt;
     <span class="kw">where
-        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt; + Hash + Eq,
+        </span><span class="self">Self</span>::Key: Borrow&lt;Q&gt;,
         Q: <span class="question-mark">?</span>Sized + Hash + Eq + Ord;
 }
 
@@ -1350,16 +1385,21 @@
     </span><span class="kw">fn </span>try_pop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Target&gt; {
         <span class="self">self</span>.pop().ok().flatten()
     }
+}
+<span class="doccomment">/// Mutatability for array like values
+</span><span class="kw">pub trait </span>MutableValueArrayAccess&lt;I&gt; {
+    <span class="doccomment">/// The type for Array Values
+    </span><span class="kw">type </span>Target: <span class="question-mark">?</span>Sized;
 
     <span class="doccomment">/// Same as `get_idx` but returns a mutable ref instead
-    </span><span class="kw">fn </span>get_idx_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target&gt;;
+    </span><span class="kw">fn </span>get_idx_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: I) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target&gt;;
 }
 
 <span class="doccomment">/// Access to a value as an array with error handling
 </span><span class="kw">pub trait </span>ValueArrayTryAccess {
     <span class="doccomment">/// The target for nested lookups
 
-    </span><span class="kw">type </span>Target;
+    </span><span class="kw">type </span>Target: <span class="question-mark">?</span>Sized;
     <span class="doccomment">/// Tries to get a value based on n index, returns a type error if the
     /// current value isn't an Array, returns `None` if the index is out of bounds
     /// # Errors
@@ -1378,18 +1418,20 @@
 }
 
 <span class="doccomment">/// A trait that specifies how to turn the Value `into` it's sub types with error handling
-</span><span class="kw">pub trait </span>ValueTryIntoContainer {
+</span><span class="kw">pub trait </span>ValueTryIntoArray {
     <span class="doccomment">/// The type for Arrays
     </span><span class="kw">type </span>Array;
-
-    <span class="doccomment">/// The type for Objects
-    </span><span class="kw">type </span>Object;
 
     <span class="doccomment">/// Tries to turn the value into it's array representation
     /// # Errors
     /// if the requested type doesn't match the actual type
 
     </span><span class="kw">fn </span>try_into_array(<span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Array, TryTypeError&gt;;
+}
+<span class="doccomment">/// A trait that specifies how to turn the Value `into` it's sub types with error handling
+</span><span class="kw">pub trait </span>ValueTryIntoObject {
+    <span class="doccomment">/// The type for Objects
+    </span><span class="kw">type </span>Object;
 
     <span class="doccomment">/// Tries to turn the value into it's object representation
     /// # Errors

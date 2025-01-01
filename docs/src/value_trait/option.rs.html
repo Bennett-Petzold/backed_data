@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.8.1/src/option.rs`."><title>option.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (7f75bfa1a 2024-12-30)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>option.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/value-trait-0.10.1/src/option.rs`."><title>option.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="value_trait" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">value_trait/</div>option.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -217,8 +217,35 @@
 <a href="#216" id="216">216</a>
 <a href="#217" id="217">217</a>
 <a href="#218" id="218">218</a>
-<a href="#219" id="219">219</a></pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
-    base::{TypedValue, ValueAsContainer, ValueAsScalar, ValueIntoContainer, ValueIntoString},
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
+<a href="#236" id="236">236</a>
+<a href="#237" id="237">237</a>
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a>
+<a href="#241" id="241">241</a>
+<a href="#242" id="242">242</a>
+<a href="#243" id="243">243</a>
+<a href="#244" id="244">244</a>
+<a href="#245" id="245">245</a></pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
+    base::{TypedValue, ValueAsScalar, ValueIntoString},
+    prelude::{ValueAsArray, ValueAsObject, ValueIntoArray, ValueIntoObject},
     ExtendedValueType, ValueType,
 };
 
@@ -233,17 +260,22 @@
     }
 }
 
-<span class="kw">impl</span>&lt;V&gt; ValueIntoContainer <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;V&gt;
+<span class="kw">impl</span>&lt;V&gt; ValueIntoArray <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;V&gt;
 <span class="kw">where
-    </span>V: ValueIntoContainer,
+    </span>V: ValueIntoArray,
 {
     <span class="kw">type </span>Array = V::Array;
-    <span class="kw">type </span>Object = V::Object;
     <span class="kw">fn </span>into_array(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Array&gt; {
-        <span class="self">self</span>.and_then(ValueIntoContainer::into_array)
+        <span class="self">self</span>.and_then(ValueIntoArray::into_array)
     }
+}
+<span class="kw">impl</span>&lt;V&gt; ValueIntoObject <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;V&gt;
+<span class="kw">where
+    </span>V: ValueIntoObject,
+{
+    <span class="kw">type </span>Object = V::Object;
     <span class="kw">fn </span>into_object(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Object&gt; {
-        <span class="self">self</span>.and_then(ValueIntoContainer::into_object)
+        <span class="self">self</span>.and_then(ValueIntoObject::into_object)
     }
 }
 
@@ -288,19 +320,24 @@
     }
 }
 
-<span class="kw">impl</span>&lt;V&gt; ValueAsContainer <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;V&gt;
+<span class="kw">impl</span>&lt;V&gt; ValueAsArray <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;V&gt;
 <span class="kw">where
-    </span>V: ValueAsContainer,
+    </span>V: ValueAsArray,
 {
     <span class="kw">type </span>Array = V::Array;
-    <span class="kw">type </span>Object = V::Object;
 
     <span class="kw">fn </span>as_array(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Array&gt; {
-        <span class="self">self</span>.as_ref().and_then(ValueAsContainer::as_array)
+        <span class="self">self</span>.as_ref().and_then(ValueAsArray::as_array)
     }
+}
+<span class="kw">impl</span>&lt;V&gt; ValueAsObject <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;V&gt;
+<span class="kw">where
+    </span>V: ValueAsObject,
+{
+    <span class="kw">type </span>Object = V::Object;
 
     <span class="kw">fn </span>as_object(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Object&gt; {
-        <span class="self">self</span>.as_ref().and_then(ValueAsContainer::as_object)
+        <span class="self">self</span>.as_ref().and_then(ValueAsObject::as_object)
     }
 }
 
@@ -315,17 +352,22 @@
     }
 }
 
-<span class="kw">impl</span>&lt;V, E&gt; ValueIntoContainer <span class="kw">for </span><span class="prelude-ty">Result</span>&lt;V, E&gt;
+<span class="kw">impl</span>&lt;V, E&gt; ValueIntoArray <span class="kw">for </span><span class="prelude-ty">Result</span>&lt;V, E&gt;
 <span class="kw">where
-    </span>V: ValueIntoContainer,
+    </span>V: ValueIntoArray,
 {
     <span class="kw">type </span>Array = V::Array;
-    <span class="kw">type </span>Object = V::Object;
     <span class="kw">fn </span>into_array(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Array&gt; {
-        <span class="self">self</span>.ok().and_then(ValueIntoContainer::into_array)
+        <span class="self">self</span>.ok().and_then(ValueIntoArray::into_array)
     }
+}
+<span class="kw">impl</span>&lt;V, E&gt; ValueIntoObject <span class="kw">for </span><span class="prelude-ty">Result</span>&lt;V, E&gt;
+<span class="kw">where
+    </span>V: ValueIntoObject,
+{
+    <span class="kw">type </span>Object = V::Object;
     <span class="kw">fn </span>into_object(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Object&gt; {
-        <span class="self">self</span>.ok().and_then(ValueIntoContainer::into_object)
+        <span class="self">self</span>.ok().and_then(ValueIntoObject::into_object)
     }
 }
 
@@ -368,19 +410,24 @@
         <span class="self">self</span>.as_ref().ok().and_then(ValueAsScalar::as_str)
     }
 }
-<span class="kw">impl</span>&lt;V, E&gt; ValueAsContainer <span class="kw">for </span><span class="prelude-ty">Result</span>&lt;V, E&gt;
+<span class="kw">impl</span>&lt;V, E&gt; ValueAsArray <span class="kw">for </span><span class="prelude-ty">Result</span>&lt;V, E&gt;
 <span class="kw">where
-    </span>V: ValueAsContainer,
+    </span>V: ValueAsArray,
 {
     <span class="kw">type </span>Array = V::Array;
-    <span class="kw">type </span>Object = V::Object;
 
     <span class="kw">fn </span>as_array(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Array&gt; {
-        <span class="self">self</span>.as_ref().ok().and_then(ValueAsContainer::as_array)
+        <span class="self">self</span>.as_ref().ok().and_then(ValueAsArray::as_array)
     }
+}
+<span class="kw">impl</span>&lt;V, E&gt; ValueAsObject <span class="kw">for </span><span class="prelude-ty">Result</span>&lt;V, E&gt;
+<span class="kw">where
+    </span>V: ValueAsObject,
+{
+    <span class="kw">type </span>Object = V::Object;
 
     <span class="kw">fn </span>as_object(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Object&gt; {
-        <span class="self">self</span>.as_ref().ok().and_then(ValueAsContainer::as_object)
+        <span class="self">self</span>.as_ref().ok().and_then(ValueAsObject::as_object)
     }
 }
 
@@ -421,16 +468,21 @@
     }
 }
 
-<span class="kw">impl</span>&lt;V&gt; ValueAsContainer <span class="kw">for </span><span class="kw-2">&amp;</span>V
+<span class="kw">impl</span>&lt;V&gt; ValueAsArray <span class="kw">for </span><span class="kw-2">&amp;</span>V
 <span class="kw">where
-    </span>V: ValueAsContainer,
+    </span>V: ValueAsArray,
 {
     <span class="kw">type </span>Array = V::Array;
-    <span class="kw">type </span>Object = V::Object;
 
     <span class="kw">fn </span>as_array(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Array&gt; {
         (<span class="kw-2">*</span><span class="self">self</span>).as_array()
     }
+}
+<span class="kw">impl</span>&lt;V&gt; ValueAsObject <span class="kw">for </span><span class="kw-2">&amp;</span>V
+<span class="kw">where
+    </span>V: ValueAsObject,
+{
+    <span class="kw">type </span>Object = V::Object;
 
     <span class="kw">fn </span>as_object(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="self">Self</span>::Object&gt; {
         (<span class="kw-2">*</span><span class="self">self</span>).as_object()

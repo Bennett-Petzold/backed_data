@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["ArrayMut","ArrayTrait","ObjectMut","ObjectTrait"]};
+window.SIDEBAR_ITEMS = {"trait":["ArrayMut","ArrayTrait","Indexed","IndexedMut","ObjectMut","ObjectTrait"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["TypedCustomValue","TypedValue","ValueAsContainer","ValueAsMutContainer","ValueAsScalar","ValueIntoContainer","ValueIntoString","Writable"]};
+window.SIDEBAR_ITEMS = {"trait":["TypedCustomValue","TypedValue","ValueAsArray","ValueAsMutArray","ValueAsMutObject","ValueAsObject","ValueAsScalar","ValueIntoArray","ValueIntoObject","ValueIntoString","ValueTryAsArrayMut","ValueTryAsMutObject","Writable"]};
