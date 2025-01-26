@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-bincode-0.7.2/src/reader.rs`."><title>reader.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="async_bincode" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">async_bincode/</div>reader.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-bincode-0.7.3/src/reader.rs`."><title>reader.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-faa87aeb.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="async_bincode" data-themes="" data-resource-suffix="" data-rustdoc-version="1.86.0-nightly (f7cc13af8 2025-01-25)" data-channel="nightly" data-search-js="search-ccb196c1.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">async_bincode/</div>reader.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -191,7 +191,28 @@
 <a href="#190" id="190">190</a>
 <a href="#191" id="191">191</a>
 <a href="#192" id="192">192</a>
-<a href="#193" id="193">193</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::Options;
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::Options;
 <span class="kw">use </span>byteorder::{ByteOrder, NetworkEndian};
 <span class="kw">use </span>bytes::buf::Buf;
 <span class="kw">use </span>bytes::BytesMut;
@@ -367,18 +388,39 @@
         <span class="kw">unsafe </span>{ rest.set_len(max) };
 
         <span class="kw">while </span><span class="self">self</span>.buffer.len() &lt; target_size {
-            <span class="kw">let </span>n = <span class="macro">ready!</span>(poll_reader(Pin::new(<span class="kw-2">&amp;mut </span><span class="self">self</span>.reader), cx, <span class="kw-2">&amp;mut </span>rest[..]))<span class="question-mark">?</span>;
-            <span class="kw">if </span>n == <span class="number">0 </span>{
-                <span class="kw">if </span><span class="self">self</span>.buffer.is_empty() {
-                    <span class="kw">return </span>Poll::Ready(<span class="prelude-val">Ok</span>(FillResult::EOF));
-                } <span class="kw">else </span>{
-                    <span class="kw">return </span>Poll::Ready(<span class="prelude-val">Err</span>(io::Error::from(io::ErrorKind::BrokenPipe)));
+            <span class="kw">match </span>poll_reader(Pin::new(<span class="kw-2">&amp;mut </span><span class="self">self</span>.reader), cx, <span class="kw-2">&amp;mut </span>rest[..]) {
+                Poll::Ready(result) =&gt; {
+                    <span class="kw">match </span>result {
+                        <span class="prelude-val">Ok</span>(n) =&gt; {
+                            <span class="kw">if </span>n == <span class="number">0 </span>{
+                                <span class="kw">if </span><span class="self">self</span>.buffer.is_empty() {
+                                    <span class="kw">return </span>Poll::Ready(<span class="prelude-val">Ok</span>(FillResult::EOF));
+                                } <span class="kw">else </span>{
+                                    <span class="kw">return </span>Poll::Ready(<span class="prelude-val">Err</span>(io::Error::from(
+                                        io::ErrorKind::BrokenPipe,
+                                    )));
+                                }
+                            }
+
+                            <span class="comment">// adopt the new bytes
+                            </span><span class="kw">let </span>read = rest.split_to(n);
+                            <span class="self">self</span>.buffer.unsplit(read);
+                        }
+                        <span class="prelude-val">Err</span>(err) =&gt; {
+                            <span class="comment">// reading failed, put the buffer back
+                            </span>rest.truncate(<span class="number">0</span>);
+                            <span class="self">self</span>.buffer.unsplit(rest);
+                            <span class="kw">return </span>Poll::Ready(<span class="prelude-val">Err</span>(err));
+                        }
+                    }
+                }
+                Poll::Pending =&gt; {
+                    <span class="comment">// reading in progress, put the buffer back
+                    </span>rest.truncate(<span class="number">0</span>);
+                    <span class="self">self</span>.buffer.unsplit(rest);
+                    <span class="kw">return </span>Poll::Pending;
                 }
             }
-
-            <span class="comment">// adopt the new bytes
-            </span><span class="kw">let </span>read = rest.split_to(n);
-            <span class="self">self</span>.buffer.unsplit(read);
         }
 
         Poll::Ready(<span class="prelude-val">Ok</span>(FillResult::Filled))

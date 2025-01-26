@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.11.0/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="uuid" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (d117b7f21 2024-12-31)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="icon" href="https://www.rust-lang.org/favicon.ico"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">uuid/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.12.0/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-faa87aeb.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="uuid" data-themes="" data-resource-suffix="" data-rustdoc-version="1.86.0-nightly (f7cc13af8 2025-01-25)" data-channel="nightly" data-search-js="search-ccb196c1.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="icon" href="https://www.rust-lang.org/favicon.ico"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">uuid/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -1892,8 +1892,7 @@
 <a href="#1891" id="1891">1891</a>
 <a href="#1892" id="1892">1892</a>
 <a href="#1893" id="1893">1893</a>
-<a href="#1894" id="1894">1894</a>
-<a href="#1895" id="1895">1895</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2013-2014 The Rust Project Developers.
+<a href="#1894" id="1894">1894</a></pre></div><pre class="rust"><code><span class="comment">// Copyright 2013-2014 The Rust Project Developers.
 // Copyright 2018 The Uuid Project Developers.
 //
 // See the COPYRIGHT file at the top-level directory of this distribution.
@@ -1933,7 +1932,7 @@
 //!
 //! ```toml
 //! [dependencies.uuid]
-//! version = "1.11.0"
+//! version = "1.12.0"
 //! features = [
 //!     "v4",                # Lets you generate random UUIDs
 //!     "fast-rng",          # Use a faster (but still sufficiently random) RNG
@@ -2033,7 +2032,7 @@
 //!
 //! ```toml
 //! [dependencies.uuid]
-//! version = "1.11.0"
+//! version = "1.12.0"
 //! features = [
 //!     "v4",
 //!     "v7",
@@ -2048,7 +2047,7 @@
 //!
 //! ```toml
 //! [dependencies.uuid]
-//! version = "1.11.0"
+//! version = "1.12.0"
 //! default-features = false
 //! ```
 //!
@@ -2106,7 +2105,7 @@
 #![doc(
     html_logo_url = <span class="string">"https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png"</span>,
     html_favicon_url = <span class="string">"https://www.rust-lang.org/favicon.ico"</span>,
-    html_root_url = <span class="string">"https://docs.rs/uuid/1.11.0"
+    html_root_url = <span class="string">"https://docs.rs/uuid/1.12.0"
 </span>)]
 
 #[cfg(any(feature = <span class="string">"std"</span>, test))]
@@ -2117,11 +2116,9 @@
 #[macro_use]
 </span><span class="kw">extern crate </span>core <span class="kw">as </span>std;
 
-<span class="attr">#[cfg(all(uuid_unstable, feature = <span class="string">"zerocopy"</span>))]
-</span><span class="kw">use </span>zerocopy::{IntoBytes, FromBytes, Immutable, KnownLayout, Unaligned};
-
 <span class="kw">mod </span>builder;
 <span class="kw">mod </span>error;
+<span class="kw">mod </span>non_nil;
 <span class="kw">mod </span>parser;
 
 <span class="kw">pub mod </span>fmt;
@@ -2176,7 +2173,7 @@
 
 <span class="kw">use </span><span class="kw">crate</span>::std::convert;
 
-<span class="kw">pub use crate</span>::{builder::Builder, error::Error};
+<span class="kw">pub use crate</span>::{builder::Builder, error::Error, non_nil::NonNilUuid};
 
 <span class="doccomment">/// A 128-bit (16 byte) buffer containing the UUID.
 ///
@@ -2331,15 +2328,16 @@
 ///
 /// The `Uuid` type is always guaranteed to be have the same ABI as [`Bytes`].
 </span><span class="attr">#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[cfg_attr(
+#[repr(transparent)]
+</span><span class="comment">// NOTE: Also check `NonNilUuid` when ading new derives here
+</span><span class="attr">#[cfg_attr(
     all(uuid_unstable, feature = <span class="string">"zerocopy"</span>),
-    derive(IntoBytes, FromBytes, KnownLayout, Immutable, Unaligned)
+    derive(zerocopy::IntoBytes, zerocopy::FromBytes, zerocopy::KnownLayout, zerocopy::Immutable, zerocopy::Unaligned)
 )]
 #[cfg_attr(
     feature = <span class="string">"borsh"</span>,
     derive(borsh_derive::BorshDeserialize, borsh_derive::BorshSerialize)
 )]
-#[repr(transparent)]
 #[cfg_attr(
     feature = <span class="string">"bytemuck"</span>,
     derive(bytemuck::Zeroable, bytemuck::Pod, bytemuck::TransparentWrapper)
