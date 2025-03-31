@@ -73,9 +73,9 @@ zstd = { version = "0.13", optional = true }
 num-traits = { version = "0.2", optional = true }
 
 # Format dependencies
-bincode = { version = "1", optional = true }
+bincode = { version = "2", optional = true }
 serde_json = { version = "1", optional = true }
-simd-json = { version = "0.14", optional = true }
+simd-json = { version = "0.15", optional = true }
 csv = { version = "1", optional = true }
 
 # Disk dependencies
@@ -98,7 +98,7 @@ tokio-util = { version = "0.7", optional = true, features = ["compat"] }
 smol = { version = "2", optional = true }
 
 # Async format dependencies
-async-bincode = { version = "0.7", optional = true, default-features = false, features = ["futures"] }
+async-bincode = { version = "0.8", optional = true, default-features = false, features = ["futures"] }
 csv-async = { version = "1", optional = true, features = ["with_serde"] }
 
 # Directory dependencies
