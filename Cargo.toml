@@ -62,9 +62,9 @@ test = [] # For doctests to access test utils
 either = "1"
 serde = { version = "1", features = ["derive", "rc"] }
 derive-getters = "0.5"
-error-stack = "0.5"
+error-stack = "0.6"
 cfg-if = { version = "1", optional = true }
-nix = "0.29"
+nix = "0.31"
 thiserror = "2"
 embed-doc-image = "0.1" # Images in docs
 
@@ -73,9 +73,9 @@ zstd = { version = "0.13", optional = true }
 num-traits = { version = "0.2", optional = true }
 
 # Format dependencies
-bincode = { version = "1", optional = true }
+bincode = { version = "3", optional = true }
 serde_json = { version = "1", optional = true }
-simd-json = { version = "0.14", optional = true }
+simd-json = { version = "0.17", optional = true }
 csv = { version = "1", optional = true }
 
 # Disk dependencies
@@ -83,7 +83,7 @@ memmap2 = { version = "0.9", optional = true }
 secrets = { version = "*", git = "https://github.com/Bennett-Petzold/secrets", optional = true, features = ["use-libsodium-sys"] }
 aes-gcm = { version = "0.10", optional = true }
 stable_deref_trait = { version = "1", optional = true }
-reqwest = { version = "0.12", optional = true }
+reqwest = { version = "0.13", optional = true }
 url = { version = "2", optional = true, features = ["serde"] }
 bytes = { version = "*", optional = true } # Synced with reqwest
 
@@ -98,7 +98,7 @@ tokio-util = { version = "0.7", optional = true, features = ["compat"] }
 smol = { version = "2", optional = true }
 
 # Async format dependencies
-async-bincode = { version = "0.7", optional = true, default-features = false, features = ["futures"] }
+async-bincode = { version = "0.8", optional = true, default-features = false, features = ["futures"] }
 csv-async = { version = "1", optional = true, features = ["with_serde"] }
 
 # Directory dependencies
@@ -117,7 +117,7 @@ cfg_aliases = "0.2" # Reducing cfg boilerplate
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "io-util", "fs", "macros"] }
 
 # Benchmarking
-criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 fs_extra = "1"
 
 # General utilities
@@ -127,15 +127,15 @@ uuid = { version = "1", features = ["v4"] }
 
 # For examples
 humansize = "2"
-async_zip = { version = "0.0.17", features = ["deflate"] }
+async_zip = { version = "0.0.18", features = ["deflate"] }
 tokio-stream = "0.1"
 get-size = { version = "0.1", features = ["derive"] }
-indicatif = "0.17"
-reqwest = "0.12"
+indicatif = "0.18"
+reqwest = "0.13"
 
 # Benchmarking utility, only on non-Windows.
 [target.'cfg(not(target_os = "windows"))'.dev-dependencies]
-pprof = { version = "0.14", features = ["criterion", "flamegraph"] }
+pprof = { version = "0.15", features = ["criterion", "flamegraph"] }
 
 [[bench]]
 name = "io_bench"
